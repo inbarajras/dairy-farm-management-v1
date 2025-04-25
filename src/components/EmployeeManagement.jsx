@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Calendar, Clock, Mail, Phone, MapPin, Users, Award, FileText, Briefcase, User,Download,DollarSign } from 'lucide-react';
+import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Calendar, Clock, Mail, Phone, MapPin, Users, Award, FileText, Briefcase, User,Download,DollarSign, IndianRupee } from 'lucide-react';
 
 // Mock data for employees
 const mockEmployees = [
@@ -165,7 +165,7 @@ const formatDate = (dateString) => {
 
 // Utility function to format currency
 const formatCurrency = (amount) => {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
 };
 
 // Main employee management component
@@ -1056,7 +1056,7 @@ const ActivityItem = ({ type, description, date }) => {
       case 'performance':
         return <Award size={16} className="text-amber-500" />;
       case 'payroll':
-        return <DollarSign size={16} className="text-green-500" />;
+        return <IndianRupee size={16} className="text-green-500" />;
       default:
         return null;
     }

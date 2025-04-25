@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Bell, Menu, X, User, Search, ChevronDown, Home, Users, Droplet, Thermometer, DollarSign, Clipboard, Settings, LogOut } from 'lucide-react';
+import { Bell, Menu, X, User, Search, ChevronDown, Home, Users, Droplet, Thermometer, DollarSign, Clipboard, Settings, LogOut, IndianRupee } from 'lucide-react';
 
 // Mock data
 const mockKpiData = {
@@ -116,8 +116,8 @@ const FarmDashboard = () => {
             />
             <KpiCard
               title="Revenue (MTD)"
-              value={`$${mockKpiData.revenue}`}
-              icon={<DollarSign className="text-green-700" />}
+              value={`${mockKpiData.revenue}`}
+              icon={<IndianRupee className="text-green-700" />}
               trend="+8% from last month"
               positive={true}
             />

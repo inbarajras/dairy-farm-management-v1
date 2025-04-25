@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Users, Clipboard, Droplet, Thermometer, DollarSign, Settings, LogOut,X,Menu } from 'lucide-react';
+import { Home, Users, Clipboard, Droplet, Thermometer, DollarSign, Settings, LogOut,X,Menu, IndianRupee } from 'lucide-react';
 
 // Import all components
 import AuthenticationScreen from './components/AuthenticationScreen';
@@ -112,7 +112,7 @@ const App = () => {
             onClick={() => setActiveModule('employees')}
           />
           <NavItem 
-            icon={<DollarSign size={20} />} 
+            icon={<IndianRupee size={20} />} 
             label="Finances" 
             active={activeModule === 'finances'} 
             collapsed={!sidebarOpen} 
