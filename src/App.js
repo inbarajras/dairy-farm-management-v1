@@ -8,6 +8,7 @@ import CowManagement from './components/CowManagement';
 import MilkProduction from './components/MilkProduction';
 import HealthManagement from './components/HealthManagement';
 import EmployeeManagement from './components/EmployeeManagement';
+import FinancesManagement from './components/FinanceManagement';
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -44,7 +45,7 @@ const App = () => {
       case 'employees':
         return <EmployeeManagement />;
       case 'finances':
-        return <div className="p-6"><h1 className="text-2xl font-semibold text-gray-800">Financial Management</h1><p className="text-gray-600 mt-4">Financial management module coming soon!</p></div>;
+        return <FinancesManagement/>;
       case 'settings':
         return <div className="p-6"><h1 className="text-2xl font-semibold text-gray-800">Settings</h1><p className="text-gray-600 mt-4">Settings module coming soon!</p></div>;
       default:
