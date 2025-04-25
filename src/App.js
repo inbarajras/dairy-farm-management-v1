@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Users, Clipboard, Droplet, Thermometer, DollarSign, Settings, LogOut,X } from 'lucide-react';
+import { Home, Users, Clipboard, Droplet, Thermometer, DollarSign, Settings, LogOut,X,Menu } from 'lucide-react';
 
 // Import all components
 import AuthenticationScreen from './components/AuthenticationScreen';
@@ -9,6 +9,7 @@ import MilkProduction from './components/MilkProduction';
 import HealthManagement from './components/HealthManagement';
 import EmployeeManagement from './components/EmployeeManagement';
 import FinancesManagement from './components/FinanceManagement';
+import SettingsScreen from './components/Settings';
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -47,7 +48,7 @@ const App = () => {
       case 'finances':
         return <FinancesManagement/>;
       case 'settings':
-        return <div className="p-6"><h1 className="text-2xl font-semibold text-gray-800">Settings</h1><p className="text-gray-600 mt-4">Settings module coming soon!</p></div>;
+        return <SettingsScreen/>;
       default:
         return <FarmDashboard />;
     }
@@ -63,12 +64,15 @@ const App = () => {
       {/* Sidebar */}
       <div className={`bg-white shadow-md z-20 transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-20'} flex flex-col`}>
         <div className="p-4 flex items-center justify-between border-b">
-          <div className={`flex items-center ${!sidebarOpen && 'justify-center w-full'}`}>
+          {/* <div className={`flex items-center ${!sidebarOpen && 'justify-center w-full'}`}>
             <div className="w-10 h-10 rounded-full bg-green-600 flex items-center justify-center text-white font-bold">CF</div>
             {sidebarOpen && <span className="ml-3 font-medium text-lg">CowFarm</span>}
-          </div>
+          </div> */}
           <button onClick={toggleSidebar} className={`text-gray-500 hover:text-gray-700 ${!sidebarOpen && 'hidden'}`}>
             <X size={20} />
+          </button>
+          <button onClick={toggleSidebar} className={`flex flex-col flex-grow p-2 space-y-2 overflow-y-auto ${sidebarOpen && 'hidden'}`}>
+          <Menu size={24} />
           </button>
         </div>
         <div className="flex flex-col flex-grow p-4 space-y-4 overflow-y-auto">
