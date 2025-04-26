@@ -1131,6 +1131,7 @@ const MilkProduction = () => {
       somatic: '',
       bacteria: '',
       collectedBy: '',
+      sendWhatsAppNotification: false,
       notes: ''
     });
     
@@ -1144,11 +1145,91 @@ const MilkProduction = () => {
     };
     
     // Handle form submission
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
       e.preventDefault();
-      console.log('Form data submitted:', formData);
-      // Here you would make an API call to record the collection
-      onClose();
+      
+      try {
+        // 1. Save the milk collection record
+        console.log('Recording milk collection:', formData);
+        
+        // This would be an API call in a real implementation
+        // const response = await fetch('/api/milk-collections', {
+        //   method: 'POST',
+        //   headers: { 'Content-Type': 'application/json' },
+        //   body: JSON.stringify(formData)
+        // });
+        
+        // 2. If WhatsApp notification is enabled, send notification
+        if (formData.sendWhatsAppNotification) {
+          // In a real implementation, fetch the cow owner details based on the cow
+          // For example, if you know which cow the milk is from:
+          
+          // Get the cow owner information from a database/API
+          // This is a mock example - you'd need to implement the actual data fetching
+          const cowOwnerData = {
+            name: "John Smith", // The cow owner's name
+            phoneNumber: "+15551234567" // The cow owner's WhatsApp number
+          };
+          
+          const notificationResult = sendWhatsAppNotification(formData, cowOwnerData);
+          
+          if (notificationResult.success) {
+            console.log('Notification sent successfully');
+          } else {
+            console.error('Failed to send notification:', notificationResult.message);
+          }
+        }
+        
+        // Show success message
+        alert(formData.sendWhatsAppNotification 
+          ? 'Milk collection recorded and notification sent!'
+          : 'Milk collection recorded successfully!');
+        
+        // Close the modal
+        onClose();
+      } catch (error) {
+        console.error('Error recording milk collection:', error);
+        alert('Failed to record milk collection. Please try again.');
+      }
+    };
+
+    // WhatsApp notification service
+    const sendWhatsAppNotification = async (collectionData, cowOwnerData) => {
+      try {
+        console.log('Sending WhatsApp notification for milk collection:', collectionData);
+        
+        // In a real implementation, make an API call to your WhatsApp service (like Twilio)
+        // Example:
+        const message = `Hello ${cowOwnerData.name}, your cow's milk collection for ${collectionData.date} (${collectionData.shift} shift) has been recorded. Quantity: ${collectionData.totalQuantity}L.`;
+        
+        // Mock API call for demonstration
+        /*
+        const response = await fetch('https://api.yourmessagingservice.com/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer YOUR_AUTH_TOKEN'
+          },
+          body: JSON.stringify({
+            to: `whatsapp:${cowOwnerData.phoneNumber}`, // Format required by most WhatsApp APIs
+            from: 'whatsapp:+15551234567',  // Your WhatsApp business number
+            body: message
+          })
+        });
+        
+        const result = await response.json();
+        */
+        
+        // For demo, log the notification details
+        console.log('WhatsApp message:', message);
+        console.log('WhatsApp notification would be sent to:', cowOwnerData.phoneNumber);
+        
+        // Return success
+        return { success: true, message: 'Notification sent successfully' };
+      } catch (error) {
+        console.error('Failed to send WhatsApp notification:', error);
+        return { success: false, message: error.message };
+      }
     };
     
     return (
@@ -1315,6 +1396,22 @@ const MilkProduction = () => {
                   required
                   className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                 />
+              </div>
+              <div className="flex items-center mt-4">
+                <input
+                  id="sendWhatsAppNotification"
+                  name="sendWhatsAppNotification"
+                  type="checkbox"
+                  checked={formData.sendWhatsAppNotification}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    sendWhatsAppNotification: e.target.checked
+                  })}
+                  className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                />
+                <label htmlFor="sendWhatsAppNotification" className="ml-2 block text-sm text-gray-700">
+                  Send WhatsApp notification to cow owner
+                </label>
               </div>
               
               <div>

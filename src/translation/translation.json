@@ -1,0 +1,304 @@
+{
+    "en": {
+      "cowManagement": {
+        "title": "Cow Management",
+        "addNewCow": "Add New Cow",
+        "search": "Search by name, tag number or breed...",
+        "filters": {
+          "allStatus": "All Status",
+          "active": "Active",
+          "dry": "Dry",
+          "sold": "Sold",
+          "deceased": "Deceased",
+          "allBreeds": "All Breeds"
+        },
+        "count": "Showing {start}-{end} of {total} cows",
+        "statusLabels": {
+          "active": "Active",
+          "onLeave": "On Leave",
+          "terminated": "Terminated"
+        },
+        "cowCard": {
+          "tag": "Tag:",
+          "lastCheck": "Last check:"
+        }
+      },
+      "cowProfile": {
+        "backButton": "Back",
+        "editDetails": "Edit Details",
+        "recordHealthEvent": "Record Health Event",
+        "labels": {
+          "breed": "Breed:",
+          "dateOfBirth": "Date of Birth:",
+          "age": "Age:",
+          "status": "Status:",
+          "healthStatus": "Health Status:"
+        },
+        "alerts": "Alerts",
+        "tabs": {
+          "overview": "Overview",
+          "milk": "Milk Production",
+          "health": "Health Records",
+          "breeding": "Breeding"
+        },
+        "overviewTab": {
+          "avgMilkProduction": "Avg. Milk Production",
+          "fromLastWeek": "{value}% from last week",
+          "healthCheck": "Health Check",
+          "nextAction": "Next Action",
+          "regularCheckup": "Regular checkup",
+          "scheduledFor": "Scheduled for {date}",
+          "recentActivity": "Recent Activity"
+        },
+        "milkTab": {
+          "dailyMilkProduction": "Daily Milk Production",
+          "productionRecords": "Production Records",
+          "recordNew": "Record New",
+          "tableHeaders": {
+            "date": "Date",
+            "amount": "Amount (L)",
+            "quality": "Quality",
+            "notes": "Notes"
+          },
+          "quality": "Good"
+        },
+        "healthTab": {
+          "healthStatus": "Health Status",
+          "currentStatus": "Current Status",
+          "lastHealthCheck": "Last health check: {date}",
+          "vaccinationStatus": "Vaccination Status",
+          "vitalSigns": "Vital Signs (Last Check)",
+          "vitals": {
+            "temperature": "Temperature:",
+            "heartRate": "Heart Rate:",
+            "respiratoryRate": "Respiratory Rate:",
+            "weight": "Weight:"
+          },
+          "healthHistory": "Health History"
+        },
+        "breedingTab": {
+          "breedingInfo": "Breeding Information",
+          "reproductiveStatus": "Reproductive Status",
+          "open": "Open",
+          "lastHeat": "Last Heat",
+          "nextExpectedHeat": "Next Expected Heat",
+          "calvingHistory": "Calving History",
+          "calvingHistoryDetails": "{count} previous calvings",
+          "lastCalving": "Last calving: {date}",
+          "breedingPlan": "Breeding Plan",
+          "aiPlan": "Scheduled for artificial insemination in next heat cycle",
+          "breedingEvents": "Breeding Events",
+          "scheduleNew": "Record New Event",
+          "breedingTableHeaders": {
+            "date": "Date",
+            "eventType": "Event Type",
+            "details": "Details",
+            "result": "Result"
+          }
+        },
+        "activityTypes": {
+          "attendance": "Completed {hours} hours work day",
+          "training": "Completed equipment safety refresher",
+          "performance": "Quarterly performance review",
+          "payroll": "Monthly payroll processed"
+        }
+      },
+      "addCowModal": {
+        "title": "Add New Cow",
+        "cancel": "Cancel",
+        "steps": {
+          "personalInfo": "Personal Info",
+          "jobDetails": "Job Details",
+          "review": "Review"
+        },
+        "fields": {
+          "firstName": "First Name *",
+          "lastName": "Last Name *",
+          "tagNumber": "Tag Number *",
+          "name": "Name *",
+          "breed": "Breed *",
+          "dateOfBirth": "Date of Birth *",
+          "status": "Status *",
+          "photo": "Photo",
+          "upload": "Upload",
+          "purchaseDate": "Purchase Date",
+          "purchasePrice": "Purchase Price",
+          "initialWeight": "Initial Weight (kg)",
+          "notes": "Notes"
+        },
+        "review": {
+          "title": "Review Information",
+          "subtitle": "Please review the information below before submitting.",
+          "fullName": "Full Name",
+          "tagNumber": "Tag Number",
+          "name": "Name",
+          "breed": "Breed",
+          "dateOfBirth": "Date of Birth",
+          "status": "Status",
+          "purchaseDate": "Purchase Date",
+          "purchasePrice": "Purchase Price",
+          "initialWeight": "Initial Weight",
+          "workSchedule": "Work Schedule",
+          "address": "Address",
+          "photo": "Photo"
+        },
+        "buttons": {
+          "back": "Back",
+          "next": "Next",
+          "cancel": "Cancel",
+          "addCow": "Add Cow"
+        }
+      }
+    },
+    "ta": {
+      "cowManagement": {
+        "title": "பசு மேலாண்மை",
+        "addNewCow": "புதிய பசு சேர்க்க",
+        "search": "பெயர், குறிச்சீட்டு எண் அல்லது இனத்தால் தேடுங்கள்...",
+        "filters": {
+          "allStatus": "அனைத்து நிலைகள்",
+          "active": "செயலில்",
+          "dry": "வறண்ட",
+          "sold": "விற்கப்பட்டது",
+          "deceased": "இறந்தது",
+          "allBreeds": "அனைத்து இனங்கள்"
+        },
+        "count": "{total} பசுக்களில் {start}-{end} காட்டப்படுகிறது",
+        "statusLabels": {
+          "active": "செயலில்",
+          "onLeave": "விடுப்பில்",
+          "terminated": "நிறுத்தப்பட்டது"
+        },
+        "cowCard": {
+          "tag": "குறிச்சீட்டு:",
+          "lastCheck": "கடைசி சோதனை:"
+        }
+      },
+      "cowProfile": {
+        "backButton": "பின்செல்",
+        "editDetails": "விவரங்களை திருத்து",
+        "recordHealthEvent": "சுகாதார நிகழ்வை பதிவுசெய்",
+        "labels": {
+          "breed": "இனம்:",
+          "dateOfBirth": "பிறந்த தேதி:",
+          "age": "வயது:",
+          "status": "நிலை:",
+          "healthStatus": "ஆரோக்கிய நிலை:"
+        },
+        "alerts": "எச்சரிக்கைகள்",
+        "tabs": {
+          "overview": "கண்ணோட்டம்",
+          "milk": "பால் உற்பத்தி",
+          "health": "ஆரோக்கிய பதிவுகள்",
+          "breeding": "இனப்பெருக்கம்"
+        },
+        "overviewTab": {
+          "avgMilkProduction": "சராசரி பால் உற்பத்தி",
+          "fromLastWeek": "கடந்த வாரத்திலிருந்து {value}%",
+          "healthCheck": "ஆரோக்கிய சோதனை",
+          "nextAction": "அடுத்த செயல்",
+          "regularCheckup": "வழக்கமான சோதனை",
+          "scheduledFor": "{date} அன்று திட்டமிடப்பட்டுள்ளது",
+          "recentActivity": "சமீபத்திய செயல்பாடு"
+        },
+        "milkTab": {
+          "dailyMilkProduction": "தினசரி பால் உற்பத்தி",
+          "productionRecords": "உற்பத்தி பதிவுகள்",
+          "recordNew": "புதிதாக பதிவு செய்",
+          "tableHeaders": {
+            "date": "தேதி",
+            "amount": "அளவு (லி)",
+            "quality": "தரம்",
+            "notes": "குறிப்புகள்"
+          },
+          "quality": "நல்லது"
+        },
+        "healthTab": {
+          "healthStatus": "ஆரோக்கிய நிலை",
+          "currentStatus": "தற்போதைய நிலை",
+          "lastHealthCheck": "கடைசி ஆரோக்கிய சோதனை: {date}",
+          "vaccinationStatus": "தடுப்பூசி நிலை",
+          "vitalSigns": "உயிரியல் அறிகுறிகள் (கடைசி சோதனை)",
+          "vitals": {
+            "temperature": "வெப்பநிலை:",
+            "heartRate": "இதய துடிப்பு:",
+            "respiratoryRate": "சுவாச விகிதம்:",
+            "weight": "எடை:"
+          },
+          "healthHistory": "ஆரோக்கிய வரலாறு"
+        },
+        "breedingTab": {
+          "breedingInfo": "இனப்பெருக்க தகவல்",
+          "reproductiveStatus": "இனப்பெருக்க நிலை",
+          "open": "திறந்த",
+          "lastHeat": "கடைசி சூடு",
+          "nextExpectedHeat": "அடுத்து எதிர்பார்க்கப்படும் சூடு",
+          "calvingHistory": "கன்று ஈனுதல் வரலாறு",
+          "calvingHistoryDetails": "{count} முந்தைய கன்று ஈனுதல்",
+          "lastCalving": "கடைசி கன்று ஈனுதல்: {date}",
+          "breedingPlan": "இனப்பெருக்க திட்டம்",
+          "aiPlan": "அடுத்த சூடு சுழற்சியில் செயற்கை கருத்தரிப்புக்கு திட்டமிடப்பட்டுள்ளது",
+          "breedingEvents": "இனப்பெருக்க நிகழ்வுகள்",
+          "scheduleNew": "புதிய நிகழ்வை பதிவு செய்",
+          "breedingTableHeaders": {
+            "date": "தேதி",
+            "eventType": "நிகழ்வு வகை",
+            "details": "விவரங்கள்",
+            "result": "முடிவு"
+          }
+        },
+        "activityTypes": {
+          "attendance": "{hours} மணி நேர வேலை நாள் முடிந்தது",
+          "training": "உபகரண பாதுகாப்பு புத்துணர்வு முடிந்தது",
+          "performance": "காலாண்டு செயல்திறன் மதிப்பாய்வு",
+          "payroll": "மாதாந்திர சம்பளப் பட்டியல் செயலாக்கப்பட்டது"
+        }
+      },
+      "addCowModal": {
+        "title": "புதிய பசு சேர்க்க",
+        "cancel": "ரத்து செய்",
+        "steps": {
+          "personalInfo": "தனிப்பட்ட தகவல்",
+          "jobDetails": "வேலை விவரங்கள்",
+          "review": "மதிப்பாய்வு"
+        },
+        "fields": {
+          "firstName": "முதல் பெயர் *",
+          "lastName": "கடைசி பெயர் *",
+          "tagNumber": "குறிச்சீட்டு எண் *",
+          "name": "பெயர் *",
+          "breed": "இனம் *",
+          "dateOfBirth": "பிறந்த தேதி *",
+          "status": "நிலை *",
+          "photo": "புகைப்படம்",
+          "upload": "பதிவேற்று",
+          "purchaseDate": "வாங்கிய தேதி",
+          "purchasePrice": "வாங்கிய விலை",
+          "initialWeight": "ஆரம்ப எடை (கிலோ)",
+          "notes": "குறிப்புகள்"
+        },
+        "review": {
+          "title": "தகவல் மதிப்பாய்வு",
+          "subtitle": "சமர்ப்பிப்பதற்கு முன் கீழே உள்ள தகவல்களை மதிப்பாய்வு செய்யவும்.",
+          "fullName": "முழு பெயர்",
+          "tagNumber": "குறிச்சீட்டு எண்",
+          "name": "பெயர்",
+          "breed": "இனம்",
+          "dateOfBirth": "பிறந்த தேதி",
+          "status": "நிலை",
+          "purchaseDate": "வாங்கிய தேதி",
+          "purchasePrice": "வாங்கிய விலை",
+          "initialWeight": "ஆரம்ப எடை",
+          "workSchedule": "வேலை அட்டவணை",
+          "address": "முகவரி",
+          "photo": "புகைப்படம்"
+        },
+        "buttons": {
+          "back": "பின்செல்",
+          "next": "அடுத்து",
+          "cancel": "ரத்து செய்",
+          "addCow": "பசு சேர்க்க"
+        }
+      }
+    }
+  }
