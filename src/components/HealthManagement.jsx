@@ -250,8 +250,7 @@ const HealthManagement = () => {
           <h1 className="text-2xl font-semibold text-gray-800">Health Management</h1>
           <button 
             onClick={toggleAddEvent}
-            className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-          >
+            className="flex items-center px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
             <Plus size={20} className="mr-2" />
             Record Health Event
           </button>
@@ -317,74 +316,56 @@ const HealthManagement = () => {
         {activeTab === 'dashboard' && (
           <div>
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Active Cases</p>
-                    <p className="text-2xl font-semibold text-gray-800 mt-1">{healthData.healthStats.activeCases}</p>
-                  </div>
-                  <div className="p-2 rounded-full bg-red-50 text-red-600">
-                    <AlertCircle size={20} />
-                  </div>
+            <div className="bg-gradient-to-br from-white to-red-50 rounded-lg shadow-sm p-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Active Cases</p>
+                  <p className="text-2xl font-semibold text-gray-800 mt-1">{healthData.healthStats.activeCases}</p>
                 </div>
-                <div className="mt-4 text-xs text-red-600 flex items-center">
-                  <span>Requires attention</span>
+                <div className="p-2 rounded-full bg-red-50 text-red-600">
+                  <AlertCircle size={20} />
                 </div>
               </div>
+              <div className="mt-4 text-xs text-red-600 flex items-center">
+                <span>Requires attention</span>
+              </div>
+            </div>
               
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Scheduled Checkups</p>
-                    <p className="text-2xl font-semibold text-gray-800 mt-1">{healthData.healthStats.scheduledCheckups}</p>
-                  </div>
-                  <div className="p-2 rounded-full bg-green-50 text-green-600">
-                    <Calendar size={20} />
-                  </div>
+            <div className="bg-gradient-to-br from-white to-green-50 rounded-lg shadow-sm p-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Scheduled Checkups</p>
+                  <p className="text-2xl font-semibold text-gray-800 mt-1">{healthData.healthStats.scheduledCheckups}</p>
                 </div>
-                <div className="mt-4 text-xs text-green-600 flex items-center">
-                  <span>Next: Today at 2:00 PM</span>
+                <div className="p-2 rounded-full bg-green-50 text-green-600">
+                  <Calendar size={20} />
                 </div>
               </div>
+              <div className="mt-4 text-xs text-green-600 flex items-center">
+                <span>Next: Today at 2:00 PM</span>
+              </div>
+            </div>
               
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Treated This Month</p>
-                    <p className="text-2xl font-semibold text-gray-800 mt-1">{healthData.healthStats.treatedLastMonth}</p>
-                  </div>
-                  <div className="p-2 rounded-full bg-amber-50 text-amber-600">
-                    <Thermometer size={20} />
-                  </div>
+            <div className="bg-gradient-to-br from-white to-amber-50 rounded-lg shadow-sm p-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Treated This Month</p>
+                  <p className="text-2xl font-semibold text-gray-800 mt-1">{healthData.healthStats.treatedLastMonth}</p>
                 </div>
-                <div className="mt-4 text-xs text-amber-600 flex items-center">
-                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                  </svg>
-                  <span>25% decrease from last month</span>
+                <div className="p-2 rounded-full bg-amber-50 text-amber-600">
+                  <Thermometer size={20} />
                 </div>
               </div>
-              
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Treated This Month</p>
-                    <p className="text-2xl font-semibold text-gray-800 mt-1">{healthData.healthStats.treatedLastMonth}</p>
-                  </div>
-                  <div className="p-2 rounded-full bg-amber-50 text-amber-600">
-                    <Thermometer size={20} />
-                  </div>
-                </div>
-                <div className="mt-4 text-xs text-amber-600 flex items-center">
-                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                  </svg>
-                  <span>25% decrease from last month</span>
-                </div>
+              <div className="mt-4 text-xs text-amber-600 flex items-center">
+                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                </svg>
+                <span>25% decrease from last month</span>
               </div>
+            </div>
               
-              <div className="bg-white rounded-lg shadow-sm p-6">
+              
+              <div className="bg-gradient-to-br from-white to-blue-50 rounded-lg shadow-sm p-6">
                 <div className="flex justify-between items-start">
                   <div>
                     <p className="text-sm font-medium text-gray-500">Vaccinations YTD</p>
@@ -398,7 +379,6 @@ const HealthManagement = () => {
                   <span>Herd immunity: Good</span>
                 </div>
               </div>
-            </div>
             
             {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -1563,11 +1543,11 @@ const AddHealthEventModal = ({ onClose }) => {
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-screen overflow-y-auto">
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-lg font-medium text-gray-800">Record Health Event</h3>
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gradient-to-r from-green-500 to-green-600 text-white">
+          <h3 className="flex items-center px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">Record Health Event</h3>
           <button 
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-500"
+            className="text-white hover:text-gray-200"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1802,7 +1782,7 @@ const AddHealthEventModal = ({ onClose }) => {
             </div>
           </div>
           
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
             <button
               type="button"
               onClick={onClose}
@@ -1812,7 +1792,7 @@ const AddHealthEventModal = ({ onClose }) => {
             </button>
             <button
               type="submit"
-              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
             >
               Save
             </button>

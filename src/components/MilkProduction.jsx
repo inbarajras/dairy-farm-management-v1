@@ -156,6 +156,45 @@ const getAverageQuality = (data, parameter) => {
   return data.reduce((sum, record) => sum + record.qualityParameters[parameter], 0) / data.length;
 };
 
+// Utility function to handle downloads
+const handleDownload = (data, filename, fileType) => {
+  let content = '';
+  let mimeType = '';
+  
+  // Format based on file type
+  if (fileType === 'csv') {
+    mimeType = 'text/csv;charset=utf-8;';
+    
+    // For CSV, create headers and data rows
+    if (Array.isArray(data)) {
+      const headers = Object.keys(data[0]).join(',');
+      const rows = data.map(item => Object.values(item).join(','));
+      content = [headers, ...rows].join('\n');
+    }
+  } else if (fileType === 'json') {
+    mimeType = 'application/json;charset=utf-8;';
+    content = JSON.stringify(data, null, 2);
+  } else if (fileType === 'txt') {
+    mimeType = 'text/plain;charset=utf-8;';
+    content = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+  }
+  
+  // Create a blob and download link
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  
+  // Create download link and trigger click
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  
+  // Clean up
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
 // Main milk production component
 const MilkProduction = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -223,13 +262,13 @@ const MilkProduction = () => {
     };
     
     return (
-      <div className="h-full bg-gray-100">
+      <div className="h-full bg-gradient-to-br from-gray-50 to-green-50">
         <div className="px-6 py-6">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-semibold text-gray-800">Milk Production</h1>
             <button 
               onClick={toggleAddModal}
-              className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              className="flex items-center px-4 py-2 text-white rounded-lg bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
             >
               <Plus size={20} className="mr-2" />
               Record Collection
@@ -239,11 +278,11 @@ const MilkProduction = () => {
           {/* Tabs */}
           <div className="mb-6">
             <nav className="flex space-x-4 border-b border-gray-200">
-              <button
+            <button
                 onClick={() => setActiveTab('dashboard')}
                 className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px ${
                   activeTab === 'dashboard'
-                    ? 'border-green-500 text-green-600'
+                    ? 'border-green-500 text-green-600 bg-gradient-to-b from-white to-green-50'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
@@ -310,7 +349,7 @@ const MilkProduction = () => {
           {activeTab === 'dashboard' && (
             <div>
               {/* KPI Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+              <div className="bg-white rounded-lg shadow-sm p-6 bg-gradient-to-br from-white to-green-50">
                 <div className="bg-white rounded-lg shadow-sm p-6">
                   <div className="flex justify-between items-start">
                     <div>
@@ -385,8 +424,10 @@ const MilkProduction = () => {
               <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-lg font-semibold text-gray-800">Daily Milk Production</h2>
-                  <button className="text-sm text-gray-500 flex items-center">
-                    <Download size={16} className="mr-1" />
+                  <button 
+                    onClick={() => handleDownload(chartData, `milk-collections-${new Date().toISOString().slice(0, 10)}.csv`, 'csv')}
+                    className="text-sm text-white flex items-center px-3 py-2 rounded-md bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                    <Download size={16} className="mr-2" />
                     Export
                   </button>
                 </div>
@@ -474,6 +515,10 @@ const MilkProduction = () => {
     const [filter, setFilter] = useState('all');
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(10);
+    const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [viewModalData, setViewModalData] = useState(null);
+    const [editModalData, setEditModalData] = useState(null);
     
     // Filter and search collections
     const filteredCollections = data.filter(collection => {
@@ -503,6 +548,22 @@ const MilkProduction = () => {
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
     const currentItems = sortedCollections.slice(indexOfFirstItem, indexOfLastItem);
     const totalPages = Math.ceil(sortedCollections.length / itemsPerPage);
+
+    const handleViewCollection = (collection) => {
+      // Display collection details in a modal or dedicated view
+      console.log('Viewing collection:', collection);
+      // You can use a state variable to control the visibility of a view modal
+      setViewModalData(collection);
+      setIsViewModalOpen(true);
+    };
+    
+    const handleEditCollection = (collection) => {
+      // Open the collection in edit mode
+      console.log('Editing collection:', collection);
+      // You can populate a form with the collection data
+      setEditModalData(collection);
+      setIsEditModalOpen(true);
+    };
     
     return (
       <div>
@@ -535,10 +596,13 @@ const MilkProduction = () => {
               </select>
             </div>
             
-            <button className="flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
-              <Download size={16} className="mr-2" />
-              Export
-            </button>
+          <button 
+            onClick={() => handleDownload(filteredCollections, `milk-collections-${new Date().toISOString().slice(0, 10)}.csv`, 'csv')}
+            className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-white bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+          >
+            <Download size={16} className="mr-2" />
+            Export
+          </button>
           </div>
         </div>
         
@@ -603,8 +667,18 @@ const MilkProduction = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <a href="#" className="text-green-600 hover:text-green-900 mr-4">View</a>
-                    <a href="#" className="text-blue-600 hover:text-blue-900 mr-4">Edit</a>
+                    <button 
+                      onClick={() => handleViewCollection(collection)}
+                      className="text-green-600 hover:text-green-900 mr-4"
+                    >
+                      View
+                    </button>
+                    <button 
+                      onClick={() => handleEditCollection(collection)}
+                      className="text-blue-600 hover:text-blue-900 mr-4"
+                    >
+                      Edit
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -618,7 +692,8 @@ const MilkProduction = () => {
             <button
               onClick={() => setCurrentPage(currentPage - 1)}
               disabled={currentPage === 1}
-              className={`px-3 py-1 rounded-md ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+              className={`w-8 h-8 flex items-center justify-center rounded-md ${currentPage === 1 ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' 
+              : 'bg-white text-gray-700 hover:bg-gray-50'}`}
             >
               <ChevronLeft size={16} />
             </button>
@@ -627,7 +702,8 @@ const MilkProduction = () => {
                 <button
                   key={page}
                   onClick={() => setCurrentPage(page)}
-                  className={`w-8 h-8 flex items-center justify-center rounded-md ${currentPage === page ? 'bg-green-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                  className={`w-8 h-8 flex items-center justify-center rounded-md ${currentPage === page ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' 
+                  : 'bg-white text-gray-700 hover:bg-gray-50'}`}
                 >
                   {page}
                 </button>
@@ -636,12 +712,351 @@ const MilkProduction = () => {
             <button
               onClick={() => setCurrentPage(currentPage + 1)}
               disabled={currentPage === totalPages}
-              className={`px-3 py-1 rounded-md ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+              className={`w-8 h-8 flex items-center justify-center rounded-md ${currentPage === totalPages ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
             >
               <ChevronRight size={16} />
             </button>
           </div>
         )}
+        {isViewModalOpen && viewModalData && (
+      <ViewCollectionModal
+            collection={viewModalData}
+            onClose={() => setIsViewModalOpen(false)}
+          />
+        )}
+        
+        {isEditModalOpen && editModalData && (
+          <EditCollectionModal
+            collection={editModalData}
+            onClose={() => setIsEditModalOpen(false)}
+            onSave={(updatedCollection) => {
+              // Handle saving the updated collection
+              console.log('Saving updated collection:', updatedCollection);
+              // In a real app, you would call an API and update the data
+              // For now just close the modal
+              setIsEditModalOpen(false);
+            }}
+          />
+        )}
+      </div>
+      
+    );
+  };
+
+  const ViewCollectionModal = ({ collection, onClose }) => {
+    return (
+      <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full">
+          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+            <h3 className="text-lg font-medium text-gray-800">
+              Collection Details - {collection.id}
+            </h3>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          
+          <div className="px-6 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Date</p>
+                <p className="mt-1 text-sm text-gray-900">{formatDate(collection.date)}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500">Shift</p>
+                <p className="mt-1 text-sm text-gray-900">{collection.shift}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500">Quantity</p>
+                <p className="mt-1 text-sm text-gray-900">{collection.totalQuantity} L</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500">Collected By</p>
+                <p className="mt-1 text-sm text-gray-900">{collection.collectedBy}</p>
+              </div>
+              <div className="col-span-2">
+                <p className="text-sm font-medium text-gray-500">Quality Parameters</p>
+                <div className="mt-1 grid grid-cols-3 gap-2">
+                  <div>
+                    <p className="text-xs text-gray-500">Fat</p>
+                    <p className="text-sm text-gray-900">{collection.qualityParameters.fat}%</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Protein</p>
+                    <p className="text-sm text-gray-900">{collection.qualityParameters.protein}%</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Lactose</p>
+                    <p className="text-sm text-gray-900">{collection.qualityParameters.lactose}%</p>
+                  </div>
+                </div>
+              </div>
+              {collection.notes && (
+                <div className="col-span-2">
+                  <p className="text-sm font-medium text-gray-500">Notes</p>
+                  <p className="mt-1 text-sm text-gray-900">{collection.notes}</p>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+  
+  // Edit Collection Modal
+  const EditCollectionModal = ({ collection, onClose, onSave }) => {
+    const [formData, setFormData] = useState({
+      ...collection,
+      fat: collection.qualityParameters.fat,
+      protein: collection.qualityParameters.protein,
+      lactose: collection.qualityParameters.lactose,
+      somatic: collection.qualityParameters.somatic,
+      bacteria: collection.qualityParameters.bacteria
+    });
+    
+    const handleChange = (e) => {
+      const { name, value } = e.target;
+      setFormData({
+        ...formData,
+        [name]: value
+      });
+    };
+    
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      
+      // Prepare updated collection with quality parameters properly structured
+      const updatedCollection = {
+        ...formData,
+        qualityParameters: {
+          fat: parseFloat(formData.fat),
+          protein: parseFloat(formData.protein),
+          lactose: parseFloat(formData.lactose),
+          somatic: parseInt(formData.somatic),
+          bacteria: parseInt(formData.bacteria)
+        }
+      };
+      
+      // Remove the individual quality parameter fields
+      delete updatedCollection.fat;
+      delete updatedCollection.protein;
+      delete updatedCollection.lactose;
+      delete updatedCollection.somatic;
+      delete updatedCollection.bacteria;
+      
+      onSave(updatedCollection);
+    };
+    
+    return (
+      <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-screen overflow-y-auto">
+          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+            <h3 className="text-lg font-medium text-gray-800">
+              Edit Collection - {collection.id}
+            </h3>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          
+          <form onSubmit={handleSubmit}>
+            <div className="px-6 py-4 space-y-6">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
+                    Collection Date *
+                  </label>
+                  <input
+                    type="date"
+                    id="date"
+                    name="date"
+                    value={formData.date}
+                    onChange={handleChange}
+                    required
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="shift" className="block text-sm font-medium text-gray-700 mb-1">
+                    Shift *
+                  </label>
+                  <select
+                    id="shift"
+                    name="shift"
+                    value={formData.shift}
+                    onChange={handleChange}
+                    required
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  >
+                    <option value="Morning">Morning</option>
+                    <option value="Evening">Evening</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div>
+                <label htmlFor="totalQuantity" className="block text-sm font-medium text-gray-700 mb-1">
+                  Total Quantity (L) *
+                </label>
+                <input
+                  type="number"
+                  id="totalQuantity"
+                  name="totalQuantity"
+                  value={formData.totalQuantity}
+                  onChange={handleChange}
+                  required
+                  min="0"
+                  step="0.1"
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                />
+              </div>
+              
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Quality Parameters</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  <div>
+                    <label htmlFor="fat" className="block text-sm font-medium text-gray-700 mb-1">
+                      Fat (%)
+                    </label>
+                    <input
+                      type="number"
+                      id="fat"
+                      name="fat"
+                      value={formData.fat}
+                      onChange={handleChange}
+                      min="0"
+                      step="0.1"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="protein" className="block text-sm font-medium text-gray-700 mb-1">
+                      Protein (%)
+                    </label>
+                    <input
+                      type="number"
+                      id="protein"
+                      name="protein"
+                      value={formData.protein}
+                      onChange={handleChange}
+                      min="0"
+                      step="0.1"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="lactose" className="block text-sm font-medium text-gray-700 mb-1">
+                      Lactose (%)
+                    </label>
+                    <input
+                      type="number"
+                      id="lactose"
+                      name="lactose"
+                      value={formData.lactose}
+                      onChange={handleChange}
+                      min="0"
+                      step="0.1"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="somatic" className="block text-sm font-medium text-gray-700 mb-1">
+                      Somatic Cell Count (thousands/ml)
+                    </label>
+                    <input
+                      type="number"
+                      id="somatic"
+                      name="somatic"
+                      value={formData.somatic}
+                      onChange={handleChange}
+                      min="0"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="bacteria" className="block text-sm font-medium text-gray-700 mb-1">
+                      Bacteria Count (CFU/ml)
+                    </label>
+                    <input
+                      type="number"
+                      id="bacteria"
+                      name="bacteria"
+                      value={formData.bacteria}
+                      onChange={handleChange}
+                      min="0"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <label htmlFor="collectedBy" className="block text-sm font-medium text-gray-700 mb-1">
+                  Collected By *
+                </label>
+                <input
+                  type="text"
+                  id="collectedBy"
+                  name="collectedBy"
+                  value={formData.collectedBy}
+                  onChange={handleChange}
+                  required
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                />
+              </div>
+              
+              <div>
+                <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
+                  Notes
+                </label>
+                <textarea
+                  id="notes"
+                  name="notes"
+                  rows={3}
+                  value={formData.notes}
+                  onChange={handleChange}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  placeholder="Any additional information about this collection..."
+                ></textarea>
+              </div>
+            </div>
+            
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              >
+                Save Changes
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     );
   };
@@ -676,7 +1091,7 @@ const MilkProduction = () => {
                 onClick={() => setSelectedParameter('fat')}
                 className={`px-3 py-1.5 text-sm font-medium rounded-md ${
                   selectedParameter === 'fat' 
-                    ? 'bg-green-600 text-white' 
+                    ? 'bg-gradient-to-r from-green-500 to-green-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
@@ -686,7 +1101,7 @@ const MilkProduction = () => {
                 onClick={() => setSelectedParameter('protein')}
                 className={`px-3 py-1.5 text-sm font-medium rounded-md ${
                   selectedParameter === 'protein' 
-                    ? 'bg-green-600 text-white' 
+                    ? 'bg-gradient-to-r from-green-500 to-green-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
@@ -696,7 +1111,7 @@ const MilkProduction = () => {
                 onClick={() => setSelectedParameter('lactose')}
                 className={`px-3 py-1.5 text-sm font-medium rounded-md ${
                   selectedParameter === 'lactose' 
-                    ? 'bg-green-600 text-white' 
+                    ? 'bg-gradient-to-r from-green-500 to-green-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
@@ -1008,11 +1423,11 @@ const MilkProduction = () => {
           </div>
           
           <div className="mt-6">
-            <button
-              onClick={generateReport}
-              disabled={isGenerating}
-              className={`inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${isGenerating ? 'opacity-70 cursor-not-allowed' : ''}`}
-            >
+          <button
+            onClick={generateReport}
+            disabled={isGenerating}
+            className={`inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${isGenerating ? 'opacity-70 cursor-not-allowed' : ''}`}
+          >
               {isGenerating ? (
                 <>
                   <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1076,6 +1491,8 @@ const MilkProduction = () => {
       </div>
     );
   };
+
+  
   
   // Report Item Component
   const ReportItem = ({ title, type, date, format, size }) => {
@@ -1110,9 +1527,16 @@ const MilkProduction = () => {
             </div>
           </div>
           <div>
-            <button className="p-2 text-gray-400 hover:text-gray-600 rounded-full">
-              <Download size={16} />
-            </button>
+          <button 
+            onClick={() => {
+              // Mock download - in real app would fetch the actual report
+              const mockReportData = { title, type, date, format };
+              handleDownload(mockReportData, title.replace(/\s+/g, '-').toLowerCase() + '.json', 'json');
+            }}
+            className="p-2 text-white bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 rounded-full"
+          >
+            <Download size={16} />
+          </button>
           </div>
         </div>
       </li>
