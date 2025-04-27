@@ -1,8 +1,10 @@
+// src/components/AuthenticationScreen.jsx
 import React, { useState, useEffect } from 'react';
 import { User, Key, Lock, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { auth } from '../lib/supabase';
 
-const AuthenticationScreen = ({onAuthenticate}) => {
+const AuthenticationScreen = ({ onAuthenticate }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
@@ -17,6 +19,8 @@ const AuthenticationScreen = ({onAuthenticate}) => {
   const [timer, setTimer] = useState(0);
   const [validationErrors, setValidationErrors] = useState({});
   const [authSuccess, setAuthSuccess] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [authError, setAuthError] = useState(null);
 
   // Handle form field changes
   const handleChange = (e) => {
@@ -107,6 +111,7 @@ const AuthenticationScreen = ({onAuthenticate}) => {
     setIsLogin(!isLogin);
     setOtpSent(false);
     setValidationErrors({});
+    setAuthError(null);
     setFormData({
       ...formData,
       confirmPassword: '',
@@ -151,44 +156,102 @@ const AuthenticationScreen = ({onAuthenticate}) => {
   };
 
   // Handle form submission
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setAuthError(null);
     
     if (otpSent) {
       // Verify OTP
       const otpValue = formData.otp.join('');
       if (otpValue.length === 6) {
-        console.log('Verifying OTP:', otpValue);
-        // Here you would make an API call to verify the OTP
-        // For demo, we'll simulate success
-        setAuthSuccess(true);
+        setIsLoading(true);
+        try {
+          const { data, error } = await auth.verifyOTP(formData.email, otpValue);
+          
+          if (error) {
+            throw error;
+          }
+          
+          // If successful, set auth success state
+          setAuthSuccess(true);
+        } catch (error) {
+          setAuthError(error.message || 'Failed to verify OTP');
+        } finally {
+          setIsLoading(false);
+        }
       } else {
         setValidationErrors({ otp: 'Please enter a valid 6-digit OTP' });
       }
     } else {
       // Send OTP if validation passes
       if (validateForm()) {
-        console.log('Sending OTP to:', formData.email);
-        // Here you would make an API call to send the OTP
-        // For demo, we'll simulate OTP sent
-        setOtpSent(true);
-        setTimer(60); // Start 60 second timer for resend
+        setIsLoading(true);
+        
+        try {
+          if (isLogin) {
+            // Sign in flow
+            const { error } = await auth.signIn(formData.email, formData.password);
+            
+            if (error) {
+              if (error.message.includes('Invalid login')) {
+                // If email/password login failed, send OTP as a fallback
+                const { error: otpError } = await auth.sendOTP(formData.email);
+                if (otpError) throw otpError;
+                
+                setOtpSent(true);
+                setTimer(60);
+              } else {
+                throw error;
+              }
+            } else {
+              // If sign in was successful, set auth success
+              setAuthSuccess(true);
+            }
+          } else {
+            // Sign up flow
+            const { error } = await auth.signUp(formData.email, formData.password, formData.fullName);
+            
+            if (error) throw error;
+            
+            // Send OTP for verification
+            const { error: otpError } = await auth.sendOTP(formData.email);
+            
+            if (otpError) throw otpError;
+            
+            setOtpSent(true);
+            setTimer(60);
+          }
+        } catch (error) {
+          setAuthError(error.message || 'Authentication failed');
+        } finally {
+          setIsLoading(false);
+        }
       }
     }
   };
 
   // Resend OTP
-  const resendOtp = () => {
+  const resendOtp = async () => {
     if (timer === 0) {
-      console.log('Resending OTP to:', formData.email);
-      // Here you would make an API call to resend the OTP
-      setTimer(60);
+      setIsLoading(true);
+      try {
+        const { error } = await auth.sendOTP(formData.email);
+        
+        if (error) throw error;
+        
+        setTimer(60);
+      } catch (error) {
+        setAuthError(error.message || 'Failed to send OTP');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
   // Go back to login/register form
   const handleBack = () => {
     setOtpSent(false);
+    setAuthError(null);
   };
 
   // Animation variants
@@ -291,6 +354,22 @@ const AuthenticationScreen = ({onAuthenticate}) => {
 
               {/* Main Form */}
               <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+                {/* Show any auth errors */}
+                {authError && (
+                  <div className="bg-red-50 border-l-4 border-red-500 p-4">
+                    <div className="flex">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm text-red-700">{authError}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <AnimatePresence mode="wait">
                   {otpSent ? (
                     <motion.div 
@@ -351,6 +430,7 @@ const AuthenticationScreen = ({onAuthenticate}) => {
                           type="button"
                           onClick={handleBack}
                           className="flex items-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all"
+                          disabled={isLoading}
                         >
                           <ArrowLeft size={16} className="mr-1" />
                           Back
@@ -358,8 +438,17 @@ const AuthenticationScreen = ({onAuthenticate}) => {
                         <button
                           type="submit"
                           className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all"
+                          disabled={isLoading}
                         >
-                          Verify & Continue
+                          {isLoading ? (
+                            <div className="flex items-center">
+                              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Verifying...
+                            </div>
+                          ) : "Verify & Continue"}
                         </button>
                       </div>
                     </motion.div>
@@ -535,8 +624,19 @@ const AuthenticationScreen = ({onAuthenticate}) => {
                         <button
                           type="submit"
                           className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200 transform hover:scale-[1.02]"
+                          disabled={isLoading}
                         >
-                          {isLogin ? 'Sign in' : 'Create account'}
+                          {isLoading ? (
+                            <div className="flex items-center justify-center">
+                              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              {isLogin ? 'Signing in...' : 'Creating account...'}
+                            </div>
+                          ) : (
+                            isLogin ? 'Sign in' : 'Create account'
+                          )}
                         </button>
                       </div>
                     </motion.div>

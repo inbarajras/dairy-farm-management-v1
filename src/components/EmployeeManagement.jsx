@@ -181,6 +181,11 @@ const EmployeeManagement = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [activeTab, setActiveTab] = useState('employees');
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [employeeToEdit, setEmployeeToEdit] = useState(null);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
+  const [employeeForAttendance, setEmployeeForAttendance] = useState(null);
 
   // Handle search
   const handleSearch = (e) => {
@@ -195,6 +200,68 @@ const EmployeeManagement = () => {
       [filterName]: value
     });
     setCurrentPage(1); // Reset to first page on filter change
+  };
+
+  // Toggle edit modal
+  const toggleEditModal = (employee = null) => {
+    setEmployeeToEdit(employee);
+    setIsEditModalOpen(!isEditModalOpen);
+  };
+
+  // Edit employee
+  const editEmployee = (updatedEmployee) => {
+    // Update employees state with the edited employee
+    setEmployees(employees.map(emp => 
+      emp.id === updatedEmployee.id ? updatedEmployee : emp
+    ));
+    
+    // Close the modal and show success message
+    setIsEditModalOpen(false);
+    setSuccessMessage('Employee updated successfully!');
+    
+    // Clear the success message after 3 seconds
+    setTimeout(() => setSuccessMessage(''), 3000);
+  };
+
+
+  // Toggle attendance recording modal
+const toggleAttendanceModal = (employee = null) => {
+  setEmployeeForAttendance(employee);
+  setIsAttendanceModalOpen(!isAttendanceModalOpen);
+};
+
+// Record attendance for an employee
+const recordAttendance = (employeeId, attendanceRecord) => {
+  // In a real application, you would make an API call to save the attendance record
+  // For now, we'll update the employee's attendance history in our local state
+  
+  setEmployees(employees.map(emp => {
+      if (emp.id === employeeId) {
+        // Create a new array with the new attendance record at the beginning
+        const updatedAttendanceHistory = [
+          attendanceRecord,
+          ...emp.attendanceHistory
+        ];
+        
+        // Only keep the latest 7 records for our mock data
+        if (updatedAttendanceHistory.length > 7) {
+          updatedAttendanceHistory.pop();
+        }
+        
+        return {
+          ...emp,
+          attendanceHistory: updatedAttendanceHistory
+        };
+      }
+      return emp;
+    }));
+  
+    // Close the modal and show success message
+    setIsAttendanceModalOpen(false);
+    setSuccessMessage('Attendance recorded successfully!');
+    
+    // Clear the success message after 3 seconds
+    setTimeout(() => setSuccessMessage(''), 3000);
   };
 
   // Filter employees based on search and filters
@@ -246,7 +313,7 @@ const EmployeeManagement = () => {
   return (
     <div className="h-full bg-gray-100">
       {selectedEmployee ? (
-        <EmployeeProfile employee={selectedEmployee} onClose={closeEmployeeProfile} />
+        <EmployeeProfile employee={selectedEmployee} onClose={closeEmployeeProfile} onEdit={toggleEditModal} onRecordAttendance={toggleAttendanceModal}/>
       ) : (
         <div className="px-6 py-6">
           {/* Header */}
@@ -362,7 +429,7 @@ const EmployeeManagement = () => {
               {/* Employees Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-6">
                 {currentEmployees.map(employee => (
-                  <EmployeeCard key={employee.id} employee={employee} onClick={() => openEmployeeProfile(employee)} />
+                  <EmployeeCard key={employee.id} employee={employee} onClick={() => openEmployeeProfile(employee)} onRecordAttendance={toggleAttendanceModal} />
                 ))}
               </div>
 
@@ -420,12 +487,37 @@ const EmployeeManagement = () => {
       {isAddModalOpen && (
         <AddEmployeeModal onClose={toggleAddModal} />
       )}
+
+      {/* Edit Employee Modal */}
+      {isEditModalOpen && employeeToEdit && (
+        <EditEmployeeModal
+          employee={employeeToEdit}
+          onClose={toggleEditModal}
+          onSave={editEmployee}
+        />
+      )}
+
+      {/* Record Attendance Modal */}
+      {isAttendanceModalOpen && employeeForAttendance && (
+        <RecordAttendanceModal
+          employee={employeeForAttendance}
+          onClose={toggleAttendanceModal}
+          onSave={recordAttendance}
+        />
+      )}
+
+      {/* Success Message Notification */}
+      {successMessage && (
+        <div className="fixed top-6 right-6 bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-md shadow-lg z-50 animate-fadeIn">
+          <p>{successMessage}</p>
+        </div>
+      )}
     </div>
   );
 };
 
 // Employee Card Component
-const EmployeeCard = ({ employee, onClick }) => {
+const EmployeeCard = ({ employee, onClick, onRecordAttendance }) => {
   return (
     <div 
       className="bg-white rounded-lg shadow overflow-hidden hover:shadow-md transition-shadow duration-200 cursor-pointer"
@@ -467,13 +559,22 @@ const EmployeeCard = ({ employee, onClick }) => {
             Since {new Date(employee.dateJoined).toLocaleDateString()}
           </span>
         </div>
+        <div className="mt-4 pt-2 border-t flex justify-end space-x-4" onClick={(e) => e.stopPropagation()}>
+          <button 
+            className="p-1 text-green-600 hover:text-green-900 transition-colors duration-200 hover:bg-green-50 rounded-full"
+            onClick={() => onRecordAttendance(employee)}
+          >
+            <Calendar size={16} />
+            Attendance
+          </button>
+        </div>
       </div>
     </div>
   );
 };
 
 // Employee Profile Component
-const EmployeeProfile = ({ employee, onClose }) => {
+const EmployeeProfile = ({ employee, onClose, onEdit, onRecordAttendance}) => {
   const [activeTab, setActiveTab] = useState('overview');
   
   return (
@@ -538,10 +639,16 @@ const EmployeeProfile = ({ employee, onClose }) => {
                 </div>
                 
                 <div className="mt-6 w-full flex flex-col space-y-2">
-                  <button className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                  <button 
+                    onClick={() => onEdit(employee)}
+                    className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  >
                     Edit Profile
                   </button>
-                  <button className="w-full py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                  <button 
+                    onClick={() => onRecordAttendance(employee)}
+                    className="w-full py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  >
                     Record Attendance
                   </button>
                 </div>
@@ -2638,5 +2745,459 @@ const AddEmployeeModal = ({ onClose }) => {
       </div>
     );
   };
+
+const EditEmployeeModal = ({ employee, onClose, onSave }) => {
+  const [formData, setFormData] = useState({
+    ...employee,
+    firstName: employee.name.split(' ')[0],
+    lastName: employee.name.split(' ')[1] || '',
+  });
+  
+  // Handle form field changes
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
+  };
+  
+  // Handle form submission
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    // Combine first and last name
+    const updatedEmployee = {
+      ...formData,
+      name: `${formData.firstName} ${formData.lastName}`.trim(),
+    };
+    
+    // Remove the firstName and lastName fields as they're not part of the original data structure
+    delete updatedEmployee.firstName;
+    delete updatedEmployee.lastName;
+    
+    onSave(updatedEmployee);
+  };
+  
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-screen overflow-y-auto">
+        <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-blue-50 flex justify-between items-center">
+          <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-700">Edit Employee</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit}>
+          <div className="px-6 py-4 space-y-6">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div>
+                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
+                  First Name *
+                </label>
+                <input
+                  type="text"
+                  id="firstName"
+                  name="firstName"
+                  value={formData.firstName}
+                  onChange={handleChange}
+                  required
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                />
+              </div>
+              
+              <div>
+                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
+                  Last Name *
+                </label>
+                <input
+                  type="text"
+                  id="lastName"
+                  name="lastName"
+                  value={formData.lastName}
+                  onChange={handleChange}
+                  required
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                Email Address *
+              </label>
+              <input
+                type="email"
+                id="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                required
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
+                Phone Number *
+              </label>
+              <input
+                type="tel"
+                id="phone"
+                name="phone"
+                value={formData.phone}
+                onChange={handleChange}
+                required
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="jobTitle" className="block text-sm font-medium text-gray-700 mb-1">
+                Job Title *
+              </label>
+              <input
+                type="text"
+                id="jobTitle"
+                name="jobTitle"
+                value={formData.jobTitle}
+                onChange={handleChange}
+                required
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="department" className="block text-sm font-medium text-gray-700 mb-1">
+                Department *
+              </label>
+              <select
+                id="department"
+                name="department"
+                value={formData.department}
+                onChange={handleChange}
+                required
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              >
+                <option value="Management">Management</option>
+                <option value="Animal Care">Animal Care</option>
+                <option value="Milk Production">Milk Production</option>
+                <option value="Administration">Administration</option>
+                <option value="Operations">Operations</option>
+              </select>
+            </div>
+            
+            <div>
+              <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
+                Address
+              </label>
+              <textarea
+                id="address"
+                name="address"
+                rows={3}
+                value={formData.address}
+                onChange={handleChange}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              ></textarea>
+            </div>
+            
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div>
+                <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
+                  Status *
+                </label>
+                <select
+                  id="status"
+                  name="status"
+                  value={formData.status}
+                  onChange={handleChange}
+                  required
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                >
+                  <option value="Active">Active</option>
+                  <option value="On Leave">On Leave</option>
+                  <option value="Terminated">Terminated</option>
+                </select>
+              </div>
+              
+              <div>
+                <label htmlFor="schedule" className="block text-sm font-medium text-gray-700 mb-1">
+                  Schedule *
+                </label>
+                <select
+                  id="schedule"
+                  name="schedule"
+                  value={formData.schedule}
+                  onChange={handleChange}
+                  required
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                >
+                  <option value="Full-time">Full-time</option>
+                  <option value="Part-time">Part-time</option>
+                </select>
+              </div>
+            </div>
+            
+            <div>
+              <label htmlFor="salary" className="block text-sm font-medium text-gray-700 mb-1">
+                Salary (₹) *
+              </label>
+              <input
+                type="number"
+                id="salary"
+                name="salary"
+                value={formData.salary}
+                onChange={handleChange}
+                required
+                min="0"
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              />
+            </div>
+          </div>
+          
+          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            >
+              Save Changes
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// Add this component inside the EmployeeManagement.jsx file
+const RecordAttendanceModal = ({ employee, onClose, onSave }) => {
+  const today = new Date().toISOString().split('T')[0];
+  
+  const [formData, setFormData] = useState({
+    employeeId: employee.id,
+    date: today,
+    status: 'Present',
+    clockIn: '08:00',
+    clockOut: '17:00',
+    notes: '',
+    hoursWorked: 8
+  });
+  
+  // Handle form field changes
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
+    
+    // Automatically calculate hours worked when clock in/out changes
+    if (name === 'clockIn' || name === 'clockOut') {
+      const clockIn = name === 'clockIn' ? value : formData.clockIn;
+      const clockOut = name === 'clockOut' ? value : formData.clockOut;
+      
+      if (clockIn && clockOut) {
+        const [inHours, inMinutes] = clockIn.split(':').map(Number);
+        const [outHours, outMinutes] = clockOut.split(':').map(Number);
+        
+        let hours = outHours - inHours;
+        let minutes = outMinutes - inMinutes;
+        
+        if (minutes < 0) {
+          hours -= 1;
+          minutes += 60;
+        }
+        
+        const totalHours = hours + (minutes / 60);
+        
+        setFormData(prev => ({
+          ...prev,
+          hoursWorked: totalHours.toFixed(1)
+        }));
+      }
+    }
+    
+    // If status is not Present or Late, clear clock in/out times
+    if (name === 'status' && value !== 'Present' && value !== 'Late') {
+      setFormData(prev => ({
+        ...prev,
+        clockIn: '',
+        clockOut: '',
+        hoursWorked: 0
+      }));
+    }
+  };
+  
+  // Handle form submission
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    // Create attendance record
+    const attendanceRecord = {
+      date: formData.date,
+      status: formData.status,
+      hoursWorked: parseFloat(formData.hoursWorked),
+      notes: formData.notes,
+    };
+    
+    onSave(employee.id, attendanceRecord);
+  };
+  
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full">
+        <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-blue-50 flex justify-between items-center">
+          <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-700">Record Attendance</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit}>
+          <div className="px-6 py-4 space-y-4">
+            <div className="flex items-center">
+              <div className="flex-shrink-0 h-12 w-12">
+                <img className="h-12 w-12 rounded-full" src={employee.image} alt={employee.name} />
+              </div>
+              <div className="ml-4">
+                <h4 className="text-lg font-medium text-gray-900">{employee.name}</h4>
+                <p className="text-sm text-gray-500">{employee.jobTitle}</p>
+              </div>
+            </div>
+            
+            <div>
+              <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
+                Date *
+              </label>
+              <input
+                type="date"
+                id="date"
+                name="date"
+                value={formData.date}
+                onChange={handleChange}
+                required
+                max={today}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
+                Status *
+              </label>
+              <select
+                id="status"
+                name="status"
+                value={formData.status}
+                onChange={handleChange}
+                required
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              >
+                <option value="Present">Present</option>
+                <option value="Absent">Absent</option>
+                <option value="Late">Late</option>
+                <option value="Vacation">Vacation</option>
+                <option value="Sick">Sick Leave</option>
+                <option value="Holiday">Holiday</option>
+              </select>
+            </div>
+            
+            {(formData.status === 'Present' || formData.status === 'Late') && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="clockIn" className="block text-sm font-medium text-gray-700 mb-1">
+                    Clock In
+                  </label>
+                  <input
+                    type="time"
+                    id="clockIn"
+                    name="clockIn"
+                    value={formData.clockIn}
+                    onChange={handleChange}
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="clockOut" className="block text-sm font-medium text-gray-700 mb-1">
+                    Clock Out
+                  </label>
+                  <input
+                    type="time"
+                    id="clockOut"
+                    name="clockOut"
+                    value={formData.clockOut}
+                    onChange={handleChange}
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  />
+                </div>
+              </div>
+            )}
+            
+            <div>
+              <label htmlFor="hoursWorked" className="block text-sm font-medium text-gray-700 mb-1">
+                Hours Worked
+              </label>
+              <input
+                type="number"
+                id="hoursWorked"
+                name="hoursWorked"
+                value={formData.hoursWorked}
+                onChange={handleChange}
+                min="0"
+                step="0.1"
+                disabled={formData.status !== 'Present' && formData.status !== 'Late'}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
+                Notes
+              </label>
+              <textarea
+                id="notes"
+                name="notes"
+                rows={3}
+                value={formData.notes}
+                onChange={handleChange}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                placeholder="Any additional notes..."
+              ></textarea>
+            </div>
+          </div>
+          
+          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            >
+              Save Attendance
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
   
   export default EmployeeManagement;
