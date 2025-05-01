@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Home, Users, Clipboard, Droplet, Thermometer, DollarSign, Settings, LogOut,X,Menu, IndianRupee } from 'lucide-react';
 
-// Import all components
 import AuthenticationScreen from './components/AuthenticationScreen';
 import FarmDashboard from './components/FarmDashboard';
 import CowManagement from './components/CowManagement';

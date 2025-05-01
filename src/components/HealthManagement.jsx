@@ -1,177 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, Plus, Calendar, Clipboard, AlertTriangle, ChevronLeft, ChevronRight, Thermometer, Heart, AlertCircle, MoreHorizontal, Download, RefreshCw } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { 
+  fetchHealthEvents, 
+  fetchVaccinationSchedule, 
+  fetchMedications, 
+  generateHealthStats,
+  addHealthEvent,
+  updateHealthEvent,
+  deleteHealthEvent,
+  fetchCowsForSelection,
+  addMedication
+} from './services/healthService';
 
-// Mock data for cow health
-const mockHealthData = {
-  healthEvents: [
-    {
-      id: 'HE001',
-      cowId: 'C001',
-      cowName: 'Daisy',
-      cowTag: 'A128',
-      eventType: 'Vaccination',
-      eventDate: '2023-04-22',
-      description: 'Annual vaccination administered',
-      performedBy: 'Dr. Smith',
-      medications: [
-        { name: 'BVD Vaccine', dosage: '5ml', method: 'Injection' }
-      ],
-      notes: 'Cow handled well, no adverse reactions',
-      followUp: '2024-04-22',
-      status: 'Completed'
-    },
-    {
-      id: 'HE002',
-      cowId: 'C003',
-      cowName: 'Buttercup',
-      cowTag: 'C215',
-      eventType: 'Treatment',
-      eventDate: '2023-04-20',
-      description: 'Treatment for mastitis',
-      performedBy: 'Dr. Johnson',
-      medications: [
-        { name: 'Antibiotics', dosage: '10ml', method: 'Injection' },
-        { name: 'Anti-inflammatory', dosage: '5ml', method: 'Injection' }
-      ],
-      notes: 'Detected during morning milking. Moderate case in right rear quarter',
-      followUp: '2023-04-27',
-      status: 'In progress'
-    },
-    {
-      id: 'HE003',
-      cowId: 'C005',
-      cowName: 'Luna',
-      cowTag: 'E162',
-      eventType: 'Regular Checkup',
-      eventDate: '2023-04-20',
-      description: 'Scheduled health check',
-      performedBy: 'Dr. Smith',
-      medications: [],
-      notes: 'All vitals normal, but milk production has decreased. Will monitor closely',
-      followUp: '2023-05-04',
-      status: 'Monitoring'
-    },
-    {
-      id: 'HE004',
-      cowId: 'C004',
-      cowName: 'Millie',
-      cowTag: 'D073',
-      eventType: 'Hoof Trimming',
-      eventDate: '2023-04-15',
-      description: 'Regular hoof maintenance',
-      performedBy: 'Mike Peterson',
-      medications: [],
-      notes: 'Slight inflammation on front left hoof. Applied topical cream',
-      followUp: '',
-      status: 'Completed'
-    },
-    {
-      id: 'HE005',
-      cowId: 'C003',
-      cowName: 'Buttercup',
-      cowTag: 'C215',
-      eventType: 'Examination',
-      eventDate: '2023-04-10',
-      description: 'Suspected mastitis',
-      performedBy: 'Dr. Johnson',
-      medications: [],
-      notes: 'Early signs of mastitis detected. Milk sample sent to lab for confirmation',
-      followUp: '2023-04-15',
-      status: 'Completed'
-    }
-  ],
-  vaccinationSchedule: [
-    {
-      id: 'VS001',
-      cowId: 'C004',
-      cowName: 'Millie',
-      cowTag: 'D073',
-      vaccinationType: 'Annual Booster',
-      dueDate: '2023-05-01',
-      status: 'Scheduled',
-      assignedTo: 'Dr. Smith'
-    },
-    {
-      id: 'VS002',
-      cowId: 'C002',
-      cowName: 'Bella',
-      cowTag: 'B094',
-      vaccinationType: 'Annual Booster',
-      dueDate: '2023-05-10',
-      status: 'Scheduled',
-      assignedTo: 'Dr. Johnson'
-    }
-  ],
-  healthStats: {
-    activeCases: 2,
-    scheduledCheckups: 3,
-    treatedLastMonth: 8,
-    totalVaccinations: 15,
-    commonIssues: [
-      { name: 'Mastitis', count: 4 },
-      { name: 'Lameness', count: 3 },
-      { name: 'Respiratory', count: 2 },
-      { name: 'Digestive', count: 2 },
-      { name: 'Other', count: 5 }
-    ],
-    monthlyData: [
-      { month: 'Jan', treatments: 12, checkups: 25 },
-      { month: 'Feb', treatments: 8, checkups: 22 },
-      { month: 'Mar', treatments: 10, checkups: 24 },
-      { month: 'Apr', treatments: 8, checkups: 26 }
-    ]
-  },
-  medications: [
-    { 
-      id: 'M001', 
-      name: 'BVD Vaccine', 
-      type: 'Vaccine', 
-      stock: 45, 
-      unit: 'doses', 
-      expirationDate: '2023-12-15',
-      supplier: 'VetSupply Inc.'
-    },
-    { 
-      id: 'M002', 
-      name: 'Mastitis Treatment', 
-      type: 'Antibiotic', 
-      stock: 12, 
-      unit: 'tubes', 
-      expirationDate: '2023-10-30',
-      supplier: 'AnimalHealth Co.'
-    },
-    { 
-      id: 'M003', 
-      name: 'Anti-inflammatory', 
-      type: 'Pain relief', 
-      stock: 8, 
-      unit: 'bottles', 
-      expirationDate: '2023-11-20',
-      supplier: 'VetSupply Inc.'
-    },
-    { 
-      id: 'M004', 
-      name: 'Hoof Treatment', 
-      type: 'Topical', 
-      stock: 3, 
-      unit: 'containers', 
-      expirationDate: '2024-01-15',
-      supplier: 'FarmMed Ltd.'
-    },
-    { 
-      id: 'M005', 
-      name: 'Broad Spectrum Antibiotic', 
-      type: 'Antibiotic', 
-      stock: 5, 
-      unit: 'bottles', 
-      expirationDate: '2023-08-10',
-      supplier: 'AnimalHealth Co.'
-    }
-  ]
-};
-
-// Status badge colors
+// Status badge colors - no change
 const statusColors = {
   'Completed': 'bg-green-100 text-green-800',
   'In progress': 'bg-blue-100 text-blue-800',
@@ -180,7 +22,7 @@ const statusColors = {
   'Overdue': 'bg-red-100 text-red-800'
 };
 
-// Utility functions
+// Utility functions - no change
 const formatDate = (dateString) => {
   const options = { year: 'numeric', month: 'long', day: 'numeric' };
   return new Date(dateString).toLocaleDateString('en-US', options);
@@ -204,7 +46,58 @@ const HealthManagement = () => {
   const [filterStatus, setFilterStatus] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
-  const [healthData, setHealthData] = useState(mockHealthData);
+  const [healthData, setHealthData] = useState({
+    healthEvents: [],
+    vaccinationSchedule: [],
+    healthStats: {
+      activeCases: 0,
+      scheduledCheckups: 0,
+      treatedLastMonth: 0,
+      totalVaccinations: 0,
+      commonIssues: [],
+      monthlyData: []
+    },
+    medications: []
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  // Load health data
+  useEffect(() => {
+    const loadHealthData = async () => {
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        // Fetch health events
+        const events = await fetchHealthEvents();
+        
+        // Fetch vaccination schedule
+        const vaccinations = await fetchVaccinationSchedule();
+        
+        // Generate health stats
+        const stats = await generateHealthStats();
+        
+        // Fetch medications
+        const medications = await fetchMedications();
+        
+        // Update state with all data
+        setHealthData({
+          healthEvents: events,
+          vaccinationSchedule: vaccinations,
+          healthStats: stats,
+          medications: medications
+        });
+      } catch (err) {
+        console.error('Error loading health data:', err);
+        setError('Failed to load health data. Please refresh the page to try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadHealthData();
+  }, []);
   
   // Filter health events based on search and filters
   const filteredEvents = healthData.healthEvents.filter(event => {
@@ -239,9 +132,62 @@ const HealthManagement = () => {
     setIsAddEventOpen(!isAddEventOpen);
   };
   
+  // Handle adding a new health event
+  const handleAddHealthEvent = async (eventData) => {
+    try {
+      await addHealthEvent(eventData);
+      
+      // Refresh health events list
+      const events = await fetchHealthEvents();
+      setHealthData(prev => ({
+        ...prev,
+        healthEvents: events
+      }));
+      
+      // Close modal
+      setIsAddEventOpen(false);
+    } catch (err) {
+      console.error('Error adding health event:', err);
+      alert('Failed to add health event. Please try again.');
+    }
+  };
+  
   // Prepare chart data for health issues
   const healthIssuesData = healthData.healthStats.commonIssues;
   const COLORS = ['#2E7D32', '#1565C0', '#FFA000', '#6D4C41', '#9E9E9E'];
+  
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="h-full bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading health data...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Show error state
+  if (error) {
+    return (
+      <div className="h-full bg-gray-100 flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <div className="p-4 mb-4 bg-red-100 text-red-700 rounded-lg">
+            <h3 className="text-lg font-medium">Error Loading Health Data</h3>
+            <p className="mt-2">{error}</p>
+          </div>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+          >
+            <RefreshCw size={16} className="inline-block mr-2" />
+            Refresh Page
+          </button>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className="h-full bg-gray-100">
@@ -279,7 +225,7 @@ const HealthManagement = () => {
             >
               Health Events
             </button>
-            <button
+            {/* <button
               onClick={() => setActiveTab('vaccinations')}
               className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px ${
                 activeTab === 'vaccinations'
@@ -308,7 +254,7 @@ const HealthManagement = () => {
               }`}
             >
               Reports
-            </button>
+            </button> */}
           </nav>
         </div>
         
@@ -668,12 +614,16 @@ const HealthManagement = () => {
         {activeTab === 'reports' && (
           <ReportsTab healthData={healthData} />
         )}
+
       </div>
       
       {/* Add Health Event Modal */}
       {isAddEventOpen && (
-        <AddHealthEventModal onClose={toggleAddEvent} />
-      )}
+          <AddHealthEventModal 
+            onClose={toggleAddEvent} 
+            onSubmit={handleAddHealthEvent}
+          />
+        )}
     </div>
   );
 };
@@ -1480,7 +1430,7 @@ const ReportItem = ({ title, type, date, format, size }) => {
 };
 
 // Add Health Event Modal Component
-const AddHealthEventModal = ({ onClose }) => {
+const AddHealthEventModal = ({ onClose, onSubmit }) => {
   const [formData, setFormData] = useState({
     cowId: '',
     eventType: 'Examination',
@@ -1492,6 +1442,26 @@ const AddHealthEventModal = ({ onClose }) => {
     followUp: '',
     status: 'Completed'
   });
+  const [cows, setCows] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  // Load cows for selection
+  useEffect(() => {
+    const loadCows = async () => {
+      try {
+        const cowsList = await fetchCowsForSelection();
+        setCows(cowsList);
+      } catch (err) {
+        console.error('Error loading cows:', err);
+        setError('Failed to load cow list');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadCows();
+  }, []);
   
   // Handle form field changes
   const handleChange = (e) => {
@@ -1533,18 +1503,24 @@ const AddHealthEventModal = ({ onClose }) => {
   };
   
   // Handle form submission
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Form data submitted:', formData);
-    // Here you would make an API call to record the health event
-    onClose();
+    
+    try {
+      await onSubmit(formData);
+      onClose();
+    } catch (err) {
+      setError('Failed to save health event');
+    }
   };
   
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-screen overflow-y-auto">
         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gradient-to-r from-green-500 to-green-600 text-white">
-          <h3 className="flex items-center px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">Record Health Event</h3>
+          <h3 className="flex items-center px-4 py-2 text-white rounded-lg">
+            Record Health Event
+          </h3>
           <button 
             onClick={onClose}
             className="text-white hover:text-gray-200"
@@ -1555,6 +1531,12 @@ const AddHealthEventModal = ({ onClose }) => {
           </button>
         </div>
         
+        {error && (
+          <div className="px-6 pt-4 text-red-700 bg-red-100 p-3 rounded">
+            {error}
+          </div>
+        )}
+        
         <form onSubmit={handleSubmit}>
           <div className="px-6 py-4 space-y-6">
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
@@ -1562,21 +1544,25 @@ const AddHealthEventModal = ({ onClose }) => {
                 <label htmlFor="cowId" className="block text-sm font-medium text-gray-700 mb-1">
                   Cow *
                 </label>
-                <select
-                  id="cowId"
-                  name="cowId"
-                  value={formData.cowId}
-                  onChange={handleChange}
-                  required
-                  className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                >
-                  <option value="">Select a cow</option>
-                  <option value="C001">Daisy (A128)</option>
-                  <option value="C002">Bella (B094)</option>
-                  <option value="C003">Buttercup (C215)</option>
-                  <option value="C004">Millie (D073)</option>
-                  <option value="C005">Luna (E162)</option>
-                </select>
+                {isLoading ? (
+                  <div className="animate-pulse h-10 bg-gray-200 rounded"></div>
+                ) : (
+                  <select
+                    id="cowId"
+                    name="cowId"
+                    value={formData.cowId}
+                    onChange={handleChange}
+                    required
+                    className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  >
+                    <option value="">Select a cow</option>
+                    {cows.map(cow => (
+                      <option key={cow.id} value={cow.id}>
+                        {cow.name} ({cow.tag_number})
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
               
               <div>

@@ -1,141 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Calendar, Droplet, Filter, Search, ChevronLeft, ChevronRight, BarChart2, Download, Plus, ThermometerSun, AlertTriangle } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { 
+  fetchMilkCollections, 
+  fetchMonthlyTotals, 
+  fetchQualityTrends, 
+  addMilkCollection, 
+  updateMilkCollection, 
+  deleteMilkCollection, 
+  getQualityStandards, 
+  getMilkAlerts 
+} from './services/milkService';
+import { supabase } from '../lib/supabase';
+import { 
+  initReportsTable, 
+  fetchReports, 
+  generateReport, 
+  deleteReport, 
+  downloadReport 
+} from './services/reportService';
+import { saveAs } from 'file-saver';
 
-// Mock data for milk production
-const mockMilkData = {
-  dailyCollections: [
-    {
-      id: 'MC001',
-      date: '2023-04-26',
-      shift: 'Morning',
-      totalQuantity: 427,
-      qualityParameters: {
-        fat: 3.8,
-        protein: 3.2,
-        lactose: 4.7,
-        somatic: 175,
-        bacteria: 15000
-      },
-      collectedBy: 'John Doe',
-      status: 'Completed',
-      notes: 'Regular collection'
-    },
-    {
-      id: 'MC002',
-      date: '2023-04-26',
-      shift: 'Evening',
-      totalQuantity: 385,
-      qualityParameters: {
-        fat: 3.7,
-        protein: 3.3,
-        lactose: 4.6,
-        somatic: 180,
-        bacteria: 16000
-      },
-      collectedBy: 'Jane Smith',
-      status: 'Completed',
-      notes: ''
-    },
-    {
-      id: 'MC003',
-      date: '2023-04-25',
-      shift: 'Morning',
-      totalQuantity: 430,
-      qualityParameters: {
-        fat: 3.9,
-        protein: 3.2,
-        lactose: 4.8,
-        somatic: 170,
-        bacteria: 14000
-      },
-      collectedBy: 'John Doe',
-      status: 'Completed',
-      notes: ''
-    },
-    {
-      id: 'MC004',
-      date: '2023-04-25',
-      shift: 'Evening',
-      totalQuantity: 390,
-      qualityParameters: {
-        fat: 3.8,
-        protein: 3.1,
-        lactose: 4.7,
-        somatic: 175,
-        bacteria: 15000
-      },
-      collectedBy: 'Jane Smith',
-      status: 'Completed',
-      notes: ''
-    },
-    {
-      id: 'MC005',
-      date: '2023-04-24',
-      shift: 'Morning',
-      totalQuantity: 425,
-      qualityParameters: {
-        fat: 3.7,
-        protein: 3.2,
-        lactose: 4.6,
-        somatic: 185,
-        bacteria: 16000
-      },
-      collectedBy: 'John Doe',
-      status: 'Completed',
-      notes: ''
-    },
-    {
-      id: 'MC006',
-      date: '2023-04-24',
-      shift: 'Evening',
-      totalQuantity: 380,
-      qualityParameters: {
-        fat: 3.6,
-        protein: 3.1,
-        lactose: 4.5,
-        somatic: 190,
-        bacteria: 17000
-      },
-      collectedBy: 'Jane Smith',
-      status: 'Completed',
-      notes: 'Slight decrease in production'
-    }
-  ],
-  monthlyTotals: [
-    { month: 'Jan', quantity: 24150 },
-    { month: 'Feb', quantity: 23000 },
-    { month: 'Mar', quantity: 26500 },
-    { month: 'Apr', quantity: 25800 }
-  ],
-  qualityTrends: [
-    { date: '2023-04-20', fat: 3.7, protein: 3.1, lactose: 4.6 },
-    { date: '2023-04-21', fat: 3.8, protein: 3.2, lactose: 4.7 },
-    { date: '2023-04-22', fat: 3.7, protein: 3.2, lactose: 4.6 },
-    { date: '2023-04-23', fat: 3.6, protein: 3.1, lactose: 4.5 },
-    { date: '2023-04-24', fat: 3.7, protein: 3.2, lactose: 4.6 },
-    { date: '2023-04-25', fat: 3.8, protein: 3.2, lactose: 4.7 },
-    { date: '2023-04-26', fat: 3.8, protein: 3.3, lactose: 4.7 }
-  ],
-  qualityStandards: {
+
+
+// Default quality standards in case the API doesn't return them
+  const defaultStandards = {
     fat: { min: 3.5, target: 3.8, max: 4.2 },
     protein: { min: 3.0, target: 3.3, max: 3.6 },
     lactose: { min: 4.5, target: 4.8, max: 5.0 },
-    somatic: { max: 200 }, // cells/ml in thousands
-    bacteria: { max: 20000 } // CFU/ml
-  },
-  alerts: [
-    {
-      id: 'A001',
-      date: '2023-04-24',
-      type: 'quality',
-      parameter: 'somatic',
-      value: 190,
-      message: 'Somatic cell count nearing upper limit',
-      severity: 'warning'
-    }
-  ]
-};
+    somatic: { max: 200 },
+    bacteria: { max: 20000 }
+  };
 
 // Utility functions
 const formatDate = (dateString) => {
@@ -148,15 +43,6 @@ const formatShortDate = (dateString) => {
   return new Date(dateString).toLocaleDateString('en-US', options);
 };
 
-const getTotal = (data) => {
-  return data.reduce((sum, record) => sum + record.totalQuantity, 0);
-};
-
-const getAverageQuality = (data, parameter) => {
-  return data.reduce((sum, record) => sum + record.qualityParameters[parameter], 0) / data.length;
-};
-
-// Utility function to handle downloads
 const handleDownload = (data, filename, fileType) => {
   let content = '';
   let mimeType = '';
@@ -201,67 +87,221 @@ const MilkProduction = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dateRange, setDateRange] = useState('week');
-  const [milkData, setMilkData] = useState(mockMilkData);
+  const [milkData, setMilkData] = useState({
+    dailyCollections: [],
+    monthlyTotals: [],
+    qualityTrends: [],
+    qualityStandards: {},
+    alerts: []
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   
-  // Filter data based on date range
-  const getFilteredData = () => {
-    const today = new Date();
-    let startDate;
+  const navigateDate = useCallback((direction) => {
+    const newDate = new Date(currentDate);
     
     switch(dateRange) {
       case 'today':
-        startDate = new Date(today.setHours(0, 0, 0, 0));
+        // Move one day forward or backward
+        newDate.setDate(newDate.getDate() + (direction === 'next' ? 1 : -1));
         break;
       case 'week':
-        startDate = new Date(today.setDate(today.getDate() - 7));
+        // Move one week forward or backward
+        newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7));
         break;
       case 'month':
-        startDate = new Date(today.setMonth(today.getMonth() - 1));
+        // Move one month forward or backward
+        newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1));
         break;
       default:
-        startDate = new Date(today.setDate(today.getDate() - 7));
+        newDate.setDate(newDate.getDate() + (direction === 'next' ? 1 : -1));
     }
     
-    return milkData.dailyCollections.filter(record => {
-      const recordDate = new Date(record.date);
-      return recordDate >= startDate;
-    });
+    // Don't allow navigating to future dates beyond today
+    const today = new Date();
+    if (newDate > today) {
+      newDate.setTime(today.getTime());
+    }
+    
+    setCurrentDate(newDate);
+  }, [currentDate, dateRange]);
+
+  // Load data based on the selected date range
+  // Inside the useEffect for data loading:
+useEffect(() => {
+  const loadMilkData = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Create clean date strings (no time component) for exact date matching
+      const currentDateStr = currentDate.toISOString().split('T')[0];
+      let startDateStr;
+      let endDateStr;
+      
+      switch(dateRange) {
+        case 'today':
+          // For today, use the same date for start and end
+          startDateStr = currentDateStr;
+          endDateStr = currentDateStr;
+          break;
+        case 'week':
+          // For week, go back 6 days
+          const weekStartDate = new Date(currentDate);
+          weekStartDate.setDate(weekStartDate.getDate() - 6);
+          startDateStr = weekStartDate.toISOString().split('T')[0];
+          endDateStr = currentDateStr;
+          break;
+        case 'month':
+          // For month, go back 29 days
+          const monthStartDate = new Date(currentDate);
+          monthStartDate.setDate(monthStartDate.getDate() - 29);
+          startDateStr = monthStartDate.toISOString().split('T')[0];
+          endDateStr = currentDateStr;
+          break;
+        default:
+          // Default to week
+          const defaultStartDate = new Date(currentDate);
+          defaultStartDate.setDate(defaultStartDate.getDate() - 6);
+          startDateStr = defaultStartDate.toISOString().split('T')[0];
+          endDateStr = currentDateStr;
+      }
+      
+      // Fetch all data in parallel using clean date strings
+      const [
+        collections,
+        monthlyTotals,
+        qualityTrends,
+        qualityStandards,
+        alerts
+      ] = await Promise.all([
+        fetchMilkCollections(startDateStr, endDateStr),
+        fetchMonthlyTotals(currentDate.getFullYear()),
+        fetchQualityTrends(dateRange === 'today' ? 1 : dateRange === 'week' ? 7 : 30),
+        getQualityStandards(),
+        getMilkAlerts()
+      ]);
+      
+      setMilkData({
+        dailyCollections: collections,
+        monthlyTotals,
+        qualityTrends,
+        qualityStandards,
+        alerts
+      });
+    } catch (error) {
+      console.error('Error loading milk data:', error);
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
   
-  const filteredData = getFilteredData();
+  loadMilkData();
+}, [dateRange, currentDate]);
   
-  // Calculate statistics
+  // Calculate statistics safely
+  const getTotal = (data) => {
+    if (!Array.isArray(data) || data.length === 0) return 0;
+    return data.reduce((sum, record) => sum + (record.totalQuantity || 0), 0);
+  };
+
+  const filteredData = milkData.dailyCollections || [];
   const totalMilk = getTotal(filteredData);
-  const avgFat = getAverageQuality(filteredData, 'fat');
-  const avgProtein = getAverageQuality(filteredData, 'protein');
-  
-  // Prepare chart data
+
+  // Since we don't have direct access to quality parameters yet,
+  // let's calculate averages from the trends data with safeguards
+  const avgFat = milkData.qualityTrends && milkData.qualityTrends.length > 0 
+    ? milkData.qualityTrends.reduce((sum, item) => sum + (item.fat || 0), 0) / milkData.qualityTrends.length
+    : 3.8;
+    
+  const avgProtein = milkData.qualityTrends && milkData.qualityTrends.length > 0
+    ? milkData.qualityTrends.reduce((sum, item) => sum + (item.protein || 0), 0) / milkData.qualityTrends.length
+    : 3.2;
+
+  // Prepare chart data with null checks
   const prepareChartData = () => {
+    // Return empty array if no data
+    if (!Array.isArray(filteredData) || filteredData.length === 0) {
+      return [];
+    }
+
     // Group by date and calculate totals for each day
     const groupedByDate = {};
     
     filteredData.forEach(record => {
-        if (!groupedByDate[record.date]) {
-          groupedByDate[record.date] = {
-            date: record.date,
-            displayDate: formatShortDate(record.date),
-            totalQuantity: 0
-          };
-        }
-        groupedByDate[record.date].totalQuantity += record.totalQuantity;
+      if (!record.date) return; // Skip records with no date
+      
+      if (!groupedByDate[record.date]) {
+        groupedByDate[record.date] = {
+          date: record.date,
+          displayDate: formatShortDate(record.date),
+          totalQuantity: 0
+        };
+      }
+      groupedByDate[record.date].totalQuantity += record.totalQuantity || 0;
+    });
+    
+    return Object.values(groupedByDate).sort((a, b) => a.date.localeCompare(b.date));
+  };
+  
+  const chartData = prepareChartData();
+  
+  // Toggle add modal
+  const toggleAddModal = () => {
+    setIsAddModalOpen(!isAddModalOpen);
+  };
+
+  // After a successful add, update the data
+  const handleAddCollection = async (newCollection) => {
+    try {
+      // Extract quality parameters to pass them to the milk service
+      const { qualityParameters, ...collectionData } = newCollection;
+      
+      // Call the service function to add the collection
+      const result = await addMilkCollection(collectionData);
+      
+      // Reload data to reflect the changes
+      const startDateStr = new Date(Date.now() - (7 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
+      const endDateStr = new Date().toISOString().split('T')[0];
+      
+      const updatedCollections = await fetchMilkCollections(startDateStr, endDateStr);
+      
+      setMilkData({
+        ...milkData,
+        dailyCollections: updatedCollections
       });
       
-      return Object.values(groupedByDate).sort((a, b) => a.date.localeCompare(b.date));
-    };
-    
-    const chartData = prepareChartData();
-    
-    // Toggle add modal
-    const toggleAddModal = () => {
-      setIsAddModalOpen(!isAddModalOpen);
-    };
-    
+      return result;
+    } catch (error) {
+      console.error('Error adding collection:', error);
+      throw error;
+    }
+  };
+  
+  if (isLoading && filteredData.length === 0) {
     return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+      </div>
+    );
+  }
+
+  if (error && filteredData.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-8">
+        <div className="text-red-500 text-xl mb-4">Error loading data</div>
+        <p className="text-gray-600 mb-4">{error}</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-green-600 text-white rounded-md"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
+
+  return (
       <div className="h-full bg-gradient-to-br from-gray-50 to-green-50">
         <div className="px-6 py-6">
           <div className="flex justify-between items-center mb-6">
@@ -323,27 +363,47 @@ const MilkProduction = () => {
           
           {/* Date Range Filter */}
           <div className="mb-6 flex items-center space-x-4">
-            <span className="text-sm text-gray-600">Date Range:</span>
-            <select
-              value={dateRange}
-              onChange={(e) => setDateRange(e.target.value)}
-              className="border border-gray-300 rounded-md py-1 px-3 text-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
+          <span className="text-sm text-gray-600">Date Range:</span>
+          <select
+            value={dateRange}
+            onChange={(e) => {
+              setDateRange(e.target.value);
+              // Reset to today when changing date range
+              setCurrentDate(new Date());
+            }}
+            className="border border-gray-300 rounded-md py-1 px-3 text-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
+          >
+            <option value="today">Today</option>
+            <option value="week">Last 7 days</option>
+            <option value="month">Last 30 days</option>
+          </select>
+          
+          <div className="flex items-center ml-4">
+            <button 
+              onClick={() => navigateDate('prev')}
+              className="p-1 rounded-full hover:bg-gray-200"
             >
-              <option value="today">Today</option>
-              <option value="week">Last 7 days</option>
-              <option value="month">Last 30 days</option>
-            </select>
-            
-            <div className="flex items-center ml-4">
-              <button className="p-1 rounded-full hover:bg-gray-200">
-                <ChevronLeft size={18} className="text-gray-500" />
-              </button>
-              <span className="mx-2 text-sm font-medium">{formatShortDate(new Date())}</span>
-              <button className="p-1 rounded-full hover:bg-gray-200">
-                <ChevronRight size={18} className="text-gray-500" />
-              </button>
-            </div>
+              <ChevronLeft size={18} className="text-gray-500" />
+            </button>
+            <span className="mx-2 text-sm font-medium">
+              {dateRange === 'today' 
+                ? formatShortDate(currentDate) 
+                : dateRange === 'week'
+                ? `${formatShortDate(new Date(currentDate.getTime() - 6 * 24 * 60 * 60 * 1000))} - ${formatShortDate(currentDate)}`
+                : `${formatShortDate(new Date(currentDate.getTime() - 29 * 24 * 60 * 60 * 1000))} - ${formatShortDate(currentDate)}`
+              }
+            </span>
+            <button 
+              onClick={() => navigateDate('next')}
+              className={`p-1 rounded-full ${
+                isCurrentDateToday() ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-200'
+              }`}
+              disabled={isCurrentDateToday()}
+            >
+              <ChevronRight size={18} className="text-gray-500" />
+            </button>
           </div>
+        </div>
           
           {/* Dashboard Tab */}
           {activeTab === 'dashboard' && (
@@ -399,8 +459,8 @@ const MilkProduction = () => {
                 </div>
               </div>
               
-              {/* Alerts Section */}
-              {milkData.alerts.length > 0 && (
+              {/* Alerts Section
+              {Array.isArray(milkData.alerts) && milkData.alerts.length > 0 && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
                   <h3 className="text-amber-800 font-medium flex items-center mb-2">
                     <AlertTriangle size={18} className="mr-2" />
@@ -418,7 +478,7 @@ const MilkProduction = () => {
                     ))}
                   </div>
                 </div>
-              )}
+              )} */}
               
               {/* Production Chart */}
               <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
@@ -448,18 +508,9 @@ const MilkProduction = () => {
               </div>
               
               {/* Recent Collections */}
-              <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                  <h2 className="text-lg font-semibold text-gray-800">Recent Collections</h2>
-                  <button
-                    onClick={() => setActiveTab('collections')}
-                    className="text-sm text-green-600 hover:text-green-500 font-medium"
-                  >
-                    View All
-                  </button>
-                </div>
-                <div className="divide-y divide-gray-200">
-                  {milkData.dailyCollections.slice(0, 4).map(collection => (
+              <div className="divide-y divide-gray-200">
+                {milkData.dailyCollections.length > 0 ? (
+                  milkData.dailyCollections.slice(0, 4).map(collection => (
                     <div key={collection.id} className="px-6 py-4">
                       <div className="flex justify-between items-start">
                         <div>
@@ -475,12 +526,19 @@ const MilkProduction = () => {
                         </div>
                         <div className="text-right">
                           <p className="text-lg font-semibold text-gray-800">{collection.totalQuantity} L</p>
-                          <p className="text-xs text-gray-500">Fat: {collection.qualityParameters.fat}% | Protein: {collection.qualityParameters.protein}%</p>
+                          <p className="text-xs text-gray-500">
+                            Fat: {collection.qualityParameters?.fat || 'N/A'}% | 
+                            Protein: {collection.qualityParameters?.protein || 'N/A'}%
+                          </p>
                         </div>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  ))
+                ) : (
+                  <div className="px-6 py-8 text-center text-gray-500">
+                    No collection records available.
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -501,12 +559,25 @@ const MilkProduction = () => {
           )}
         </div>
         
-        {/* Add Collection Modal */}
+        {/* Add Collection Modal - Updated to use Supabase */}
         {isAddModalOpen && (
-          <AddCollectionModal onClose={toggleAddModal} />
+          <AddCollectionModal 
+            onClose={toggleAddModal} 
+            onAdd={handleAddCollection}
+          />
         )}
       </div>
     );
+
+    function isCurrentDateToday() {
+      const today = new Date();
+      return (
+        currentDate.getDate() === today.getDate() &&
+        currentDate.getMonth() === today.getMonth() &&
+        currentDate.getFullYear() === today.getFullYear()
+      );
+    }
+
   };
   
   // Collections Tab Component
@@ -517,11 +588,20 @@ const MilkProduction = () => {
     const [itemsPerPage] = useState(10);
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [viewModalData, setViewModalData] = useState(null);
     const [editModalData, setEditModalData] = useState(null);
+    const [deleteModalData, setDeleteModalData] = useState(null);
+    const [collectionsList, setCollectionsList] = useState(data);
+    const [isLoading, setIsLoading] = useState(false);
+    
+    // Update collections list when data prop changes
+    useEffect(() => {
+      setCollectionsList(data);
+    }, [data]);
     
     // Filter and search collections
-    const filteredCollections = data.filter(collection => {
+    const filteredCollections = collectionsList.filter(collection => {
       // Filter by date or shift
       const matchesFilter = 
         filter === 'all' || 
@@ -548,21 +628,57 @@ const MilkProduction = () => {
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
     const currentItems = sortedCollections.slice(indexOfFirstItem, indexOfLastItem);
     const totalPages = Math.ceil(sortedCollections.length / itemsPerPage);
-
+  
     const handleViewCollection = (collection) => {
-      // Display collection details in a modal or dedicated view
-      console.log('Viewing collection:', collection);
-      // You can use a state variable to control the visibility of a view modal
       setViewModalData(collection);
       setIsViewModalOpen(true);
     };
     
     const handleEditCollection = (collection) => {
-      // Open the collection in edit mode
-      console.log('Editing collection:', collection);
-      // You can populate a form with the collection data
       setEditModalData(collection);
       setIsEditModalOpen(true);
+    };
+  
+    const handleDeleteCollection = (collection) => {
+      setDeleteModalData(collection);
+      setIsDeleteModalOpen(true);
+    };
+    
+    const handleSaveEdit = async (updatedCollection) => {
+      setIsLoading(true);
+      try {
+        // Update the collections list to reflect changes
+        const updatedCollectionsList = collectionsList.map(item => 
+          item.id === updatedCollection.id ? updatedCollection : item
+        );
+        setCollectionsList(updatedCollectionsList);
+        setIsEditModalOpen(false);
+      } catch (error) {
+        console.error('Error updating collection:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+  
+    const confirmDelete = async () => {
+      if (!deleteModalData) return;
+      
+      setIsLoading(true);
+      try {
+        await deleteMilkCollection(deleteModalData.id);
+        
+        // Remove deleted collection from the list
+        const updatedCollectionsList = collectionsList.filter(
+          item => item.id !== deleteModalData.id
+        );
+        setCollectionsList(updatedCollectionsList);
+        setIsDeleteModalOpen(false);
+      } catch (error) {
+        console.error('Error deleting collection:', error);
+        alert('Failed to delete collection. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
     };
     
     return (
@@ -596,13 +712,13 @@ const MilkProduction = () => {
               </select>
             </div>
             
-          <button 
-            onClick={() => handleDownload(filteredCollections, `milk-collections-${new Date().toISOString().slice(0, 10)}.csv`, 'csv')}
-            className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-white bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-          >
-            <Download size={16} className="mr-2" />
-            Export
-          </button>
+            <button 
+              onClick={() => handleDownload(filteredCollections, `milk-collections-${new Date().toISOString().split('T')[0]}.csv`, 'csv')}
+              className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-white bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            >
+              <Download size={16} className="mr-2" />
+              Export
+            </button>
           </div>
         </div>
         
@@ -638,7 +754,8 @@ const MilkProduction = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {currentItems.map(collection => (
+            {currentItems.length > 0 ? (
+              currentItems.map(collection => (
                 <tr key={collection.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {collection.id}
@@ -654,8 +771,8 @@ const MilkProduction = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     <div className="flex flex-col">
-                      <span>Fat: {collection.qualityParameters.fat}%</span>
-                      <span>Protein: {collection.qualityParameters.protein}%</span>
+                      <span>Fat: {collection.qualityParameters?.fat || 'N/A'}%</span>
+                      <span>Protein: {collection.qualityParameters?.protein || 'N/A'}%</span>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -669,19 +786,32 @@ const MilkProduction = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button 
                       onClick={() => handleViewCollection(collection)}
-                      className="text-green-600 hover:text-green-900 mr-4"
+                      className="text-green-600 hover:text-green-900 mr-3"
                     >
                       View
                     </button>
                     <button 
                       onClick={() => handleEditCollection(collection)}
-                      className="text-blue-600 hover:text-blue-900 mr-4"
+                      className="text-blue-600 hover:text-blue-900 mr-3"
                     >
                       Edit
                     </button>
+                    <button 
+                      onClick={() => handleDeleteCollection(collection)}
+                      className="text-red-600 hover:text-red-900"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="8" className="px-6 py-10 text-center text-gray-500">
+                    No collection records found matching your criteria.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
@@ -692,8 +822,7 @@ const MilkProduction = () => {
             <button
               onClick={() => setCurrentPage(currentPage - 1)}
               disabled={currentPage === 1}
-              className={`w-8 h-8 flex items-center justify-center rounded-md ${currentPage === 1 ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' 
-              : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+              className={`w-8 h-8 flex items-center justify-center rounded-md ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
             >
               <ChevronLeft size={16} />
             </button>
@@ -712,14 +841,16 @@ const MilkProduction = () => {
             <button
               onClick={() => setCurrentPage(currentPage + 1)}
               disabled={currentPage === totalPages}
-              className={`w-8 h-8 flex items-center justify-center rounded-md ${currentPage === totalPages ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+              className={`w-8 h-8 flex items-center justify-center rounded-md ${currentPage === totalPages ? 'opacity-50 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
             >
               <ChevronRight size={16} />
             </button>
           </div>
         )}
+        
+        {/* Modals */}
         {isViewModalOpen && viewModalData && (
-      <ViewCollectionModal
+          <ViewCollectionModal
             collection={viewModalData}
             onClose={() => setIsViewModalOpen(false)}
           />
@@ -729,21 +860,89 @@ const MilkProduction = () => {
           <EditCollectionModal
             collection={editModalData}
             onClose={() => setIsEditModalOpen(false)}
-            onSave={(updatedCollection) => {
-              // Handle saving the updated collection
-              console.log('Saving updated collection:', updatedCollection);
-              // In a real app, you would call an API and update the data
-              // For now just close the modal
-              setIsEditModalOpen(false);
-            }}
+            onSave={handleSaveEdit}
+          />
+        )}
+        
+        {/* Delete Confirmation Modal */}
+        {isDeleteModalOpen && deleteModalData && (
+          <DeleteConfirmationModal
+            collection={deleteModalData}
+            onClose={() => setIsDeleteModalOpen(false)}
+            onConfirm={confirmDelete}
+            isLoading={isLoading}
           />
         )}
       </div>
-      
+    );
+  };
+  
+  // Add the Delete Confirmation Modal component
+  const DeleteConfirmationModal = ({ collection, onClose, onConfirm, isLoading }) => {
+    return (
+      <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+            <h3 className="text-lg font-medium text-gray-800">Delete Collection</h3>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-500" disabled={isLoading}>
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          
+          <div className="px-6 py-4">
+            <div className="text-red-600 mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </div>
+            <p className="text-gray-700 text-center">
+              Are you sure you want to delete this milk collection record?
+            </p>
+            <div className="mt-2 text-sm text-gray-500 text-center">
+              <p>Collection date: {formatDate(collection.date)}</p>
+              <p>Quantity: {collection.totalQuantity} L</p>
+              <p>This action cannot be undone.</p>
+            </div>
+          </div>
+          
+          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <button
+              onClick={onClose}
+              disabled={isLoading}
+              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={isLoading}
+              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            >
+              {isLoading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Deleting...
+                </>
+              ) : 'Delete Collection'}
+            </button>
+          </div>
+        </div>
+      </div>
     );
   };
 
   const ViewCollectionModal = ({ collection, onClose }) => {
+    if (!collection) {
+      return null;
+    }
+    
+    const qualityParams = collection.qualityParameters || {};
+    
     return (
       <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
         <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full">
@@ -781,15 +980,15 @@ const MilkProduction = () => {
                 <div className="mt-1 grid grid-cols-3 gap-2">
                   <div>
                     <p className="text-xs text-gray-500">Fat</p>
-                    <p className="text-sm text-gray-900">{collection.qualityParameters.fat}%</p>
+                    <p className="text-sm text-gray-900">{qualityParams.fat || 'N/A'}%</p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-500">Protein</p>
-                    <p className="text-sm text-gray-900">{collection.qualityParameters.protein}%</p>
+                    <p className="text-sm text-gray-900">{qualityParams.protein || 'N/A'}%</p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-500">Lactose</p>
-                    <p className="text-sm text-gray-900">{collection.qualityParameters.lactose}%</p>
+                    <p className="text-sm text-gray-900">{qualityParams.lactose || 'N/A'}%</p>
                   </div>
                 </div>
               </div>
@@ -816,49 +1015,74 @@ const MilkProduction = () => {
   };
   
   // Edit Collection Modal
-  const EditCollectionModal = ({ collection, onClose, onSave }) => {
-    const [formData, setFormData] = useState({
-      ...collection,
-      fat: collection.qualityParameters.fat,
-      protein: collection.qualityParameters.protein,
-      lactose: collection.qualityParameters.lactose,
-      somatic: collection.qualityParameters.somatic,
-      bacteria: collection.qualityParameters.bacteria
+ // Fix for the EditCollectionModal component
+const EditCollectionModal = ({ collection, onClose, onSave }) => {
+  // Ensure collection exists and handle missing qualityParameters
+  const qualityParams = collection.qualityParameters || {};
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  
+  const [formData, setFormData] = useState({
+    ...collection,
+    fat: qualityParams.fat || '',
+    protein: qualityParams.protein || '',
+    lactose: qualityParams.lactose || '',
+    somatic: qualityParams.somatic || '',
+    bacteria: qualityParams.bacteria || ''
+  });
+  
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
     });
+  };
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
     
-    const handleChange = (e) => {
-      const { name, value } = e.target;
-      setFormData({
-        ...formData,
-        [name]: value
-      });
-    };
-    
-    const handleSubmit = (e) => {
-      e.preventDefault();
+    try {
+      // Prepare data for Supabase update
+      const dataToUpdate = {
+        date: formData.date,
+        amount: parseFloat(formData.totalQuantity),
+        shift: formData.shift,
+        quality: formData.quality || 'Good',
+        notes: formData.notes
+      };
       
-      // Prepare updated collection with quality parameters properly structured
+      // First, update the database record
+      const result = await updateMilkCollection(collection.id, dataToUpdate);
+      
+      if (!result) throw new Error("Failed to update the collection in the database");
+      
+      // Then prepare the updated collection object for the UI update
       const updatedCollection = {
-        ...formData,
+        ...collection,
+        ...dataToUpdate,
+        totalQuantity: parseFloat(formData.totalQuantity), // Ensure we update with the right property name
         qualityParameters: {
-          fat: parseFloat(formData.fat),
-          protein: parseFloat(formData.protein),
-          lactose: parseFloat(formData.lactose),
-          somatic: parseInt(formData.somatic),
-          bacteria: parseInt(formData.bacteria)
+          fat: formData.fat ? parseFloat(formData.fat) : null,
+          protein: formData.protein ? parseFloat(formData.protein) : null,
+          lactose: formData.lactose ? parseFloat(formData.lactose) : null,
+          somatic: formData.somatic ? parseInt(formData.somatic) : null,
+          bacteria: formData.bacteria ? parseInt(formData.bacteria) : null
         }
       };
       
-      // Remove the individual quality parameter fields
-      delete updatedCollection.fat;
-      delete updatedCollection.protein;
-      delete updatedCollection.lactose;
-      delete updatedCollection.somatic;
-      delete updatedCollection.bacteria;
-      
+      // Pass the updated collection back to the parent component for UI update
       onSave(updatedCollection);
-    };
-    
+    } catch (err) {
+      setError("Failed to update collection. Please try again.");
+      console.error("Error updating collection:", err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+      
     return (
       <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
         <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-screen overflow-y-auto">
@@ -872,6 +1096,12 @@ const MilkProduction = () => {
               </svg>
             </button>
           </div>
+          
+          {error && (
+            <div className="mx-6 mt-4 p-3 bg-red-50 text-red-700 border border-red-200 rounded-md">
+              {error}
+            </div>
+          )}
           
           <form onSubmit={handleSubmit}>
             <div className="px-6 py-4 space-y-6">
@@ -924,6 +1154,24 @@ const MilkProduction = () => {
                   step="0.1"
                   className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                 />
+              </div>
+  
+              <div>
+                <label htmlFor="quality" className="block text-sm font-medium text-gray-700 mb-1">
+                  Quality
+                </label>
+                <select
+                  id="quality"
+                  name="quality"
+                  value={formData.quality}
+                  onChange={handleChange}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                >
+                  <option value="Excellent">Excellent</option>
+                  <option value="Good">Good</option>
+                  <option value="Average">Average</option>
+                  <option value="Poor">Poor</option>
+                </select>
               </div>
               
               <div>
@@ -1010,21 +1258,6 @@ const MilkProduction = () => {
               </div>
               
               <div>
-                <label htmlFor="collectedBy" className="block text-sm font-medium text-gray-700 mb-1">
-                  Collected By *
-                </label>
-                <input
-                  type="text"
-                  id="collectedBy"
-                  name="collectedBy"
-                  value={formData.collectedBy}
-                  onChange={handleChange}
-                  required
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                />
-              </div>
-              
-              <div>
                 <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
                   Notes
                 </label>
@@ -1045,14 +1278,24 @@ const MilkProduction = () => {
                 type="button"
                 onClick={onClose}
                 className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                disabled={isSubmitting}
               >
                 Cancel
               </button>
               <button
                 type="submit"
+                disabled={isSubmitting}
                 className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
               >
-                Save Changes
+                {isSubmitting ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Saving...
+                  </>
+                ) : 'Save Changes'}
               </button>
             </div>
           </form>
@@ -1066,12 +1309,16 @@ const MilkProduction = () => {
     const [selectedParameter, setSelectedParameter] = useState('fat');
     const [dateRange, setDateRange] = useState('week');
     
-    const qualityTrends = data.qualityTrends;
-    const standards = data.qualityStandards;
+    const qualityTrends = data.qualityTrends || [];
+    const standards = data.qualityStandards || defaultStandards;
     
-    // Calculate current averages
+    // Check if we have data to display
+    const hasQualityData = qualityTrends.length > 0;
+    
+    // Calculate current averages safely
     const calculateAverage = (parameter) => {
-      return qualityTrends.reduce((sum, record) => sum + record[parameter], 0) / qualityTrends.length;
+      if (!hasQualityData) return 0;
+      return qualityTrends.reduce((sum, record) => sum + (record[parameter] || 0), 0) / qualityTrends.length;
     };
     
     const currentAverages = {
@@ -1122,8 +1369,9 @@ const MilkProduction = () => {
           
           {/* Selected Parameter Chart */}
           <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={qualityTrends}>
+            {hasQualityData ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={qualityTrends}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis 
                   dataKey="date" 
@@ -1158,7 +1406,12 @@ const MilkProduction = () => {
                 )}
               </LineChart>
             </ResponsiveContainer>
-          </div>
+              ) : (
+                <div className="h-full flex items-center justify-center text-gray-500">
+                  No quality trend data available for the selected period.
+                </div>
+              )}
+            </div>
           
           {/* Parameter Details */}
           <div className="mt-6 pt-6 border-t border-gray-200">
@@ -1293,27 +1546,220 @@ const MilkProduction = () => {
     );
   };
   
-  // Reports Tab Component
-  const ReportsTab = ({ data }) => {
+    const ReportsTab = ({ data }) => {
     const [reportType, setReportType] = useState('daily');
     const [dateRange, setDateRange] = useState('last7');
+    const [customStartDate, setCustomStartDate] = useState(new Date().toISOString().split('T')[0]);
+    const [customEndDate, setCustomEndDate] = useState(new Date().toISOString().split('T')[0]);
+    const [format, setFormat] = useState('pdf');
     const [isGenerating, setIsGenerating] = useState(false);
-    
-    // Handle report generation
-    const generateReport = () => {
-      setIsGenerating(true);
-      
-      // Simulate API call with timeout
-      setTimeout(() => {
-        setIsGenerating(false);
-        alert('Report generated successfully!');
-      }, 1500);
+    const [reports, setReports] = useState([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState(null);
+  
+    // Initialize the reports table if needed and load existing reports
+    useEffect(() => {
+      const loadReports = async () => {
+        setIsLoading(true);
+        try {
+          await initReportsTable(); // Ensure the reports table exists
+          const reportsList = await fetchReports();
+          setReports(reportsList);
+        } catch (err) {
+          console.error('Error loading reports:', err);
+          setError('Failed to load reports. Please try again.');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+  
+      loadReports();
+    }, []);
+  
+    // Calculate date range based on selected option
+    const getDateRange = () => {
+      const now = new Date();
+      let startDate, endDate;
+  
+      switch (dateRange) {
+        case 'today':
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          break;
+        case 'yesterday':
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+          endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+          break;
+        case 'last7':
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+          endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          break;
+        case 'last30':
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
+          endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          break;
+        case 'thisMonth':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          break;
+        case 'lastMonth':
+          startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          endDate = new Date(now.getFullYear(), now.getMonth(), 0);
+          break;
+        case 'custom':
+          startDate = new Date(customStartDate);
+          endDate = new Date(customEndDate);
+          break;
+        default:
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+          endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      }
+  
+      return {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString()
+      };
     };
-    
+  
+    // Handle report generation
+    const handleGenerateReport = async () => {
+      setIsGenerating(true);
+      setError(null);
+  
+      try {
+        const { startDate, endDate } = getDateRange();
+  
+        // Call the report generation service
+        const result = await generateReport({
+          reportType,
+          dateRangeStart: startDate,
+          dateRangeEnd: endDate,
+          format
+        });
+  
+        if (result.success) {
+          // Refresh reports list
+          const updatedReports = await fetchReports();
+          setReports(updatedReports);
+  
+          // Download the generated report
+          downloadReport(result.fileData, result.fileName, format);
+          
+          // Show success message
+          alert('Report generated and downloaded successfully!');
+        } else {
+          throw new Error('Failed to generate report');
+        }
+      } catch (err) {
+        console.error('Error generating report:', err);
+        setError(`Failed to generate report: ${err.message}`);
+      } finally {
+        setIsGenerating(false);
+      }
+    };
+  
+    // Handle report deletion
+    const handleDeleteReport = async (reportId) => {
+      if (!window.confirm('Are you sure you want to delete this report?')) {
+        return;
+      }
+  
+      try {
+        await deleteReport(reportId);
+        // Refresh the reports list
+        const updatedReports = await fetchReports();
+        setReports(updatedReports);
+      } catch (err) {
+        console.error('Error deleting report:', err);
+        alert('Failed to delete report. Please try again.');
+      }
+    };
+  
+    // Handle report download
+    const handleDownloadReport = async (report) => {
+      try {
+        // In a real app, you would fetch the actual file from storage
+        // Here we'll create a mock file based on the report format
+        const mockContent = `This is a sample ${report.report_type} report content.\nTitle: ${report.title}\nGenerated on: ${report.created_at}`;
+        let blob;
+        
+        switch (report.format.toLowerCase()) {
+          case 'pdf':
+            // For demo purposes we're creating a text file with .pdf extension
+            blob = new Blob([mockContent], { type: 'application/pdf' });
+            break;
+          case 'xlsx':
+            blob = new Blob([mockContent], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            break;
+          case 'csv':
+            blob = new Blob([mockContent], { type: 'text/csv' });
+            break;
+          default:
+            blob = new Blob([mockContent], { type: 'text/plain' });
+        }
+        
+        // Use file-saver to download the blob
+        saveAs(blob, report.file_path.split('/').pop() || `report-${report.id}.${report.format}`);
+      } catch (err) {
+        console.error('Error downloading report:', err);
+        alert('Failed to download report. Please try again.');
+      }
+    };
+  
+    // Format date for display
+    const formatReportDate = (dateString) => {
+      const date = new Date(dateString);
+      return date.toLocaleString('en-US', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    };
+  
+    // Get the file icon based on format
+    const getFormatIcon = (format) => {
+      switch (format.toLowerCase()) {
+        case 'pdf':
+          return (
+            <div className="w-10 h-12 bg-red-100 text-red-600 flex items-center justify-center rounded">
+              <span className="text-xs font-medium">PDF</span>
+            </div>
+          );
+        case 'xlsx':
+          return (
+            <div className="w-10 h-12 bg-green-100 text-green-600 flex items-center justify-center rounded">
+              <span className="text-xs font-medium">XLS</span>
+            </div>
+          );
+        case 'csv':
+          return (
+            <div className="w-10 h-12 bg-blue-100 text-blue-600 flex items-center justify-center rounded">
+              <span className="text-xs font-medium">CSV</span>
+            </div>
+          );
+        default:
+          return (
+            <div className="w-10 h-12 bg-gray-100 text-gray-600 flex items-center justify-center rounded">
+              <span className="text-xs font-medium">FILE</span>
+            </div>
+          );
+      }
+    };
+  
     return (
       <div>
+        {/* Report Generator Form */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">Generate Reports</h2>
+          
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-md">
+              {error}
+            </div>
+          )}
+          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label htmlFor="reportType" className="block text-sm font-medium text-gray-700 mb-1">
@@ -1362,6 +1808,8 @@ const MilkProduction = () => {
                   <input
                     type="date"
                     id="startDate"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
                     className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                   />
                 </div>
@@ -1373,6 +1821,8 @@ const MilkProduction = () => {
                   <input
                     type="date"
                     id="endDate"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
                     className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                   />
                 </div>
@@ -1389,7 +1839,8 @@ const MilkProduction = () => {
                     id="pdf"
                     name="format"
                     type="radio"
-                    defaultChecked
+                    checked={format === 'pdf'}
+                    onChange={() => setFormat('pdf')}
                     className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
                   />
                   <label htmlFor="pdf" className="ml-2 block text-sm text-gray-700">
@@ -1398,12 +1849,14 @@ const MilkProduction = () => {
                 </div>
                 <div className="flex items-center">
                   <input
-                    id="excel"
+                    id="xlsx"
                     name="format"
                     type="radio"
+                    checked={format === 'xlsx'}
+                    onChange={() => setFormat('xlsx')}
                     className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
                   />
-                  <label htmlFor="excel" className="ml-2 block text-sm text-gray-700">
+                  <label htmlFor="xlsx" className="ml-2 block text-sm text-gray-700">
                     Excel
                   </label>
                 </div>
@@ -1412,6 +1865,8 @@ const MilkProduction = () => {
                     id="csv"
                     name="format"
                     type="radio"
+                    checked={format === 'csv'}
+                    onChange={() => setFormat('csv')}
                     className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
                   />
                   <label htmlFor="csv" className="ml-2 block text-sm text-gray-700">
@@ -1423,11 +1878,11 @@ const MilkProduction = () => {
           </div>
           
           <div className="mt-6">
-          <button
-            onClick={generateReport}
-            disabled={isGenerating}
-            className={`inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${isGenerating ? 'opacity-70 cursor-not-allowed' : ''}`}
-          >
+            <button
+              onClick={handleGenerateReport}
+              disabled={isGenerating}
+              className={`inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${isGenerating ? 'opacity-70 cursor-not-allowed' : ''}`}
+            >
               {isGenerating ? (
                 <>
                   <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1445,119 +1900,110 @@ const MilkProduction = () => {
           </div>
         </div>
         
-        {/* Recent Reports */}
+        {/* Reports List */}
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200">
             <h2 className="text-lg font-semibold text-gray-800">Recent Reports</h2>
           </div>
-          <ul className="divide-y divide-gray-200">
-            <ReportItem 
-              title="Monthly Analysis Report - April 2023"
-              type="Monthly Analysis"
-              date="2023-04-26"
-              format="PDF"
-              size="1.2 MB"
-            />
-            <ReportItem 
-              title="Weekly Summary Report - Week 16, 2023"
-              type="Weekly Summary"
-              date="2023-04-24"
-              format="Excel"
-              size="856 KB"
-            />
-            <ReportItem 
-              title="Quality Metrics Report - March 2023"
-              type="Quality Metrics"
-              date="2023-04-05"
-              format="PDF"
-              size="1.5 MB"
-            />
-            <ReportItem 
-              title="Compliance Report - Q1 2023"
-              type="Compliance"
-              date="2023-04-02"
-              format="PDF"
-              size="2.1 MB"
-            />
-            <ReportItem 
-              title="Monthly Analysis Report - March 2023"
-              type="Monthly Analysis"
-              date="2023-03-31"
-              format="PDF"
-              size="1.3 MB"
-            />
-          </ul>
+          
+          {isLoading ? (
+            <div className="flex justify-center items-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-500"></div>
+            </div>
+          ) : reports.length > 0 ? (
+            <ul className="divide-y divide-gray-200">
+              {reports.map(report => (
+                <li key={report.id} className="px-6 py-4 hover:bg-gray-50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0">
+                        {getFormatIcon(report.format)}
+                      </div>
+                      <div className="ml-4">
+                        <h3 className="text-sm font-medium text-gray-800">{report.title}</h3>
+                        <div className="mt-1 flex items-center text-xs text-gray-500">
+                          <span>{report.report_type.replace('_', ' ').charAt(0).toUpperCase() + report.report_type.replace('_', ' ').slice(1)}</span>
+                          <span className="mx-1">•</span>
+                          <span>{formatReportDate(report.created_at)}</span>
+                          <span className="mx-1">•</span>
+                          <span>{report.file_size}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button 
+                        onClick={() => handleDownloadReport(report)}
+                        className="p-2 text-white bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 rounded-full"
+                        title="Download"
+                      >
+                        <Download size={16} />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteReport(report.id)}
+                        className="p-2 text-white bg-red-500 hover:bg-red-600 rounded-full"
+                        title="Delete"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="px-6 py-12 text-center text-gray-500">
+              No reports found. Generate a report to see it listed here.
+            </div>
+          )}
         </div>
       </div>
     );
   };
-
-  
-  
-  // Report Item Component
-  const ReportItem = ({ title, type, date, format, size }) => {
-    return (
-      <li className="px-6 py-4 hover:bg-gray-50">
-        <div className="flex items-center justify-between">
-          <div className="flex items-start">
-            <div className="flex-shrink-0">
-              {format === 'PDF' ? (
-                <div className="w-10 h-12 bg-red-100 text-red-600 flex items-center justify-center rounded">
-                  <span className="text-xs font-medium">PDF</span>
-                </div>
-              ) : format === 'Excel' ? (
-                <div className="w-10 h-12 bg-green-100 text-green-600 flex items-center justify-center rounded">
-                  <span className="text-xs font-medium">XLS</span>
-                </div>
-              ) : (
-                <div className="w-10 h-12 bg-blue-100 text-blue-600 flex items-center justify-center rounded">
-                  <span className="text-xs font-medium">CSV</span>
-                </div>
-              )}
-            </div>
-            <div className="ml-4">
-              <h3 className="text-sm font-medium text-gray-800">{title}</h3>
-              <div className="mt-1 flex items-center text-xs text-gray-500">
-                <span>{type}</span>
-                <span className="mx-1">•</span>
-                <span>{formatDate(date)}</span>
-                <span className="mx-1">•</span>
-                <span>{size}</span>
-              </div>
-            </div>
-          </div>
-          <div>
-          <button 
-            onClick={() => {
-              // Mock download - in real app would fetch the actual report
-              const mockReportData = { title, type, date, format };
-              handleDownload(mockReportData, title.replace(/\s+/g, '-').toLowerCase() + '.json', 'json');
-            }}
-            className="p-2 text-white bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 rounded-full"
-          >
-            <Download size={16} />
-          </button>
-          </div>
-        </div>
-      </li>
-    );
-  };
   
   // Add Collection Modal Component
-  const AddCollectionModal = ({ onClose }) => {
+  const AddCollectionModal = ({ onClose, onAdd }) => {
     const [formData, setFormData] = useState({
       date: new Date().toISOString().split('T')[0],
       shift: 'Morning',
       totalQuantity: '',
+      cowId: '',
+      quality: 'Good',
+      notes: '',
+      sendWhatsAppNotification: false,
       fat: '',
       protein: '',
       lactose: '',
       somatic: '',
-      bacteria: '',
-      collectedBy: '',
-      sendWhatsAppNotification: false,
-      notes: ''
+      bacteria: ''
     });
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState(null);
+    const [cows, setCows] = useState([]);
+    const [isLoadingCows, setIsLoadingCows] = useState(true);
+    
+    // Load cows for dropdown
+    useEffect(() => {
+      const loadCows = async () => {
+        try {
+          const { data: cowsData, error } = await supabase
+            .from('cows')
+            .select('id, name, tag_number')
+            .order('name');
+          
+          if (error) throw error;
+          setCows(cowsData);
+        } catch (error) {
+          console.error('Error loading cows:', error);
+          setError('Failed to load cows. Please try again.');
+        } finally {
+          setIsLoadingCows(false);
+        }
+      };
+      
+      loadCows();
+    }, []);
     
     // Handle form field changes
     const handleChange = (e) => {
@@ -1568,91 +2014,59 @@ const MilkProduction = () => {
       });
     };
     
+    // Handle checkbox change
+    const handleCheckboxChange = (e) => {
+      setFormData({
+        ...formData,
+        sendWhatsAppNotification: e.target.checked
+      });
+    };
+    
     // Handle form submission
     const handleSubmit = async (e) => {
       e.preventDefault();
       
+      if (!formData.cowId) {
+        setError('Please select a cow');
+        return;
+      }
+      
       try {
-        // 1. Save the milk collection record
-        console.log('Recording milk collection:', formData);
+        setIsSubmitting(true);
+        setError(null);
         
-        // This would be an API call in a real implementation
-        // const response = await fetch('/api/milk-collections', {
-        //   method: 'POST',
-        //   headers: { 'Content-Type': 'application/json' },
-        //   body: JSON.stringify(formData)
-        // });
-        
-        // 2. If WhatsApp notification is enabled, send notification
-        if (formData.sendWhatsAppNotification) {
-          // In a real implementation, fetch the cow owner details based on the cow
-          // For example, if you know which cow the milk is from:
-          
-          // Get the cow owner information from a database/API
-          // This is a mock example - you'd need to implement the actual data fetching
-          const cowOwnerData = {
-            name: "John Smith", // The cow owner's name
-            phoneNumber: "+15551234567" // The cow owner's WhatsApp number
-          };
-          
-          const notificationResult = sendWhatsAppNotification(formData, cowOwnerData);
-          
-          if (notificationResult.success) {
-            console.log('Notification sent successfully');
-          } else {
-            console.error('Failed to send notification:', notificationResult.message);
+        // Prepare data for submission
+        const collectionData = {
+          cowId: formData.cowId,
+          date: formData.date,
+          totalQuantity: parseFloat(formData.totalQuantity),
+          shift: formData.shift,
+          quality: formData.quality,
+          notes: formData.notes,
+          qualityParameters: {
+            fat: formData.fat ? parseFloat(formData.fat) : null,
+            protein: formData.protein ? parseFloat(formData.protein) : null,
+            lactose: formData.lactose ? parseFloat(formData.lactose) : null,
+            somatic: formData.somatic ? parseInt(formData.somatic) : null,
+            bacteria: formData.bacteria ? parseInt(formData.bacteria) : null
           }
+        };
+        
+        // Call the onAdd function that will use the milk service
+        await onAdd(collectionData);
+        
+        // Handle WhatsApp notification if enabled
+        if (formData.sendWhatsAppNotification) {
+          console.log('Would send WhatsApp notification here');
+          // In a real app, you'd implement a notification service
         }
         
-        // Show success message
-        alert(formData.sendWhatsAppNotification 
-          ? 'Milk collection recorded and notification sent!'
-          : 'Milk collection recorded successfully!');
-        
-        // Close the modal
         onClose();
       } catch (error) {
-        console.error('Error recording milk collection:', error);
-        alert('Failed to record milk collection. Please try again.');
-      }
-    };
-
-    // WhatsApp notification service
-    const sendWhatsAppNotification = async (collectionData, cowOwnerData) => {
-      try {
-        console.log('Sending WhatsApp notification for milk collection:', collectionData);
-        
-        // In a real implementation, make an API call to your WhatsApp service (like Twilio)
-        // Example:
-        const message = `Hello ${cowOwnerData.name}, your cow's milk collection for ${collectionData.date} (${collectionData.shift} shift) has been recorded. Quantity: ${collectionData.totalQuantity}L.`;
-        
-        // Mock API call for demonstration
-        /*
-        const response = await fetch('https://api.yourmessagingservice.com/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer YOUR_AUTH_TOKEN'
-          },
-          body: JSON.stringify({
-            to: `whatsapp:${cowOwnerData.phoneNumber}`, // Format required by most WhatsApp APIs
-            from: 'whatsapp:+15551234567',  // Your WhatsApp business number
-            body: message
-          })
-        });
-        
-        const result = await response.json();
-        */
-        
-        // For demo, log the notification details
-        console.log('WhatsApp message:', message);
-        console.log('WhatsApp notification would be sent to:', cowOwnerData.phoneNumber);
-        
-        // Return success
-        return { success: true, message: 'Notification sent successfully' };
-      } catch (error) {
-        console.error('Failed to send WhatsApp notification:', error);
-        return { success: false, message: error.message };
+        console.error('Error submitting form:', error);
+        setError('Failed to record milk collection. Please try again.');
+      } finally {
+        setIsSubmitting(false);
       }
     };
     
@@ -1664,6 +2078,7 @@ const MilkProduction = () => {
             <button 
               onClick={onClose}
               className="text-gray-400 hover:text-gray-500"
+              disabled={isSubmitting}
             >
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1671,8 +2086,40 @@ const MilkProduction = () => {
             </button>
           </div>
           
+          {error && (
+            <div className="mx-6 mt-4 p-3 bg-red-50 text-red-700 border border-red-200 rounded-md">
+              {error}
+            </div>
+          )}
+          
           <form onSubmit={handleSubmit}>
             <div className="px-6 py-4 space-y-6">
+              {/* Cow Selection */}
+              <div>
+                <label htmlFor="cowId" className="block text-sm font-medium text-gray-700 mb-1">
+                  Cow *
+                </label>
+                {isLoadingCows ? (
+                  <div className="py-2">Loading cows...</div>
+                ) : (
+                  <select
+                    id="cowId"
+                    name="cowId"
+                    value={formData.cowId}
+                    onChange={handleChange}
+                    required
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  >
+                    <option value="">Select a cow</option>
+                    {cows.map(cow => (
+                      <option key={cow.id} value={cow.id}>
+                        {cow.name} ({cow.tag_number})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <div>
                   <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
@@ -1724,6 +2171,25 @@ const MilkProduction = () => {
                 />
               </div>
               
+              <div>
+                <label htmlFor="quality" className="block text-sm font-medium text-gray-700 mb-1">
+                  Quality
+                </label>
+                <select
+                  id="quality"
+                  name="quality"
+                  value={formData.quality}
+                  onChange={handleChange}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                >
+                  <option value="Excellent">Excellent</option>
+                  <option value="Good">Good</option>
+                  <option value="Average">Average</option>
+                  <option value="Poor">Poor</option>
+                </select>
+              </div>
+              
+              {/* Quality Parameters - Same as in Edit form */}
               <div>
                 <h4 className="text-sm font-medium text-gray-700 mb-3">Quality Parameters</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -1808,37 +2274,6 @@ const MilkProduction = () => {
               </div>
               
               <div>
-                <label htmlFor="collectedBy" className="block text-sm font-medium text-gray-700 mb-1">
-                  Collected By *
-                </label>
-                <input
-                  type="text"
-                  id="collectedBy"
-                  name="collectedBy"
-                  value={formData.collectedBy}
-                  onChange={handleChange}
-                  required
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                />
-              </div>
-              <div className="flex items-center mt-4">
-                <input
-                  id="sendWhatsAppNotification"
-                  name="sendWhatsAppNotification"
-                  type="checkbox"
-                  checked={formData.sendWhatsAppNotification}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    sendWhatsAppNotification: e.target.checked
-                  })}
-                  className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
-                />
-                <label htmlFor="sendWhatsAppNotification" className="ml-2 block text-sm text-gray-700">
-                  Send WhatsApp notification to cow owner
-                </label>
-              </div>
-              
-              <div>
                 <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
                   Notes
                 </label>
@@ -1849,8 +2284,22 @@ const MilkProduction = () => {
                   value={formData.notes}
                   onChange={handleChange}
                   className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                  placeholder="Any additional information about this collection..."
+                  placeholder="Any additional notes about this collection..."
                 ></textarea>
+              </div>
+              
+              <div className="flex items-center mt-4">
+                <input
+                  id="sendWhatsAppNotification"
+                  name="sendWhatsAppNotification"
+                  type="checkbox"
+                  checked={formData.sendWhatsAppNotification}
+                  onChange={handleCheckboxChange}
+                  className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                />
+                <label htmlFor="sendWhatsAppNotification" className="ml-2 block text-sm text-gray-700">
+                  Send WhatsApp notification to cow owner
+                </label>
               </div>
             </div>
             
@@ -1859,14 +2308,24 @@ const MilkProduction = () => {
                 type="button"
                 onClick={onClose}
                 className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                disabled={isSubmitting}
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                disabled={isSubmitting}
+                className={`py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${isSubmitting ? 'opacity-75 cursor-not-allowed' : ''}`}
               >
-                Save
+                {isSubmitting ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Saving...
+                  </>
+                ) : 'Save'}
               </button>
             </div>
           </form>

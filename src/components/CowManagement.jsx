@@ -1,127 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Calendar, Clock, Mail, Phone, MapPin, Users, Award, FileText, Briefcase, User,Download,DollarSign } from 'lucide-react';
-
-// Mock data for cows
-const mockCows = [
-  {
-    id: 'C001',
-    tagNumber: 'A128',
-    name: 'Daisy',
-    breed: 'Holstein',
-    dateOfBirth: '2019-05-15',
-    age: '4 years',
-    status: 'Active',
-    healthStatus: 'Healthy',
-    owner: 'John Smith',
-    milkProduction: [
-      { date: '2023-04-20', amount: 28 },
-      { date: '2023-04-21', amount: 27 },
-      { date: '2023-04-22', amount: 29 },
-      { date: '2023-04-23', amount: 26 },
-      { date: '2023-04-24', amount: 28 },
-      { date: '2023-04-25', amount: 30 },
-      { date: '2023-04-26', amount: 29 },
-    ],
-    lastHealthCheck: '2023-04-15',
-    vaccinationStatus: 'Up to date',
-    image: '/api/placeholder/160/160'
-  },
-  {
-    id: 'C002',
-    tagNumber: 'B094',
-    name: 'Bella',
-    breed: 'Jersey',
-    dateOfBirth: '2020-03-10',
-    age: '3 years',
-    status: 'Active',
-    healthStatus: 'Healthy',
-    owner: 'John Smith',
-    milkProduction: [
-      { date: '2023-04-20', amount: 22 },
-      { date: '2023-04-21', amount: 23 },
-      { date: '2023-04-22', amount: 22 },
-      { date: '2023-04-23', amount: 24 },
-      { date: '2023-04-24', amount: 23 },
-      { date: '2023-04-25', amount: 21 },
-      { date: '2023-04-26', amount: 22 },
-    ],
-    lastHealthCheck: '2023-04-10',
-    vaccinationStatus: 'Up to date',
-    image: '/api/placeholder/160/160'
-  },
-  {
-    id: 'C003',
-    tagNumber: 'C215',
-    name: 'Buttercup',
-    breed: 'Brown Swiss',
-    dateOfBirth: '2018-08-22',
-    age: '5 years',
-    status: 'Active',
-    healthStatus: 'Under treatment',
-    owner: 'John Smith',
-    milkProduction: [
-      { date: '2023-04-20', amount: 18 },
-      { date: '2023-04-21', amount: 16 },
-      { date: '2023-04-22', amount: 15 },
-      { date: '2023-04-23', amount: 14 },
-      { date: '2023-04-24', amount: 16 },
-      { date: '2023-04-25', amount: 18 },
-      { date: '2023-04-26', amount: 19 },
-    ],
-    lastHealthCheck: '2023-04-22',
-    vaccinationStatus: 'Up to date',
-    alerts: ['Mastitis treatment in progress'],
-    image: '/api/placeholder/160/160'
-  },
-  {
-    id: 'C004',
-    tagNumber: 'D073',
-    name: 'Millie',
-    breed: 'Holstein',
-    dateOfBirth: '2021-01-05',
-    age: '2 years',
-    status: 'Active',
-    healthStatus: 'Healthy',
-    owner: 'John Smith',
-    milkProduction: [
-      { date: '2023-04-20', amount: 25 },
-      { date: '2023-04-21', amount: 26 },
-      { date: '2023-04-22', amount: 27 },
-      { date: '2023-04-23', amount: 25 },
-      { date: '2023-04-24', amount: 26 },
-      { date: '2023-04-25', amount: 27 },
-      { date: '2023-04-26', amount: 25 },
-    ],
-    lastHealthCheck: '2023-04-18',
-    vaccinationStatus: 'Due for vaccination',
-    alerts: ['Vaccination due in 5 days'],
-    image: '/api/placeholder/160/160'
-  },
-  {
-    id: 'C005',
-    tagNumber: 'E162',
-    name: 'Luna',
-    breed: 'Ayrshire',
-    dateOfBirth: '2020-07-12',
-    age: '3 years',
-    status: 'Active',
-    healthStatus: 'Monitored',
-    owner: 'John Smith',
-    milkProduction: [
-      { date: '2023-04-20', amount: 20 },
-      { date: '2023-04-21', amount: 19 },
-      { date: '2023-04-22', amount: 18 },
-      { date: '2023-04-23', amount: 17 },
-      { date: '2023-04-24', amount: 19 },
-      { date: '2023-04-25', amount: 20 },
-      { date: '2023-04-26', amount: 21 },
-    ],
-    lastHealthCheck: '2023-04-20',
-    vaccinationStatus: 'Up to date',
-    alerts: ['Low milk production trend'],
-    image: '/api/placeholder/160/160'
-  }
-];
+import { fetchCows, addCow, updateCow, deleteCow, recordHealthEvent, recordMilkProduction, recordBreedingEvent,
+  fetchRecentActivity,fetchBreedingEvents,fetchHealthHistory,fetchReproductiveStatus
+ } from './services/cowService';
+import cowSample from './cow.jpg';
 
 // Status badge colors
 const statusColors = {
@@ -156,8 +38,9 @@ const formatDate = (dateString) => {
 
 // Main cow management component
 const CowManagement = () => {
-  const [employees, setEmployees] = useState([]);
-  const [cows, setCows] = useState(mockCows);
+  const [cows, setCows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [selectedCow, setSelectedCow] = useState(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -178,7 +61,31 @@ const CowManagement = () => {
   const [view, setView] = useState('grid'); // 'grid' or 'table'
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  
+
+  // Fetch cows on component mount
+  useEffect(() => {
+    const loadCows = async () => {
+      try {
+        setLoading(true);
+        const data = await fetchCows();
+        setCows(data);
+      } catch (err) {
+        setError(err.message);
+        setErrorMessage('Failed to load cows. Please try again later.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadCows();
+  }, []);
+
+  const ensureValidCows = (cowsArray) => {
+    if (!cowsArray || !Array.isArray(cowsArray)) {
+      return [];
+    }
+    return cowsArray;
+  };
 
   // Handle search
   const handleSearch = (e) => {
@@ -196,13 +103,17 @@ const CowManagement = () => {
   };
 
   // Filter cows based on search and filters
-  const filteredCows = cows.filter(cow => {
-    // Search filter
+  const filteredCows = ensureValidCows(cows).filter(cow => {
+    // Only process if cow is a valid object
+    if (!cow || typeof cow !== 'object') return false;
+    
+    // Search filter with safety checks
     const matchesSearch = 
       searchQuery === '' || 
-      cow.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (cow.name && cow.name.toLowerCase().includes(searchQuery.toLowerCase())) || 
+      (cow.tagNumber && cow.tagNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
       cow.tagNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      cow.breed.toLowerCase().includes(searchQuery.toLowerCase());
+      cow.breed.toLowerCase().includes(searchQuery.toLowerCase()));
     
     // Status filter
     const matchesStatus = 
@@ -265,109 +176,215 @@ const CowManagement = () => {
     setIsRecordHealthEventModalOpen(!isRecordHealthEventModalOpen);
   };
 
+  // Toggle record milk production modal
+  const toggleRecordMilkModal = () => {
+    setIsRecordMilkModalOpen(!isRecordMilkModalOpen);
+  };
+
+  // Toggle record breeding event modal
+  const toggleRecordBreedingEventModal = () => {
+    setIsRecordBreedingEventModalOpen(!isRecordBreedingEventModalOpen);
+  };
+
   // Add new cow
-  const addCow = (newCow) => {
-    const id = `C${String(cows.length + 1).padStart(3, '0')}`;
-    setCows([...cows, { ...newCow, id }]);
-    setSuccessMessage('New cow added successfully!');
-    setTimeout(() => setSuccessMessage(''), 3000);
+  const handleAddCow = async (newCowData) => {
+    try {
+      setLoading(true);
+      const newCow = await addCow(newCowData);
+      setCows([...cows, newCow]);
+      setSuccessMessage('New cow added successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      console.error("Error adding cow:", err);
+      setErrorMessage('Failed to add cow. Please try again.');
+      setTimeout(() => setErrorMessage(''), 3000);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Edit cow
-  const editCow = (updatedCow) => {
-    setCows(cows.map(cow => cow.id === updatedCow.id ? updatedCow : cow));
-    if (selectedCow && selectedCow.id === updatedCow.id) {
-      setSelectedCow(updatedCow);
+  const handleEditCow = async (updatedCowData) => {
+    try {
+      setLoading(true);
+      const updatedCow = await updateCow(updatedCowData.id, updatedCowData);
+      setCows(cows.map(cow => cow.id === updatedCow.id ? updatedCow : cow));
+      
+      if (selectedCow && selectedCow.id === updatedCow.id) {
+        setSelectedCow(updatedCow);
+      }
+      
+      setSuccessMessage('Cow updated successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      console.error("Error updating cow:", err);
+      setErrorMessage('Failed to update cow. Please try again.');
+      setTimeout(() => setErrorMessage(''), 3000);
+    } finally {
+      setLoading(false);
     }
-    setSuccessMessage('Cow updated successfully!');
-    setTimeout(() => setSuccessMessage(''), 3000);
   };
 
   // Delete cow
-  const deleteCow = (cowId) => {
-    setCows(cows.filter(cow => cow.id !== cowId));
-    if (selectedCow && selectedCow.id === cowId) {
-      setSelectedCow(null);
+  const handleDeleteCow = async (cowId) => {
+    try {
+      setLoading(true);
+      await deleteCow(cowId);
+      setCows(cows.filter(cow => cow.id !== cowId));
+      
+      if (selectedCow && selectedCow.id === cowId) {
+        setSelectedCow(null);
+      }
+      
+      setSuccessMessage('Cow deleted successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      console.error("Error deleting cow:", err);
+      setErrorMessage('Failed to delete cow. Please try again.');
+      setTimeout(() => setErrorMessage(''), 3000);
+    } finally {
+      setLoading(false);
     }
-    setSuccessMessage('Cow deleted successfully!');
-    setTimeout(() => setSuccessMessage(''), 3000);
   };
 
   // Record health event
-  const recordHealthEvent = (cowId, event) => {
-    // In a real application, you would update the database
-    // For this demo, we'll just update the lastHealthCheck date
-    setCows(cows.map(cow => {
-      if (cow.id === cowId) {
-        return {
-          ...cow,
-          lastHealthCheck: new Date().toISOString().split('T')[0],
-          healthStatus: event.status || cow.healthStatus
-        };
-      }
-      return cow;
-    }));
-    
-    if (selectedCow && selectedCow.id === cowId) {
-      setSelectedCow({
-        ...selectedCow,
-        lastHealthCheck: new Date().toISOString().split('T')[0],
-        healthStatus: event.status || selectedCow.healthStatus
+  const handleRecordHealthEvent = async (cowId, eventData) => {
+    try {
+      setLoading(true);
+      await recordHealthEvent(cowId, eventData);
+      
+      // Update local state with the new health status
+      const updatedCows = cows.map(cow => {
+        if (cow.id === cowId) {
+          return {
+            ...cow,
+            lastHealthCheck: eventData.eventDate,
+            healthStatus: eventData.status || cow.healthStatus
+          };
+        }
+        return cow;
       });
+      
+      setCows(updatedCows);
+      
+      if (selectedCow && selectedCow.id === cowId) {
+        setSelectedCow({
+          ...selectedCow,
+          lastHealthCheck: eventData.eventDate,
+          healthStatus: eventData.status || selectedCow.healthStatus
+        });
+      }
+      
+      setSuccessMessage('Health event recorded successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      console.error("Error recording health event:", err);
+      setErrorMessage('Failed to record health event. Please try again.');
+      setTimeout(() => setErrorMessage(''), 3000);
+    } finally {
+      setLoading(false);
     }
-    
-    setSuccessMessage('Health event recorded successfully!');
-    setTimeout(() => setSuccessMessage(''), 3000);
   };
 
-  // Toggle record milk production modal
-const toggleRecordMilkModal = () => {
-  setIsRecordMilkModalOpen(!isRecordMilkModalOpen);
-};
-
-// Toggle record breeding event modal
-const toggleRecordBreedingEventModal = () => {
-  setIsRecordBreedingEventModalOpen(!isRecordBreedingEventModalOpen);
-};
-
-// Record milk production
-const recordMilkProduction = (cowId, record) => {
-  // In a real application, you would update the database
-  // For this demo, we'll update the cow's milk production records
-  setCows(cows.map(cow => {
-    if (cow.id === cowId) {
-      return {
-        ...cow,
-        milkProduction: [...cow.milkProduction, record]
-      };
+  // Record milk production
+  const handleRecordMilkProduction = async (cowId, recordData) => {
+    try {
+      setLoading(true);
+      console.log(recordData);
+      const newRecord = await recordMilkProduction(cowId, recordData);
+      
+      // Update local state with the new milk production record
+      const updatedCows = cows.map(cow => {
+        if (cow.id === cowId) {
+          return {
+            ...cow,
+            milkProduction: [...cow.milkProduction, {
+              date: recordData.date,
+              amount: recordData.amount
+            }]
+          };
+        }
+        return cow;
+      });
+      
+      setCows(updatedCows);
+      
+      if (selectedCow && selectedCow.id === cowId) {
+        setSelectedCow({
+          ...selectedCow,
+          milkProduction: [...selectedCow.milkProduction, {
+            date: recordData.date,
+            amount: recordData.amount
+          }]
+        });
+      }
+      
+      setSuccessMessage('Milk production recorded successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      console.error("Error recording milk production:", err);
+      setErrorMessage('Failed to record milk production. Please try again.');
+      setTimeout(() => setErrorMessage(''), 3000);
+    } finally {
+      setLoading(false);
     }
-    return cow;
-  }));
-  
-  if (selectedCow && selectedCow.id === cowId) {
-    setSelectedCow({
-      ...selectedCow,
-      milkProduction: [...selectedCow.milkProduction, record]
-    });
-  }
-  
-  setSuccessMessage('Milk production recorded successfully!');
-  setTimeout(() => setSuccessMessage(''), 3000);
-};
+  };
 
-// Record breeding event
-const recordBreedingEvent = (cowId, event) => {
-  // In a real application, you would update the database
-  // For this demo, we'll just show a success message
-  console.log('Recording breeding event for cow', cowId, event);
-  
-  // Here you would typically update the cow's breeding history
-  // This would require adding a breedingHistory array to your cow model
-  // For now, we'll just show a success message
-  
-  setSuccessMessage('Breeding event recorded successfully!');
-  setTimeout(() => setSuccessMessage(''), 3000);
-};
+  // Record breeding event
+  const handleRecordBreedingEvent = async (cowId, eventData) => {
+    try {
+      setLoading(true);
+      const newEvent = await recordBreedingEvent(cowId, eventData);
+      
+      // If this was for the selected cow, refresh the cow data
+      if (selectedCow && selectedCow.id === cowId) {
+        // We'll need to refresh the selectedCow data to reflect new updates
+        // No need to directly manipulate the breeding events or reproductive status here
+        // as they will be fetched when the tab is active in the EmployeeProfile component
+        
+        // Optionally, refresh the entire cow data if needed
+        const updatedCowData = await fetchCows().then(cows => 
+          cows.find(cow => cow.id === cowId)
+        );
+        
+        if (updatedCowData) {
+          setSelectedCow(updatedCowData);
+        }
+      }
+      
+      setSuccessMessage('Breeding event recorded successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      console.error("Error recording breeding event:", err);
+      setErrorMessage('Failed to record breeding event. Please try again.');
+      setTimeout(() => setErrorMessage(''), 3000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading && cows.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+      </div>
+    );
+  }
+
+  if (error && cows.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-6">
+        <div className="text-red-500 text-xl mb-4">Failed to load cows</div>
+        <p className="text-gray-600 mb-4">{error}</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-green-600 text-white rounded-md"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full bg-gradient-to-br from-green-50 to-blue-50">
@@ -384,14 +401,14 @@ const recordBreedingEvent = (cowId, event) => {
       )}
       
       {selectedCow ? (
-        <EmployeeProfile 
-        cow={selectedCow} 
-        onClose={closeCowProfile} 
-        onEdit={() => toggleEditModal(selectedCow)}
-        onRecordHealthEvent={toggleRecordHealthEventModal} 
-        toggleRecordMilkModal={toggleRecordMilkModal}
-        toggleRecordBreedingEventModal={toggleRecordBreedingEventModal}
-      />
+       <EmployeeProfile 
+          cow={selectedCow} 
+          onClose={closeCowProfile} 
+          onEdit={() => toggleEditModal(selectedCow)}
+          onRecordHealthEvent={toggleRecordHealthEventModal} 
+          toggleRecordMilkModal={toggleRecordMilkModal}
+          toggleRecordBreedingEventModal={toggleRecordBreedingEventModal}
+        />
       ) : (
         <div className="px-6 py-6">
           <div className="flex justify-between items-center mb-6">
@@ -550,7 +567,10 @@ const recordBreedingEvent = (cowId, event) => {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {cow.milkProduction[cow.milkProduction.length - 1].amount}L/day
+                      {cow.milkProduction && cow.milkProduction.length > 0 
+                        ? `${cow.milkProduction[cow.milkProduction.length - 1].amount}L/day`
+                        : '0L/day'
+                      }
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>
@@ -608,55 +628,51 @@ const recordBreedingEvent = (cowId, event) => {
         </div>
       )}
 
-      {/* Add Cow Modal */}
+      {/* Modals */}
       {isAddModalOpen && (
         <AddCowModal 
           onClose={toggleAddModal} 
-          onAdd={addCow}
+          onAdd={handleAddCow}
         />
       )}
 
-      {/* Edit Cow Modal */}
       {isEditModalOpen && (
         <EditCowModal 
           cow={cowToEdit} 
           onClose={toggleEditModal} 
-          onEdit={editCow}
+          onEdit={handleEditCow}
         />
       )}
 
-      {/* Delete Confirmation Modal */}
       {isDeleteModalOpen && (
         <DeleteConfirmationModal 
           cow={cowToDelete} 
           onClose={toggleDeleteModal} 
-          onDelete={deleteCow}
+          onDelete={handleDeleteCow}
         />
       )}
 
-      {/* Record Health Event Modal */}
       {isRecordHealthEventModalOpen && (
         <RecordHealthEventModal 
           cow={selectedCow} 
           onClose={toggleRecordHealthEventModal} 
-          onSubmit={(event) => recordHealthEvent(selectedCow.id, event)}
+          onSubmit={(id, record) => handleRecordHealthEvent(id, record)}
         />
       )}
-      {/* Record Milk Production Modal */}
+      
       {isRecordMilkModalOpen && (
         <RecordMilkProductionModal 
           cow={selectedCow} 
           onClose={toggleRecordMilkModal} 
-          onSubmit={recordMilkProduction}
+          onSubmit={(id,record) => handleRecordMilkProduction(id, record)}
         />
       )}
 
-      {/* Record Breeding Event Modal */}
       {isRecordBreedingEventModalOpen && (
         <RecordBreedingEventModal 
           cow={selectedCow} 
           onClose={toggleRecordBreedingEventModal} 
-          onSubmit={recordBreedingEvent}
+          onSubmit={(id,record) => handleRecordBreedingEvent(id, record)}
         />
       )}
     </div>
@@ -665,6 +681,30 @@ const recordBreedingEvent = (cowId, event) => {
 
 // Cow Card Component
 const CowCard = ({ cow, onClick, onEdit, onDelete }) => {
+
+  // Safe method to get latest milk production
+  const getLatestMilkProduction = () => {
+    if (!cow.milkProduction || !Array.isArray(cow.milkProduction) || cow.milkProduction.length === 0) {
+      return '0L/day';
+    }
+    const latestRecord = cow.milkProduction[cow.milkProduction.length - 1];
+    return `${latestRecord.amount || 0}L/day`;
+  };
+
+  // Safe method to get last health check date
+  const getLastHealthCheckDate = () => {
+    if (!cow.lastHealthCheck) return 'Not recorded';
+    try {
+      return new Date(cow.lastHealthCheck).toLocaleDateString();
+    } catch (e) {
+      return 'Invalid Date';
+    }
+  };
+
+  // Ensure alerts is always an array
+  const alerts = Array.isArray(cow.alerts) ? cow.alerts : 
+                (cow.alerts ? [cow.alerts] : []);
+
   return (
     <div 
       className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:scale-105 cursor-pointer"
@@ -683,8 +723,7 @@ const CowCard = ({ cow, onClick, onEdit, onDelete }) => {
         
         <div className="flex items-center mb-4">
           <img 
-            src={cow.image} 
-            alt={cow.name} 
+            src={cowSample}  
             className="w-16 h-16 object-cover rounded-full bg-gray-200 border-2 border-green-100"
           />
           <div className="ml-4">
@@ -699,20 +738,20 @@ const CowCard = ({ cow, onClick, onEdit, onDelete }) => {
               <svg className="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
               </svg>
-              <span>{cow.milkProduction[cow.milkProduction.length - 1].amount}L/day</span>
+              <span>{getLatestMilkProduction()}</span>
             </div>
             <div className="flex items-center text-gray-500">
               <Calendar size={16} className="mr-1" />
-              <span>Last check: {new Date(cow.lastHealthCheck).toLocaleDateString()}</span>
+              <span>Last check: {getLastHealthCheckDate()}</span>
             </div>
           </div>
           
-          {cow.alerts && cow.alerts.length > 0 && (
+          {alerts.length > 0 && (
             <div className="mt-2 flex items-start text-amber-600 text-sm">
               <svg className="h-4 w-4 mr-1 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
-              <span>{cow.alerts[0]}</span>
+              <span>{alerts[0]}</span>
             </div>
           )}
         </div>
@@ -739,18 +778,127 @@ const CowCard = ({ cow, onClick, onEdit, onDelete }) => {
 // Employee Profile Component
 const EmployeeProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMilkModal, toggleRecordBreedingEventModal }) => {
   const [activeTab, setActiveTab] = useState('overview');
+  const [healthHistory, setHealthHistory] = useState([]);
+  const [breedingEvents, setBreedingEvents] = useState([]);
+  const [reproductiveStatus, setReproductiveStatus] = useState(null);
+  const [recentActivities, setRecentActivities] = useState([]);
+  const [loading, setLoading] = useState({
+    health: false,
+    breeding: false,
+    reproductive: false,
+    activity: false
+  });
   
-  // Calculate average milk production
-  const avgMilkProduction = cow.milkProduction.reduce((sum, record) => sum + record.amount, 0) / cow.milkProduction.length;
+  // Safely check for milkProduction array and ensure it has data
+  const hasMilkProductionData = cow?.milkProduction && Array.isArray(cow.milkProduction) && cow.milkProduction.length > 0;
   
-  // Format date
+  // Calculate average milk production with comprehensive safety check
+  const avgMilkProduction = hasMilkProductionData
+    ? cow.milkProduction.reduce((sum, record) => sum + (parseFloat(record.amount) || 0), 0) / cow.milkProduction.length
+    : 0;
+  
+  // Ensure alerts is always treated as an array
+  const alerts = Array.isArray(cow.alerts) ? cow.alerts : 
+                (cow.alerts ? [cow.alerts] : []);
+
+  // Format date with safety check
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
+    if (!dateString) return 'N/A';
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    } catch (e) {
+      console.error("Invalid date format:", dateString);
+      return 'Invalid Date';
+    }
   };
+  
+  // Format relative time (e.g., "2 days ago")
+  const formatRelativeTime = (dateString) => {
+    if (!dateString) return 'N/A';
+    try {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffTime = Math.abs(now - date);
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays === 0) return 'Today';
+      if (diffDays === 1) return 'Yesterday';
+      if (diffDays < 7) return `${diffDays} days ago`;
+      if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+      if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+      return `${Math.floor(diffDays / 365)} years ago`;
+    } catch (e) {
+      console.error("Invalid date format:", dateString);
+      return 'Unknown date';
+    }
+  };
+  
+  // Fetch health history when tab changes to health
+  useEffect(() => {
+    if (activeTab === 'health' && cow && cow.id && !healthHistory.length) {
+      const loadHealthHistory = async () => {
+        try {
+          setLoading(prev => ({ ...prev, health: true }));
+          const data = await fetchHealthHistory(cow.id);
+          setHealthHistory(data);
+        } catch (error) {
+          console.error('Failed to load health history:', error);
+        } finally {
+          setLoading(prev => ({ ...prev, health: false }));
+        }
+      };
+      
+      loadHealthHistory();
+    }
+  }, [activeTab, cow, healthHistory.length]);
+  
+  // Fetch breeding events when tab changes to breeding
+  useEffect(() => {
+    if (activeTab === 'breeding' && cow && cow.id) {
+      const loadBreedingData = async () => {
+        try {
+          setLoading(prev => ({ ...prev, breeding: true, reproductive: true }));
+          
+          // Fetch breeding events
+          const eventsData = await fetchBreedingEvents(cow.id);
+          setBreedingEvents(eventsData);
+          
+          // Fetch reproductive status
+          const statusData = await fetchReproductiveStatus(cow.id);
+          setReproductiveStatus(statusData);
+        } catch (error) {
+          console.error('Failed to load breeding data:', error);
+        } finally {
+          setLoading(prev => ({ ...prev, breeding: false, reproductive: false }));
+        }
+      };
+      
+      loadBreedingData();
+    }
+  }, [activeTab, cow]);
+  
+  // Fetch recent activities when tab changes to overview
+  useEffect(() => {
+    if ((activeTab === 'overview' && cow && cow.id && !recentActivities.length)) {
+      const loadRecentActivities = async () => {
+        try {
+          setLoading(prev => ({ ...prev, activity: true }));
+          const data = await fetchRecentActivity(cow.id);
+          setRecentActivities(data);
+        } catch (error) {
+          console.error('Failed to load recent activities:', error);
+        } finally {
+          setLoading(prev => ({ ...prev, activity: false }));
+        }
+      };
+      
+      loadRecentActivities();
+    }
+  }, [activeTab, cow, recentActivities.length]);
   
   return (
     <div className="bg-gradient-to-br from-white to-green-50 min-h-full">
@@ -780,8 +928,7 @@ const EmployeeProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleReco
             <div className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition-all duration-300">
               <div className="p-6 flex flex-col items-center">
                 <img 
-                  src={cow.image} 
-                  alt={cow.name} 
+                  src={cowSample} 
                   className="w-32 h-32 object-cover rounded-full bg-gray-200 mb-4 border-4 border-green-100 shadow-md"
                 />
                 <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-green-700 to-blue-600">{cow.name}</h2>
@@ -834,7 +981,7 @@ const EmployeeProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleReco
             </div>
             
             {/* Alerts Section */}
-            {cow.alerts && cow.alerts.length > 0 && (
+            {alerts.length > 0 && (
               <div className="mt-6 bg-amber-50 border border-amber-200 rounded-lg p-4 shadow-md hover:shadow-lg transition-all duration-300">
                 <h3 className="text-amber-800 font-medium flex items-center">
                   <svg className="h-5 w-5 mr-2 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -843,7 +990,7 @@ const EmployeeProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleReco
                   Alerts
                 </h3>
                 <ul className="mt-2 space-y-2">
-                  {cow.alerts.map((alert, index) => (
+                  {alerts.map((alert, index) => (
                     <li key={index} className="text-amber-700 text-sm flex items-start">
                       <span className="mr-2">•</span>
                       {alert}
@@ -912,7 +1059,9 @@ const EmployeeProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleReco
                       <div className="flex justify-between items-start">
                         <div>
                           <p className="text-sm font-medium text-gray-500">Avg. Milk Production</p>
-                          <p className="text-2xl font-semibold text-gray-800 mt-1">{avgMilkProduction.toFixed(1)}L</p>
+                          <p className="text-2xl font-semibold text-gray-800 mt-1">
+                            {!isNaN(avgMilkProduction) ? avgMilkProduction.toFixed(1) : '0.0'}L
+                          </p>
                         </div>
                         <div className="p-2 rounded-full bg-gradient-to-r from-blue-50 to-blue-100 text-blue-600">
                           <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -967,28 +1116,26 @@ const EmployeeProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleReco
                     <div className="px-6 py-4 border-b border-gray-200">
                       <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-700 to-blue-700">Recent Activity</h3>
                     </div>
-                    <div className="divide-y divide-gray-200">
-                      <ActivityItem 
-                        type="milk" 
-                        description={`Milk collection recorded: ${cow.milkProduction[cow.milkProduction.length - 1].amount}L`} 
-                        date="Today"
-                      />
-                      <ActivityItem 
-                        type="health" 
-                        description="Regular health check completed" 
-                        date="5 days ago"
-                      />
-                      <ActivityItem 
-                        type="feed" 
-                        description="Feed ration updated" 
-                        date="1 week ago"
-                      />
-                      <ActivityItem 
-                        type="treatment" 
-                        description="Vaccination administered" 
-                        date="2 weeks ago"
-                      />
-                    </div>
+                    {loading.activity ? (
+                      <div className="flex justify-center items-center p-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+                      </div>
+                    ) : recentActivities.length > 0 ? (
+                      <div className="divide-y divide-gray-200">
+                        {recentActivities.map((activity) => (
+                          <ActivityItem 
+                            key={activity.id}
+                            type={activity.type} 
+                            description={activity.description} 
+                            date={formatRelativeTime(activity.date)}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-6 text-center text-gray-500">
+                        No recent activities found.
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -1032,24 +1179,25 @@ const EmployeeProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleReco
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {cow.milkProduction.slice().reverse().map((record, index) => (
-                          <tr key={index} className="hover:bg-gray-50 transition-colors duration-200">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {formatDate(record.date)}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                              {record.amount} L
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                Good
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {index === 0 ? "Morning collection" : ""}
+                      {hasMilkProductionData ? (
+                          cow.milkProduction.slice().reverse().map((record, index) => (
+                            <tr key={index} className="hover:bg-gray-50 transition-colors duration-200">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {formatDate(record.date)}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                                {record.amount || 0} L
+                              </td>
+                              {/* ...other cells... */}
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
+                              No milk production records available.
                             </td>
                           </tr>
-                        ))}
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -1114,32 +1262,27 @@ const EmployeeProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleReco
                     <div className="px-6 py-4 border-b border-gray-200">
                       <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-700 to-blue-700">Health History</h3>
                     </div>
-                    <div className="divide-y divide-gray-200">
-                      <HealthRecord 
-                        date="2023-04-15" 
-                        type="Regular checkup" 
-                        description="All vital signs normal. Cow in good health."
-                        performedBy="Dr. Smith"
-                      />
-                      <HealthRecord 
-                        date="2023-03-01" 
-                        type="Vaccination" 
-                        description="Annual vaccination administered."
-                        performedBy="Dr. Johnson"
-                      />
-                      <HealthRecord 
-                        date="2023-01-15" 
-                        type="Treatment" 
-                        description="Treated for minor hoof issue."
-                        performedBy="Dr. Smith"
-                      />
-                      <HealthRecord 
-                        date="2022-10-10" 
-                        type="Regular checkup" 
-                        description="All vital signs normal. Weight: 560kg."
-                        performedBy="Dr. Johnson"
-                      />
-                    </div>
+                    {loading.health ? (
+                      <div className="flex justify-center items-center p-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+                      </div>
+                    ) : healthHistory.length > 0 ? (
+                      <div className="divide-y divide-gray-200">
+                        {healthHistory.map((record) => (
+                          <HealthRecord 
+                            key={record.id}
+                            date={record.eventDate} 
+                            type={record.eventType} 
+                            description={record.description}
+                            performedBy={record.performedBy}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-6 text-center text-gray-500">
+                        No health records found for this cow.
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -1150,30 +1293,51 @@ const EmployeeProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleReco
                   <div className="bg-white shadow-lg rounded-lg p-6 mb-6 hover:shadow-xl transition-all duration-300">
                     <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-700 to-blue-700 mb-4">Breeding Information</h3>
                     <p className="text-gray-500 mb-4">Breeding history and reproductive information for {cow.name}.</p>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-500 mb-2">Reproductive Status</h4>
-                        <p className="text-sm font-medium text-gray-800">Open</p>
-                        
-                        <h4 className="text-sm font-medium text-gray-500 mt-6 mb-2">Last Heat</h4>
-                        <p className="text-sm text-gray-800">March 15, 2023</p>
-                        
-                        <h4 className="text-sm font-medium text-gray-500 mt-6 mb-2">Next Expected Heat</h4>
-                        <p className="text-sm text-gray-800">April 5, 2023</p>
+                    {loading.reproductive ? (
+                      <div className="flex justify-center items-center p-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
                       </div>
-                      
-                      <div className="border-l border-gray-200 pl-6">
-                        <h4 className="text-sm font-medium text-gray-500 mb-2">Calving History</h4>
-                        <div className="space-y-2">
-                          <div className="text-sm text-gray-800">2 previous calvings</div>
-                          <div className="text-sm text-gray-600">Last calving: October 10, 2022</div>
+                    ) : reproductiveStatus ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-500 mb-2">Reproductive Status</h4>
+                          <p className="text-sm font-medium text-gray-800">{reproductiveStatus.status}</p>
+                          
+                          <h4 className="text-sm font-medium text-gray-500 mt-6 mb-2">Last Heat</h4>
+                          <p className="text-sm text-gray-800">
+                            {reproductiveStatus.last_heat_date ? 
+                              formatDate(reproductiveStatus.last_heat_date) : 'Not recorded'}
+                          </p>
+                          
+                          <h4 className="text-sm font-medium text-gray-500 mt-6 mb-2">Next Expected Heat</h4>
+                          <p className="text-sm text-gray-800">
+                            {reproductiveStatus.next_heat_date ? 
+                              formatDate(reproductiveStatus.next_heat_date) : 'Not calculated'}
+                          </p>
                         </div>
                         
-                        <h4 className="text-sm font-medium text-gray-500 mt-6 mb-2">Breeding Plan</h4>
-                        <p className="text-sm text-gray-800">Scheduled for artificial insemination in next heat cycle</p>
+                        <div className="border-l border-gray-200 pl-6">
+                          <h4 className="text-sm font-medium text-gray-500 mb-2">Calving History</h4>
+                          <div className="space-y-2">
+                            <div className="text-sm text-gray-800">
+                              {reproductiveStatus.calving_count} previous calving{reproductiveStatus.calving_count !== 1 ? 's' : ''}
+                            </div>
+                            {reproductiveStatus.last_calving_date && (
+                              <div className="text-sm text-gray-600">
+                                Last calving: {formatDate(reproductiveStatus.last_calving_date)}
+                              </div>
+                            )}
+                          </div>
+                          
+                          <h4 className="text-sm font-medium text-gray-500 mt-6 mb-2">Breeding Plan</h4>
+                          <p className="text-sm text-gray-800">{reproductiveStatus.breeding_plan || 'No breeding plan set'}</p>
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="p-6 text-center text-gray-500">
+                        No reproductive information available for this cow.
+                      </div>
+                    )}
                   </div>
                   
                   <div className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition-all duration-300">
@@ -1184,74 +1348,60 @@ const EmployeeProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleReco
                         Record New Event
                       </button>
                     </div>
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gradient-to-r from-green-50 to-blue-50">
-                        <tr>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Date
-                          </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Event Type
-                          </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Details
-                          </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Result
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        <tr className="hover:bg-gray-50 transition-colors duration-200">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            March 15, 2023
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            Heat Detection
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            Observed standing heat
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                              Confirmed
-                            </span>
-                          </td>
-                        </tr>
-                        <tr className="hover:bg-gray-50 transition-colors duration-200">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            February 23, 2023
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            Heat Detection
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            No signs observed
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
-                              No heat
-                            </span>
-                          </td>
-                        </tr>
-                        <tr className="hover:bg-gray-50 transition-colors duration-200">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            October 10, 2022
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            Calving
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            Female calf, 35kg
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                              Healthy
-                            </span>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
+                    {loading.breeding ? (
+                      <div className="flex justify-center items-center p-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+                      </div>
+                    ) : breedingEvents.length > 0 ? (
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gradient-to-r from-green-50 to-blue-50">
+                          <tr>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Date
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Event Type
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Details
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Result
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {breedingEvents.map((event) => (
+                            <tr key={event.id} className="hover:bg-gray-50 transition-colors duration-200">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {formatDate(event.date)}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {event.eventType}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {event.details}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                  event.result === 'Confirmed' || event.result === 'Positive' || event.result === 'Healthy' || event.result === 'Completed' || event.result === 'Successful' ? 
+                                    'bg-green-100 text-green-800' : 
+                                  event.result === 'Failed' || event.result === 'Negative' || event.result === 'Stillborn' || event.result === 'Unsuccessful' ? 
+                                    'bg-red-100 text-red-800' :
+                                    'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {event.result}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <div className="p-6 text-center text-gray-500">
+                        No breeding events recorded for this cow.
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -1351,6 +1501,7 @@ const AddCowModal = ({ onClose, onAdd }) => {
       dateOfBirth: formData.dateOfBirth,
       age: calculateAge(formData.dateOfBirth),
       status: formData.status,
+      owner: formData.owner,
       healthStatus: formData.healthStatus,
       milkProduction: [
         { date: new Date().toISOString().split('T')[0], amount: 0 }
@@ -1813,18 +1964,22 @@ const AddCowModal = ({ onClose, onAdd }) => {
 };
 
 // EditCowModal Component
-const EditCowModal = ({ cow, onClose, onSave }) => {
+const EditCowModal = ({ cow, onClose, onEdit }) => {
   const [formData, setFormData] = useState({
+    id: cow.id, // Make sure to include the cow's ID
     tagNumber: cow.tagNumber || '',
     name: cow.name || '',
     breed: cow.breed || 'Holstein',
     dateOfBirth: cow.dateOfBirth || '',
     status: cow.status || 'Active',
+    healthStatus: cow.healthStatus || 'Healthy',
+    owner: cow.owner || 'Farm Owner', // Include owner with a default value
     purchaseDate: cow.purchaseDate || '',
     purchasePrice: cow.purchasePrice || '',
     initialWeight: cow.initialWeight || '',
     notes: cow.notes || '',
-    photo: cow.photo || null
+    photo: cow.photo || null,
+    alerts: Array.isArray(cow.alerts) ? cow.alerts : []
   });
   
   // Handle form field changes
@@ -1839,12 +1994,8 @@ const EditCowModal = ({ cow, onClose, onSave }) => {
   // Handle form submission
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Here you would make an API call to update the cow
-    console.log('Updated cow data:', formData);
-    
-    if (onSave) {
-      onSave(formData);
-    }
+    // Pass the updated cow data to the parent component
+    onEdit(formData);
     onClose();
   };
   
@@ -2161,7 +2312,7 @@ const DeleteConfirmationModal = ({ cow, onClose, onDelete }) => {
 };
 
 // RecordHealthEventModal Component
-const RecordHealthEventModal = ({ cow, onClose, onSave }) => {
+const RecordHealthEventModal = ({ cow, onClose, onSubmit }) => {
   const [formData, setFormData] = useState({
     cowId: cow.id || '',
     eventType: 'Examination',
@@ -2219,9 +2370,7 @@ const RecordHealthEventModal = ({ cow, onClose, onSave }) => {
     // Here you would make an API call to record the health event
     console.log('Health event data:', formData);
     
-    if (onSave) {
-      onSave(formData);
-    }
+    onSubmit(cow.id,formData);
     onClose();
   };
   
@@ -2548,7 +2697,7 @@ const RecordMilkProductionModal = ({ cow, onClose, onSubmit }) => {
       notes: formData.notes
     };
     
-    onSubmit(cow.id, newRecord);
+    onSubmit(cow.id,newRecord);
 
     if (formData.sendWhatsAppNotification) {
       const notificationResult = sendWhatsAppNotification(formData, cow);
@@ -2718,10 +2867,20 @@ const RecordBreedingEventModal = ({ cow, onClose, onSubmit }) => {
   // Handle form field changes
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value
-    });
+    
+    // If changing event type, reset the result field to avoid invalid combinations
+    if (name === 'eventType') {
+      setFormData({
+        ...formData,
+        [name]: value,
+        result: '' // Reset result when event type changes
+      });
+    } else {
+      setFormData({
+        ...formData,
+        [name]: value
+      });
+    }
   };
   
   // Handle form submission
@@ -2755,6 +2914,22 @@ const RecordBreedingEventModal = ({ cow, onClose, onSubmit }) => {
         return ['Healthy', 'Complications', 'Stillborn'];
       default:
         return ['Successful', 'Unsuccessful', 'Partial Success'];
+    }
+  };
+
+  // Get event-specific details placeholder
+  const getDetailsPlaceholder = () => {
+    switch(formData.eventType) {
+      case 'Heat Detection':
+        return 'E.g., Standing heat observed, mounting behavior';
+      case 'Insemination':
+        return 'E.g., Bull ID, semen source, technician name';
+      case 'Pregnancy Check':
+        return 'E.g., Ultrasound method, weeks of gestation';
+      case 'Calving':
+        return 'E.g., Calf gender, weight, ease of birth';
+      default:
+        return 'Enter details about this breeding event';
     }
   };
   
@@ -2810,6 +2985,20 @@ const RecordBreedingEventModal = ({ cow, onClose, onSubmit }) => {
                   <option value="Other">Other</option>
                 </select>
               </div>
+              <div>
+                <label htmlFor="performedBy" className="block text-sm font-medium text-gray-700 mb-1">
+                  Performed By
+                </label>
+                <input
+                  type="text"
+                  id="performedBy"
+                  name="performedBy"
+                  value={formData.performedBy}
+                  onChange={handleChange}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm transition-all duration-300"
+                  placeholder="E.g., Technician name"
+                />
+              </div>
             </div>
             
             <div>
@@ -2824,7 +3013,7 @@ const RecordBreedingEventModal = ({ cow, onClose, onSubmit }) => {
                 onChange={handleChange}
                 required
                 className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm transition-all duration-300"
-                placeholder="E.g., Observed standing heat, Bull ID, Calf weight"
+                placeholder={getDetailsPlaceholder()}
               />
             </div>
             
@@ -2847,24 +3036,10 @@ const RecordBreedingEventModal = ({ cow, onClose, onSubmit }) => {
               </select>
             </div>
             
-            <div>
-              <label htmlFor="performedBy" className="block text-sm font-medium text-gray-700 mb-1">
-                Performed By
-              </label>
-              <input
-                type="text"
-                id="performedBy"
-                name="performedBy"
-                value={formData.performedBy}
-                onChange={handleChange}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm transition-all duration-300"
-                placeholder="Name of person who performed the procedure"
-              />
-            </div>
             
             <div>
               <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
-                Notes
+                Additional Notes
               </label>
               <textarea
                 id="notes"
