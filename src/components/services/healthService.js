@@ -54,6 +54,9 @@ export const fetchCowHealthEvents = async (cowId) => {
 // Add a new health event
 export const addHealthEvent = async (eventData) => {
   try {
+    // Make sure medications is properly formatted as an array
+    const medications = eventData.medications || [];
+    
     // Convert data to the database schema
     const dbRecord = {
       cow_id: eventData.cowId,
@@ -61,7 +64,8 @@ export const addHealthEvent = async (eventData) => {
       event_date: eventData.eventDate,
       description: eventData.description,
       performed_by: eventData.performedBy,
-      medications: eventData.medications,
+      // Ensure medications is stored as a proper JSONB array, not a string
+      medications: Array.isArray(medications) ? medications : [],
       notes: eventData.notes,
       follow_up: eventData.followUp || null,
       status: eventData.status
@@ -81,9 +85,12 @@ export const addHealthEvent = async (eventData) => {
   }
 };
 
-// Update a health event
+//updateHealthEvent function
 export const updateHealthEvent = async (eventId, eventData) => {
   try {
+    // Make sure medications is properly formatted as an array
+    const medications = eventData.medications || [];
+    
     // Convert data to the database schema
     const dbRecord = {
       cow_id: eventData.cowId,
@@ -91,7 +98,8 @@ export const updateHealthEvent = async (eventId, eventData) => {
       event_date: eventData.eventDate,
       description: eventData.description,
       performed_by: eventData.performedBy,
-      medications: eventData.medications,
+      // Ensure medications is stored as a proper JSONB array
+      medications: Array.isArray(medications) ? medications : [],
       notes: eventData.notes,
       follow_up: eventData.followUp || null,
       status: eventData.status

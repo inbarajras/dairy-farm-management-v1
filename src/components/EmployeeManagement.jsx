@@ -1,153 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Calendar, Clock, Mail, Phone, MapPin, Users, Award, FileText, Briefcase, User,Download,DollarSign, IndianRupee } from 'lucide-react';
+import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Calendar, Clock, Mail, Phone, MapPin, Users, Award, FileText, Briefcase, User, Download, DollarSign, IndianRupee } from 'lucide-react';
+import { 
+  fetchEmployees, 
+  fetchEmployeeById,
+  addEmployee, 
+  updateEmployee, 
+  recordAttendance,
+  getMonthlyAttendanceSummary,
+  getAttendanceStatistics,
+  getEmployeeShifts,
+  getEmployeePerformance,
+  getScheduledReviews,
+  schedulePerformanceReview,assignShifts
+} from './services/employeeService';
+import { supabase } from '../lib/supabase';
+import emp from './emp.jpg';
 
-// Mock data for employees
-const mockEmployees = [
-  {
-    id: 'E001',
-    name: 'John Doe',
-    jobTitle: 'Farm Manager',
-    department: 'Management',
-    email: 'john.doe@example.com',
-    phone: '(555) 123-4567',
-    address: '123 Farm Lane, Rural County',
-    dateJoined: '2018-03-15',
-    status: 'Active',
-    schedule: 'Full-time',
-    image: '/api/placeholder/120/120',
-    performanceRating: 4.8,
-    skills: ['Management', 'Cattle handling', 'Equipment operation', 'Team leadership'],
-    certifications: ['Farm Management Certification', 'Agricultural Safety'],
-    attendanceRate: 98,
-    salary: 75000,
-    attendanceHistory: [
-      { date: '2023-04-26', status: 'Present', hoursWorked: 9.5 },
-      { date: '2023-04-25', status: 'Present', hoursWorked: 8.0 },
-      { date: '2023-04-24', status: 'Present', hoursWorked: 8.5 },
-      { date: '2023-04-23', status: 'Weekend', hoursWorked: 0 },
-      { date: '2023-04-22', status: 'Weekend', hoursWorked: 0 },
-      { date: '2023-04-21', status: 'Present', hoursWorked: 8.0 },
-      { date: '2023-04-20', status: 'Present', hoursWorked: 8.5 }
-    ]
-  },
-  {
-    id: 'E002',
-    name: 'Jane Smith',
-    jobTitle: 'Livestock Specialist',
-    department: 'Animal Care',
-    email: 'jane.smith@example.com',
-    phone: '(555) 234-5678',
-    address: '456 County Road, Rural County',
-    dateJoined: '2019-06-22',
-    status: 'Active',
-    schedule: 'Full-time',
-    image: '/api/placeholder/120/120',
-    performanceRating: 4.6,
-    skills: ['Veterinary assistance', 'Animal health monitoring', 'Calving assistance', 'Record keeping'],
-    certifications: ['Animal Husbandry Certification', 'First Aid for Animals'],
-    attendanceRate: 97,
-    salary: 62000,
-    attendanceHistory: [
-      { date: '2023-04-26', status: 'Present', hoursWorked: 8.0 },
-      { date: '2023-04-25', status: 'Present', hoursWorked: 8.5 },
-      { date: '2023-04-24', status: 'Present', hoursWorked: 8.0 },
-      { date: '2023-04-23', status: 'Weekend', hoursWorked: 0 },
-      { date: '2023-04-22', status: 'Weekend', hoursWorked: 0 },
-      { date: '2023-04-21', status: 'Present', hoursWorked: 8.5 },
-      { date: '2023-04-20', status: 'Present', hoursWorked: 8.0 }
-    ]
-  },
-  {
-    id: 'E003',
-    name: 'David Johnson',
-    jobTitle: 'Milking Technician',
-    department: 'Milk Production',
-    email: 'david.johnson@example.com',
-    phone: '(555) 345-6789',
-    address: '789 Meadow Drive, Rural County',
-    dateJoined: '2020-02-10',
-    status: 'Active',
-    schedule: 'Part-time',
-    image: '/api/placeholder/120/120',
-    performanceRating: 4.2,
-    skills: ['Milking equipment operation', 'Hygiene protocols', 'Quality testing', 'Equipment maintenance'],
-    certifications: ['Dairy Safety and Hygiene'],
-    attendanceRate: 95,
-    salary: 42000,
-    attendanceHistory: [
-      { date: '2023-04-26', status: 'Present', hoursWorked: 6.0 },
-      { date: '2023-04-25', status: 'Present', hoursWorked: 6.0 },
-      { date: '2023-04-24', status: 'Absent', hoursWorked: 0 },
-      { date: '2023-04-23', status: 'Weekend', hoursWorked: 0 },
-      { date: '2023-04-22', status: 'Weekend', hoursWorked: 0 },
-      { date: '2023-04-21', status: 'Present', hoursWorked: 6.0 },
-      { date: '2023-04-20', status: 'Present', hoursWorked: 6.5 }
-    ]
-  },
-  {
-    id: 'E004',
-    name: 'Emily Williams',
-    jobTitle: 'Administrative Assistant',
-    department: 'Administration',
-    email: 'emily.williams@example.com',
-    phone: '(555) 456-7890',
-    address: '101 Oak Street, Rural County',
-    dateJoined: '2021-05-05',
-    status: 'Active',
-    schedule: 'Full-time',
-    image: '/api/placeholder/120/120',
-    performanceRating: 4.5,
-    skills: ['Office management', 'Data entry', 'Customer relations', 'Scheduling'],
-    certifications: ['Office Administration'],
-    attendanceRate: 99,
-    salary: 48000,
-    attendanceHistory: [
-      { date: '2023-04-26', status: 'Present', hoursWorked: 8.0 },
-      { date: '2023-04-25', status: 'Present', hoursWorked: 8.0 },
-      { date: '2023-04-24', status: 'Present', hoursWorked: 8.0 },
-      { date: '2023-04-23', status: 'Weekend', hoursWorked: 0 },
-      { date: '2023-04-22', status: 'Weekend', hoursWorked: 0 },
-      { date: '2023-04-21', status: 'Present', hoursWorked: 8.0 },
-      { date: '2023-04-20', status: 'Present', hoursWorked: 8.0 }
-    ]
-  },
-  {
-    id: 'E005',
-    name: 'Michael Brown',
-    jobTitle: 'Farm Hand',
-    department: 'Operations',
-    email: 'michael.brown@example.com',
-    phone: '(555) 567-8901',
-    address: '234 Pine Road, Rural County',
-    dateJoined: '2022-01-18',
-    status: 'Active',
-    schedule: 'Full-time',
-    image: '/api/placeholder/120/120',
-    performanceRating: 4.0,
-    skills: ['Equipment operation', 'Maintenance', 'Feeding', 'General farm work'],
-    certifications: ['Equipment Operation Safety'],
-    attendanceRate: 96,
-    salary: 45000,
-    attendanceHistory: [
-      { date: '2023-04-26', status: 'Present', hoursWorked: 8.5 },
-      { date: '2023-04-25', status: 'Present', hoursWorked: 8.0 },
-      { date: '2023-04-24', status: 'Late', hoursWorked: 7.5 },
-      { date: '2023-04-23', status: 'Weekend', hoursWorked: 0 },
-      { date: '2023-04-22', status: 'Weekend', hoursWorked: 0 },
-      { date: '2023-04-21', status: 'Present', hoursWorked: 8.0 },
-      { date: '2023-04-20', status: 'Present', hoursWorked: 8.5 }
-    ]
-  }
-];
-
-// Status badge colors
+// Status badge colors - unchanged
 const statusColors = {
   'Active': 'bg-green-100 text-green-800',
   'On Leave': 'bg-amber-100 text-amber-800',
   'Terminated': 'bg-red-100 text-red-800'
 };
 
-// Attendance status colors
+// Attendance status colors - unchanged
 const attendanceStatusColors = {
   'Present': 'bg-green-100 text-green-800',
   'Absent': 'bg-red-100 text-red-800',
@@ -159,18 +35,20 @@ const attendanceStatusColors = {
 
 // Utility function to format dates
 const formatDate = (dateString) => {
+  if (!dateString) return '';
   const options = { year: 'numeric', month: 'long', day: 'numeric' };
   return new Date(dateString).toLocaleDateString('en-US', options);
 };
 
 // Utility function to format currency
 const formatCurrency = (amount) => {
+  if (!amount) return '₹0.00';
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
 };
 
 // Main employee management component
 const EmployeeManagement = () => {
-  const [employees, setEmployees] = useState(mockEmployees);
+  const [employees, setEmployees] = useState([]);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -186,13 +64,139 @@ const EmployeeManagement = () => {
   const [successMessage, setSuccessMessage] = useState('');
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
   const [employeeForAttendance, setEmployeeForAttendance] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  // For attendance tab
+  const [attendanceData, setAttendanceData] = useState({
+    summary: [],
+    statistics: {
+      total: 0,
+      present: 0,
+      absent: 0,
+      late: 0,
+      attendanceRate: 0
+    }
+  });
+  
+  // For shifts tab
+  const [shiftsData, setShiftsData] = useState([]);
+  
+  // For performance tab
+  const [performanceData, setPerformanceData] = useState([]);
+  const [scheduledReviews, setScheduledReviews] = useState([]);
+  
+  // Load employees on component mount
+  useEffect(() => {
+    loadEmployees();
+  }, []);
+  
+  // Load additional data when tab changes
+  useEffect(() => {
+    const loadTabData = async () => {
+      try {
+        if (activeTab === 'attendance') {
+          setIsLoading(true);
+          
+          // Get current month and year
+          const today = new Date();
+          const month = today.getMonth() + 1; // JavaScript months are 0-indexed
+          const year = today.getFullYear();
+          
+          // Fetch attendance data
+          const summary = await getMonthlyAttendanceSummary(month, year);
+          const statistics = await getAttendanceStatistics(month, year);
+          
+          setAttendanceData({
+            summary,
+            statistics
+          });
+          
+          setIsLoading(false);
+        } else if (activeTab === 'shifts') {
+          setIsLoading(true);
+          
+          // Get current date for week start
+          const today = new Date();
+          const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, ...
+          const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust to get Monday
+          const weekStart = new Date(today.setDate(diff));
+          
+          // Fetch shifts data
+          const shifts = await getEmployeeShifts(weekStart);
+          setShiftsData(shifts);
+          
+          setIsLoading(false);
+        } else if (activeTab === 'performance') {
+          setIsLoading(true);
+          
+          // Fetch performance data
+          const performance = await getEmployeePerformance();
+          const reviews = await getScheduledReviews();
+          
+          setPerformanceData(performance);
+          setScheduledReviews(reviews);
+          
+          setIsLoading(false);
+        }
+      } catch (err) {
+        console.error('Error loading tab data:', err);
+        setError(`Failed to load data for ${activeTab} tab. Please try again.`);
+        setIsLoading(false);
+      }
+    };
+    
+    if (activeTab !== 'employees') {
+      loadTabData();
+    }
+  }, [activeTab]);
+  
+  // Load all employees
+  const loadEmployees = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const data = await fetchEmployees();
+      setEmployees(data);
+      
+      setIsLoading(false);
+    } catch (err) {
+      console.error('Error loading employees:', err);
+      setError('Failed to load employees. Please refresh the page to try again.');
+      setIsLoading(false);
+    }
+  };
 
+  const refreshShiftsData = async (date = new Date()) => {
+    if (activeTab === 'shifts') {
+      setIsLoading(true);
+      
+      // Get current date for week start if none provided
+      const targetDate = date || new Date();
+      const dayOfWeek = targetDate.getDay(); // 0 = Sunday, 1 = Monday, ...
+      const diff = targetDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust to get Monday
+      const weekStart = new Date(targetDate.setDate(diff));
+      
+      // Fetch shifts data
+      try {
+        const shifts = await getEmployeeShifts(weekStart);
+        setShiftsData(shifts);
+      } catch (err) {
+        console.error('Error refreshing shifts data:', err);
+        setError('Failed to refresh shifts data. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+  
   // Handle search
   const handleSearch = (e) => {
     setSearchQuery(e.target.value);
     setCurrentPage(1); // Reset to first page on search
   };
-
+  
   // Handle filter change
   const handleFilterChange = (filterName, value) => {
     setFilters({
@@ -201,77 +205,150 @@ const EmployeeManagement = () => {
     });
     setCurrentPage(1); // Reset to first page on filter change
   };
-
+  
   // Toggle edit modal
   const toggleEditModal = (employee = null) => {
     setEmployeeToEdit(employee);
     setIsEditModalOpen(!isEditModalOpen);
   };
-
+  
   // Edit employee
-  const editEmployee = (updatedEmployee) => {
-    // Update employees state with the edited employee
-    setEmployees(employees.map(emp => 
-      emp.id === updatedEmployee.id ? updatedEmployee : emp
-    ));
-    
-    // Close the modal and show success message
-    setIsEditModalOpen(false);
-    setSuccessMessage('Employee updated successfully!');
-    
-    // Clear the success message after 3 seconds
-    setTimeout(() => setSuccessMessage(''), 3000);
+  const handleEditEmployee = async (updatedEmployee) => {
+    try {
+      setIsLoading(true);
+      
+      // Update employee in database
+      await updateEmployee(updatedEmployee.id, updatedEmployee);
+      
+      // Refresh employees list
+      await loadEmployees();
+      
+      // Close the modal and show success message
+      setIsEditModalOpen(false);
+      setSuccessMessage('Employee updated successfully!');
+      
+      // Clear the success message after 3 seconds
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      console.error('Error updating employee:', err);
+      setError('Failed to update employee. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
-
-
+  
   // Toggle attendance recording modal
-const toggleAttendanceModal = (employee = null) => {
-  setEmployeeForAttendance(employee);
-  setIsAttendanceModalOpen(!isAttendanceModalOpen);
-};
-
-// Record attendance for an employee
-const recordAttendance = (employeeId, attendanceRecord) => {
-  // In a real application, you would make an API call to save the attendance record
-  // For now, we'll update the employee's attendance history in our local state
-  
-  setEmployees(employees.map(emp => {
-      if (emp.id === employeeId) {
-        // Create a new array with the new attendance record at the beginning
-        const updatedAttendanceHistory = [
-          attendanceRecord,
-          ...emp.attendanceHistory
-        ];
-        
-        // Only keep the latest 7 records for our mock data
-        if (updatedAttendanceHistory.length > 7) {
-          updatedAttendanceHistory.pop();
-        }
-        
-        return {
-          ...emp,
-          attendanceHistory: updatedAttendanceHistory
-        };
-      }
-      return emp;
-    }));
-  
-    // Close the modal and show success message
-    setIsAttendanceModalOpen(false);
-    setSuccessMessage('Attendance recorded successfully!');
-    
-    // Clear the success message after 3 seconds
-    setTimeout(() => setSuccessMessage(''), 3000);
+  const toggleAttendanceModal = (employee = null) => {
+    setEmployeeForAttendance(employee);
+    setIsAttendanceModalOpen(!isAttendanceModalOpen);
   };
-
+  
+  // Record attendance for an employee
+  const handleRecordAttendance = async (employeeId, attendanceData) => {
+    try {
+      setIsLoading(true);
+      
+      // Record attendance in database
+      await recordAttendance({
+        employeeId,
+        ...attendanceData
+      });
+      
+      // If we're on the attendance tab, refresh data
+      if (activeTab === 'attendance') {
+        const today = new Date();
+        const month = today.getMonth() + 1;
+        const year = today.getFullYear();
+        
+        const summary = await getMonthlyAttendanceSummary(month, year);
+        const statistics = await getAttendanceStatistics(month, year);
+        
+        setAttendanceData({
+          summary,
+          statistics
+        });
+      }
+      
+      // Refresh employees list to get updated attendance rates
+      await loadEmployees();
+      
+      // Close the modal and show success message
+      setIsAttendanceModalOpen(false);
+      setSuccessMessage('Attendance recorded successfully!');
+      
+      // Clear the success message after 3 seconds
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      console.error('Error recording attendance:', err);
+      setError('Failed to record attendance. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Add new employee
+  const handleAddEmployee = async (employeeData) => {
+    try {
+      setIsLoading(true);
+      
+      // Add employee to database
+      await addEmployee(employeeData);
+      
+      // Refresh employees list
+      await loadEmployees();
+      
+      // Close the modal and show success message
+      setIsAddModalOpen(false);
+      setSuccessMessage('Employee added successfully!');
+      
+      // Clear the success message after 3 seconds
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      console.error('Error adding employee:', err);
+      setError('Failed to add employee. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Open employee profile
+  const openEmployeeProfile = async (employee) => {
+    try {
+      setIsLoading(true);
+      
+      // Fetch complete employee data including attendance history
+      const completeEmployee = await fetchEmployeeById(employee.id);
+      setSelectedEmployee(completeEmployee);
+      
+      setIsLoading(false);
+    } catch (err) {
+      console.error('Error loading employee profile:', err);
+      setError('Failed to load employee profile. Please try again.');
+      setIsLoading(false);
+    }
+  };
+  
+  // Close employee profile
+  const closeEmployeeProfile = () => {
+    setSelectedEmployee(null);
+  };
+  
+  // Toggle add modal
+  const toggleAddModal = () => {
+    setIsAddModalOpen(!isAddModalOpen);
+  };
+  
   // Filter employees based on search and filters
-  const filteredEmployees = employees.filter(employee => {
+  const filteredEmployees = employees ? employees.filter(employee => {
+    // Only filter if employee exists
+    if (!employee) return false;
+    
     // Search filter
     const matchesSearch = 
       searchQuery === '' || 
-      employee.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      employee.jobTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      employee.email.toLowerCase().includes(searchQuery.toLowerCase());
+      (employee.name && employee.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (employee.job_title && employee.job_title.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (employee.email && employee.email.toLowerCase().includes(searchQuery.toLowerCase()));
     
     // Department filter
     const matchesDepartment = 
@@ -284,36 +361,57 @@ const recordAttendance = (employeeId, attendanceRecord) => {
       employee.status === filters.status;
     
     return matchesSearch && matchesDepartment && matchesStatus;
-  });
-
+  }) : [];
+  
   // Pagination
   const indexOfLastEmployee = currentPage * itemsPerPage;
   const indexOfFirstEmployee = indexOfLastEmployee - itemsPerPage;
   const currentEmployees = filteredEmployees.slice(indexOfFirstEmployee, indexOfLastEmployee);
   const totalPages = Math.ceil(filteredEmployees.length / itemsPerPage);
-
+  
   // Get unique departments for filter
   const uniqueDepartments = Array.from(new Set(employees.map(employee => employee.department)));
-
-  // Open employee profile
-  const openEmployeeProfile = (employee) => {
-    setSelectedEmployee(employee);
-  };
-
-  // Close employee profile
-  const closeEmployeeProfile = () => {
-    setSelectedEmployee(null);
-  };
-
-  // Toggle add modal
-  const toggleAddModal = () => {
-    setIsAddModalOpen(!isAddModalOpen);
-  };
-
+  
+  // Display loading state
+  if (isLoading && !selectedEmployee && employees.length === 0) {
+    return (
+      <div className="h-full bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading employees...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Display error state
+  if (error && !selectedEmployee && employees.length === 0) {
+    return (
+      <div className="h-full bg-gray-100 flex items-center justify-center">
+        <div className="bg-white p-6 rounded-lg shadow-lg max-w-md">
+          <h3 className="text-lg font-medium text-red-600 mb-2">Error</h3>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button 
+            onClick={loadEmployees}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+  
   return (
     <div className="h-full bg-gray-100">
       {selectedEmployee ? (
-        <EmployeeProfile employee={selectedEmployee} onClose={closeEmployeeProfile} onEdit={toggleEditModal} onRecordAttendance={toggleAttendanceModal}/>
+        <EmployeeProfile 
+          employee={selectedEmployee} 
+          onClose={closeEmployeeProfile} 
+          onEdit={toggleEditModal} 
+          onRecordAttendance={toggleAttendanceModal}
+          isLoading={isLoading}
+        />
       ) : (
         <div className="px-6 py-6">
           {/* Header */}
@@ -321,7 +419,7 @@ const recordAttendance = (employeeId, attendanceRecord) => {
             <h1 className="text-2xl font-semibold text-gray-800">Employee Management</h1>
             <button 
               onClick={toggleAddModal}
-              className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              className="flex items-center px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200"
             >
               <Plus size={20} className="mr-2" />
               Add Employee
@@ -330,10 +428,10 @@ const recordAttendance = (employeeId, attendanceRecord) => {
 
           {/* Tabs */}
           <div className="mb-6">
-            <nav className="flex space-x-4 border-b border-gray-200">
+            <nav className="flex space-x-4 border-b border-gray-200 overflow-x-auto">
               <button
                 onClick={() => setActiveTab('employees')}
-                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px ${
+                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap ${
                   activeTab === 'employees'
                     ? 'border-green-500 text-green-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -343,7 +441,7 @@ const recordAttendance = (employeeId, attendanceRecord) => {
               </button>
               <button
                 onClick={() => setActiveTab('attendance')}
-                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px ${
+                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap ${
                   activeTab === 'attendance'
                     ? 'border-green-500 text-green-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -353,7 +451,7 @@ const recordAttendance = (employeeId, attendanceRecord) => {
               </button>
               <button
                 onClick={() => setActiveTab('shifts')}
-                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px ${
+                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap ${
                   activeTab === 'shifts'
                     ? 'border-green-500 text-green-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -363,7 +461,7 @@ const recordAttendance = (employeeId, attendanceRecord) => {
               </button>
               <button
                 onClick={() => setActiveTab('performance')}
-                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px ${
+                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap ${
                   activeTab === 'performance'
                     ? 'border-green-500 text-green-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -373,6 +471,35 @@ const recordAttendance = (employeeId, attendanceRecord) => {
               </button>
             </nav>
           </div>
+
+          {/* Show error message if exists */}
+          {error && (
+            <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm text-red-700">{error}</p>
+                </div>
+                <div className="ml-auto pl-3">
+                  <div className="-mx-1.5 -my-1.5">
+                    <button 
+                      onClick={() => setError(null)} 
+                      className="inline-flex bg-red-50 rounded-md p-1.5 text-red-500 hover:bg-red-100"
+                    >
+                      <span className="sr-only">Dismiss</span>
+                      <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Employees Tab */}
           {activeTab === 'employees' && (
@@ -423,15 +550,38 @@ const recordAttendance = (employeeId, attendanceRecord) => {
 
               {/* Count */}
               <div className="text-sm text-gray-600 mb-4">
-                Showing {indexOfFirstEmployee + 1}-{Math.min(indexOfLastEmployee, filteredEmployees.length)} of {filteredEmployees.length} employees
+                Showing {filteredEmployees.length > 0 ? indexOfFirstEmployee + 1 : 0}-{Math.min(indexOfLastEmployee, filteredEmployees.length)} of {filteredEmployees.length} employees
               </div>
 
-              {/* Employees Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-6">
-                {currentEmployees.map(employee => (
-                  <EmployeeCard key={employee.id} employee={employee} onClick={() => openEmployeeProfile(employee)} onRecordAttendance={toggleAttendanceModal} />
-                ))}
-              </div>
+              {/* Employees Grid with loading state */}
+              {isLoading && employees.length > 0 ? (
+                <div className="flex justify-center py-12">
+                  <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-green-500"></div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-6">
+                  {currentEmployees.length > 0 ? (
+                    currentEmployees.map(employee => (
+                      <EmployeeCard 
+                        key={employee.id} 
+                        employee={{
+                          ...employee,
+                          name: employee.name,
+                          jobTitle: employee.job_title,
+                          dateJoined: employee.date_joined,
+                          image: employee.image_url
+                        }} 
+                        onClick={() => openEmployeeProfile(employee)} 
+                        onRecordAttendance={toggleAttendanceModal} 
+                      />
+                    ))
+                  ) : (
+                    <div className="col-span-full py-10 text-center bg-white rounded-lg shadow">
+                      <p className="text-gray-500">No employees found matching your filters</p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Pagination */}
               {totalPages > 1 && (
@@ -443,7 +593,7 @@ const recordAttendance = (employeeId, attendanceRecord) => {
                   >
                     <ChevronLeft size={16} />
                   </button>
-                  <div className="flex space-x-2">
+                  <div className="flex space-x-2 overflow-x-auto">
                     {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
                       <button
                         key={page}
@@ -468,24 +618,42 @@ const recordAttendance = (employeeId, attendanceRecord) => {
 
           {/* Attendance Tab */}
           {activeTab === 'attendance' && (
-            <AttendanceTab employees={employees} />
+            <AttendanceTab 
+              attendanceData={attendanceData} 
+              employees={employees} 
+              isLoading={isLoading} 
+            />
           )}
 
           {/* Shifts Tab */}
           {activeTab === 'shifts' && (
-            <ShiftsTab employees={employees} />
+            <ShiftsTab 
+              shiftsData={shiftsData} 
+              employees={employees} 
+              isLoading={isLoading}
+              onRefreshData={refreshShiftsData}
+            />
           )}
 
           {/* Performance Tab */}
           {activeTab === 'performance' && (
-            <PerformanceTab employees={employees} />
+            <PerformanceTab 
+              performanceData={performanceData} 
+              scheduledReviews={scheduledReviews}
+              employees={employees}
+              isLoading={isLoading} 
+            />
           )}
         </div>
       )}
 
       {/* Add Employee Modal */}
       {isAddModalOpen && (
-        <AddEmployeeModal onClose={toggleAddModal} />
+        <AddEmployeeModal 
+          onClose={toggleAddModal} 
+          onSubmit={handleAddEmployee}
+          isLoading={isLoading}
+        />
       )}
 
       {/* Edit Employee Modal */}
@@ -493,16 +661,23 @@ const recordAttendance = (employeeId, attendanceRecord) => {
         <EditEmployeeModal
           employee={employeeToEdit}
           onClose={toggleEditModal}
-          onSave={editEmployee}
+          onSave={handleEditEmployee}
+          isLoading={isLoading}
         />
       )}
 
       {/* Record Attendance Modal */}
       {isAttendanceModalOpen && employeeForAttendance && (
         <RecordAttendanceModal
-          employee={employeeForAttendance}
+          employee={{
+            ...employeeForAttendance,
+            name: employeeForAttendance.name,
+            jobTitle: employeeForAttendance.job_title || employeeForAttendance.jobTitle,
+            image: employeeForAttendance.image_url || employeeForAttendance.image
+          }}
           onClose={toggleAttendanceModal}
-          onSave={recordAttendance}
+          onSave={handleRecordAttendance}
+          isLoading={isLoading}
         />
       )}
 
@@ -516,7 +691,7 @@ const recordAttendance = (employeeId, attendanceRecord) => {
   );
 };
 
-// Employee Card Component
+// Employee Card Component - unchanged except for adapted property names
 const EmployeeCard = ({ employee, onClick, onRecordAttendance }) => {
   return (
     <div 
@@ -526,7 +701,7 @@ const EmployeeCard = ({ employee, onClick, onRecordAttendance }) => {
       <div className="p-4">
         <div className="flex items-center mb-3">
           <img 
-            src={employee.image} 
+            src={emp} 
             alt={employee.name} 
             className="w-16 h-16 object-cover rounded-full bg-gray-200"
           />
@@ -556,16 +731,19 @@ const EmployeeCard = ({ employee, onClick, onRecordAttendance }) => {
             {employee.status}
           </span>
           <span className="text-sm text-gray-500">
-            Since {new Date(employee.dateJoined).toLocaleDateString()}
+            Since {formatDate(employee.dateJoined)}
           </span>
         </div>
         <div className="mt-4 pt-2 border-t flex justify-end space-x-4" onClick={(e) => e.stopPropagation()}>
           <button 
-            className="p-1 text-green-600 hover:text-green-900 transition-colors duration-200 hover:bg-green-50 rounded-full"
-            onClick={() => onRecordAttendance(employee)}
+            className="p-1 text-green-600 hover:text-green-900 transition-colors duration-200 hover:bg-green-50 rounded-full flex items-center"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRecordAttendance(employee);
+            }}
           >
-            <Calendar size={16} />
-            Attendance
+            <Calendar size={16} className="mr-1" />
+            <span className="text-sm">Attendance</span>
           </button>
         </div>
       </div>
@@ -574,13 +752,21 @@ const EmployeeCard = ({ employee, onClick, onRecordAttendance }) => {
 };
 
 // Employee Profile Component
-const EmployeeProfile = ({ employee, onClose, onEdit, onRecordAttendance}) => {
+const EmployeeProfile = ({ employee, onClose, onEdit, onRecordAttendance, isLoading }) => {
   const [activeTab, setActiveTab] = useState('overview');
+
+  if (isLoading) {
+    return (
+      <div className="h-full bg-white flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+      </div>
+    );
+  }
   
   return (
     <div className="bg-white min-h-full">
       {/* Header */}
-      <div className="bg-green-600 text-white">
+      <div className="bg-gradient-to-r from-green-600 to-green-700 text-white">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center">
             <button 
@@ -591,7 +777,7 @@ const EmployeeProfile = ({ employee, onClose, onEdit, onRecordAttendance}) => {
             </button>
             <h1 className="text-2xl font-semibold">{employee.name}</h1>
             <span className="ml-4 px-3 py-1 bg-white text-green-600 rounded-full text-sm font-medium">
-              {employee.jobTitle}
+              {employee.job_title}
             </span>
           </div>
         </div>
@@ -605,12 +791,12 @@ const EmployeeProfile = ({ employee, onClose, onEdit, onRecordAttendance}) => {
             <div className="bg-white shadow rounded-lg overflow-hidden">
               <div className="p-6 flex flex-col items-center">
                 <img 
-                  src={employee.image} 
+                  src={emp} 
                   alt={employee.name} 
                   className="w-32 h-32 object-cover rounded-full bg-gray-200 mb-4"
                 />
                 <h2 className="text-xl font-semibold text-gray-800">{employee.name}</h2>
-                <p className="text-gray-500">{employee.jobTitle}</p>
+                <p className="text-gray-500">{employee.job_title}</p>
                 <span className={`mt-2 px-3 py-1 text-xs font-semibold rounded-full ${statusColors[employee.status]}`}>
                   {employee.status}
                 </span>
@@ -630,11 +816,11 @@ const EmployeeProfile = ({ employee, onClose, onEdit, onRecordAttendance}) => {
                   </div>
                   <div className="flex items-center">
                     <MapPin size={16} className="text-gray-400 mr-3" />
-                    <span className="text-gray-600">{employee.address}</span>
+                    <span className="text-gray-600">{employee.address || 'No address provided'}</span>
                   </div>
                   <div className="flex items-center">
                     <Calendar size={16} className="text-gray-400 mr-3" />
-                    <span className="text-gray-600">Joined: {formatDate(employee.dateJoined)}</span>
+                    <span className="text-gray-600">Joined: {formatDate(employee.date_joined)}</span>
                   </div>
                 </div>
                 
@@ -659,7 +845,7 @@ const EmployeeProfile = ({ employee, onClose, onEdit, onRecordAttendance}) => {
           {/* Right Column - Tabs & Details */}
           <div className="lg:w-2/3">
             {/* Tabs */}
-            <div className="border-b border-gray-200">
+            <div className="border-b border-gray-200 overflow-x-auto">
               <nav className="flex -mb-px space-x-8">
                 <button
                   onClick={() => setActiveTab('overview')}
@@ -708,441 +894,22 @@ const EmployeeProfile = ({ employee, onClose, onEdit, onRecordAttendance}) => {
             <div className="py-6">
               {/* Overview Tab */}
               {activeTab === 'overview' && (
-                <div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <div className="bg-white shadow rounded-lg p-6">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="text-sm font-medium text-gray-500">Performance Rating</p>
-                          <p className="text-2xl font-semibold text-gray-800 mt-1">{employee.performanceRating}/5.0</p>
-                        </div>
-                        <div className="p-2 rounded-full bg-green-50 text-green-600">
-                          <Award size={20} />
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="bg-white shadow rounded-lg p-6">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="text-sm font-medium text-gray-500">Attendance Rate</p>
-                          <p className="text-2xl font-semibold text-gray-800 mt-1">{employee.attendanceRate}%</p>
-                        </div>
-                        <div className="p-2 rounded-full bg-blue-50 text-blue-600">
-                          <Calendar size={20} />
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="bg-white shadow rounded-lg p-6">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="text-sm font-medium text-gray-500">Schedule</p>
-                          <p className="text-2xl font-semibold text-gray-800 mt-1">{employee.schedule}</p>
-                        </div>
-                        <div className="p-2 rounded-full bg-purple-50 text-purple-600">
-                          <Clock size={20} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white shadow rounded-lg overflow-hidden mb-6">
-                    <div className="px-6 py-4 border-b border-gray-200">
-                      <h3 className="text-lg font-medium text-gray-800">Skills & Certifications</h3>
-                    </div>
-                    <div className="p-6">
-                      <h4 className="text-sm font-medium text-gray-700 mb-3">Skills</h4>
-                      <div className="flex flex-wrap gap-2 mb-6">
-                        {employee.skills.map((skill, index) => (
-                          <span key={index} className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                            {skill}
-                          </span>
-                        ))}
-                      </div>
-                      
-                      <h4 className="text-sm font-medium text-gray-700 mb-3">Certifications</h4>
-                      <div className="space-y-2">
-                        {employee.certifications.map((cert, index) => (
-                          <div key={index} className="flex items-center">
-                            <FileText size={16} className="text-gray-400 mr-2" />
-                            <span className="text-gray-700">{cert}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white shadow rounded-lg overflow-hidden">
-                    <div className="px-6 py-4 border-b border-gray-200">
-                      <h3 className="text-lg font-medium text-gray-800">Recent Activity</h3>
-                    </div>
-                    <div className="divide-y divide-gray-200">
-                      <ActivityItem 
-                        type="attendance" 
-                        description="Completed 9.5 hours work day" 
-                        date="Today"
-                      />
-                      <ActivityItem 
-                        type="training" 
-                        description="Completed equipment safety refresher" 
-                        date="2 days ago"
-                      />
-                      <ActivityItem 
-                        type="performance" 
-                        description="Quarterly performance review" 
-                        date="1 week ago"
-                      />
-                      <ActivityItem 
-                        type="payroll" 
-                        description="Monthly payroll processed" 
-                        date="2 weeks ago"
-                      />
-                    </div>
-                  </div>
-                </div>
+                <OverviewTab employee={employee} />
               )}
               
               {/* Attendance Tab */}
               {activeTab === 'attendance' && (
-                <div>
-                  <div className="bg-white shadow rounded-lg p-6 mb-6">
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-lg font-medium text-gray-800">Attendance Summary</h3>
-                      <div className="flex items-center">
-                        <button className="mr-2 p-1 rounded-full hover:bg-gray-100">
-                          <ChevronLeft size={18} className="text-gray-500" />
-                        </button>
-                        <span className="text-sm font-medium">April 2023</span>
-                        <button className="ml-2 p-1 rounded-full hover:bg-gray-100">
-                          <ChevronRight size={18} className="text-gray-500" />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <div className="bg-green-50 p-4 rounded-lg">
-                        <p className="text-sm text-gray-500">Present Days</p>
-                        <p className="text-2xl font-semibold text-gray-800">18</p>
-                      </div>
-                      <div className="bg-red-50 p-4 rounded-lg">
-                        <p className="text-sm text-gray-500">Absent Days</p>
-                        <p className="text-2xl font-semibold text-gray-800">1</p>
-                      </div>
-                      <div className="bg-amber-50 p-4 rounded-lg">
-                        <p className="text-sm text-gray-500">Late Days</p>
-                        <p className="text-2xl font-semibold text-gray-800">2</p>
-                      </div>
-                      <div className="bg-blue-50 p-4 rounded-lg">
-                        <p className="text-sm text-gray-500">Total Hours</p>
-                        <p className="text-2xl font-semibold text-gray-800">165.5</p>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white shadow rounded-lg overflow-hidden">
-                    <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                      <h3 className="text-lg font-medium text-gray-800">Attendance Log</h3>
-                      <button className="text-sm text-green-600 hover:text-green-500 font-medium flex items-center">
-                        <Download size={14} className="mr-1" />
-                        Export
-                      </button>
-                    </div>
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Date
-                          </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Status
-                          </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Hours Worked
-                          </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Notes
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {employee.attendanceHistory.map((record, index) => (
-                          <tr key={index}>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {formatDate(record.date)}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${attendanceStatusColors[record.status]}`}>
-                                {record.status}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {record.hoursWorked} hrs
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {record.notes || '-'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                <AttendanceDetailsTab employee={employee} />
               )}
               
               {/* Performance Tab */}
               {activeTab === 'performance' && (
-                <div>
-                  <div className="bg-white shadow rounded-lg p-6 mb-6">
-                    <h3 className="text-lg font-medium text-gray-800 mb-4">Performance Overview</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <div className="flex items-center mb-3">
-                          <div className="text-3xl font-bold text-gray-800 mr-3">{employee.performanceRating}</div>
-                          <div className="flex">
-                            {[1, 2, 3, 4, 5].map((star) => (
-                              <svg key={star} className={`w-5 h-5 ${star <= Math.floor(employee.performanceRating) ? 'text-yellow-400' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                              </svg>
-                            ))}
-                          </div>
-                          <div className="text-sm text-gray-500 ml-2">Overall Rating</div>
-                        </div>
-                        
-                        <div className="space-y-3 mt-6">
-                          <div>
-                            <div className="flex justify-between mb-1">
-                              <span className="text-sm font-medium text-gray-700">Job Knowledge</span>
-                              <span className="text-sm font-medium text-gray-700">4.7/5</span>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2.5">
-                              <div className="bg-green-600 h-2.5 rounded-full" style={{ width: '94%' }}></div>
-                            </div>
-                          </div>
-                          <div>
-                            <div className="flex justify-between mb-1">
-                              <span className="text-sm font-medium text-gray-700">Work Quality</span>
-                              <span className="text-sm font-medium text-gray-700">4.5/5</span>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2.5">
-                              <div className="bg-green-600 h-2.5 rounded-full" style={{ width: '90%' }}></div>
-                            </div>
-                          </div>
-                          <div>
-                            <div className="flex justify-between mb-1">
-                              <span className="text-sm font-medium text-gray-700">Initiative</span>
-                              <span className="text-sm font-medium text-gray-700">4.2/5</span>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2.5">
-                              <div className="bg-green-600 h-2.5 rounded-full" style={{ width: '84%' }}></div>
-                            </div>
-                          </div>
-                          <div>
-                            <div className="flex justify-between mb-1">
-                              <span className="text-sm font-medium text-gray-700">Communication</span>
-                              <span className="text-sm font-medium text-gray-700">4.0/5</span>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2.5">
-                              <div className="bg-green-600 h-2.5 rounded-full" style={{ width: '80%' }}></div>
-                            </div>
-                          </div>
-                          <div>
-                            <div className="flex justify-between mb-1">
-                              <span className="text-sm font-medium text-gray-700">Teamwork</span>
-                              <span className="text-sm font-medium text-gray-700">4.8/5</span>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2.5">
-                              <div className="bg-green-600 h-2.5 rounded-full" style={{ width: '96%' }}></div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-700 mb-3">Performance Trends</h4>
-                        <div className="bg-gray-100 rounded-lg p-4 h-64 flex items-center justify-center">
-                          <p className="text-gray-500">Performance trend chart would go here</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white shadow rounded-lg overflow-hidden">
-                    <div className="px-6 py-4 border-b border-gray-200">
-                      <h3 className="text-lg font-medium text-gray-800">Performance Reviews</h3>
-                    </div>
-                    <div className="divide-y divide-gray-200">
-                      <ReviewItem 
-                        date="2023-01-15" 
-                        reviewer="John Smith"
-                        rating={4.8}
-                        summary="Excellent performance and leadership skills. Consistently exceeds expectations."
-                      />
-                      <ReviewItem 
-                        date="2022-07-10" 
-                        reviewer="Sarah Johnson"
-                        rating={4.6}
-                        summary="Strong contributor to the team. Demonstrates exceptional knowledge and problem-solving abilities."
-                      />
-                      <ReviewItem 
-                        date="2022-01-12" 
-                        reviewer="John Smith"
-                        rating={4.5}
-                        summary="Reliable performer who consistently delivers quality work. Communicates effectively with team members."
-                      />
-                    </div>
-                  </div>
-                </div>
+                <PerformanceDetailsTab employee={employee} />
               )}
               
               {/* Payroll Tab */}
               {activeTab === 'payroll' && (
-                <div>
-                  <div className="bg-white shadow rounded-lg p-6 mb-6">
-                    <h3 className="text-lg font-medium text-gray-800 mb-4">Payroll Information</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <tbody className="divide-y divide-gray-200">
-                            <tr>
-                              <td className="px-3 py-3 text-sm font-medium text-gray-700">Salary</td>
-                              <td className="px-3 py-3 text-sm text-gray-900">{formatCurrency(employee.salary)}/year</td>
-                            </tr>
-                            <tr>
-                              <td className="px-3 py-3 text-sm font-medium text-gray-700">Pay Period</td>
-                              <td className="px-3 py-3 text-sm text-gray-900">Bi-weekly</td>
-                            </tr>
-                            <tr>
-                              <td className="px-3 py-3 text-sm font-medium text-gray-700">Payment Method</td>
-                              <td className="px-3 py-3 text-sm text-gray-900">Direct Deposit</td>
-                            </tr>
-                            <tr>
-                              <td className="px-3 py-3 text-sm font-medium text-gray-700">Bank Account</td>
-                              <td className="px-3 py-3 text-sm text-gray-900">****4567</td>
-                            </tr>
-                            <tr>
-                              <td className="px-3 py-3 text-sm font-medium text-gray-700">Tax Withholding</td>
-                              <td className="px-3 py-3 text-sm text-gray-900">Standard</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                      
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-700 mb-3">Year to Date Summary</h4>
-                        <div className="space-y-3">
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Gross Pay:</span>
-                            <span className="text-sm font-medium text-gray-800">{formatCurrency(employee.salary / 12 * 4)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Federal Tax:</span>
-                            <span className="text-sm font-medium text-gray-800">{formatCurrency((employee.salary / 12 * 4) * 0.15)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">State Tax:</span>
-                            <span className="text-sm font-medium text-gray-800">{formatCurrency((employee.salary / 12 * 4) * 0.05)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Social Security:</span>
-                            <span className="text-sm font-medium text-gray-800">{formatCurrency((employee.salary / 12 * 4) * 0.062)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Medicare:</span>
-                            <span className="text-sm font-medium text-gray-800">{formatCurrency((employee.salary / 12 * 4) * 0.0145)}</span>
-                          </div>
-                          <div className="flex justify-between pt-2 border-t">
-                            <span className="text-sm font-medium text-gray-800">Net Pay:</span>
-                            <span className="text-sm font-medium text-gray-800">{formatCurrency((employee.salary / 12 * 4) * 0.7235)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white shadow rounded-lg overflow-hidden">
-                    <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                      <h3 className="text-lg font-medium text-gray-800">Payment History</h3>
-                      <button className="text-sm text-green-600 hover:text-green-500 font-medium flex items-center">
-                        <Download size={14} className="mr-1" />
-                        Export
-                      </button>
-                    </div>
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Pay Period
-                          </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Pay Date
-                          </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Gross Amount
-                          </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Net Amount
-                          </th>
-                          <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        <tr>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            Apr 16 - Apr 30, 2023
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            May 05, 2023
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {formatCurrency(employee.salary / 24)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {formatCurrency((employee.salary / 24) * 0.7235)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <a href="#" className="text-green-600 hover:text-green-900">View</a>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            Apr 01 - Apr 15, 2023
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            Apr 20, 2023
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {formatCurrency(employee.salary / 24)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {formatCurrency((employee.salary / 24) * 0.7235)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <a href="#" className="text-green-600 hover:text-green-900">View</a>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            Mar 16 - Mar 31, 2023
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            Apr 05, 2023
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {formatCurrency(employee.salary / 24)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {formatCurrency((employee.salary / 24) * 0.7235)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <a href="#" className="text-green-600 hover:text-green-900">View</a>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                <PayrollTab employee={employee} />
               )}
             </div>
           </div>
@@ -1209,8 +976,422 @@ const ReviewItem = ({ date, reviewer, rating, summary }) => {
   );
 };
 
+const OverviewTab = ({ employee }) => {
+  // The skills and certifications are now arrays from Supabase
+  const skills = employee.skills || [];
+  const certifications = employee.certifications || [];
+  
+  return (
+    <div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="bg-white shadow rounded-lg p-6">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-sm font-medium text-gray-500">Performance Rating</p>
+              <p className="text-2xl font-semibold text-gray-800 mt-1">
+                {employee.performance_rating ? `${employee.performance_rating}/5.0` : 'Not rated'}
+              </p>
+            </div>
+            <div className="p-2 rounded-full bg-green-50 text-green-600">
+              <Award size={20} />
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white shadow rounded-lg p-6">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-sm font-medium text-gray-500">Attendance Rate</p>
+              <p className="text-2xl font-semibold text-gray-800 mt-1">{employee.attendance_rate || 100}%</p>
+            </div>
+            <div className="p-2 rounded-full bg-blue-50 text-blue-600">
+              <Calendar size={20} />
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white shadow rounded-lg p-6">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-sm font-medium text-gray-500">Schedule</p>
+              <p className="text-2xl font-semibold text-gray-800 mt-1">{employee.schedule}</p>
+            </div>
+            <div className="p-2 rounded-full bg-purple-50 text-purple-600">
+              <Clock size={20} />
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div className="bg-white shadow rounded-lg overflow-hidden mb-6">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-800">Skills & Certifications</h3>
+        </div>
+        <div className="p-6">
+          <h4 className="text-sm font-medium text-gray-700 mb-3">Skills</h4>
+          <div className="flex flex-wrap gap-2 mb-6">
+            {skills.length > 0 ? skills.map((skill, index) => (
+              <span key={index} className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                {skill}
+              </span>
+            )) : (
+              <span className="text-sm text-gray-500">No skills listed</span>
+            )}
+          </div>
+          
+          <h4 className="text-sm font-medium text-gray-700 mb-3">Certifications</h4>
+          <div className="space-y-2">
+            {certifications.length > 0 ? certifications.map((cert, index) => (
+              <div key={index} className="flex items-center">
+                <FileText size={16} className="text-gray-400 mr-2" />
+                <span className="text-gray-700">{cert}</span>
+              </div>
+            )) : (
+              <span className="text-sm text-gray-500">No certifications listed</span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Add the missing AttendanceDetailsTab component
+const AttendanceDetailsTab = ({ employee }) => {
+  const attendanceHistory = employee.attendanceHistory || [];
+
+  return (
+    <div className="space-y-6">
+      {/* Attendance Summary Card */}
+      <div className="bg-white shadow-sm rounded-lg p-6">
+        <h3 className="text-lg font-medium text-gray-800 mb-4">Attendance Summary</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <div className="p-4 bg-green-50 rounded-lg">
+            <div className="text-sm font-medium text-gray-500">Attendance Rate</div>
+            <div className="mt-1 text-2xl font-semibold text-gray-800">{employee.attendance_rate || 100}%</div>
+          </div>
+          <div className="p-4 bg-blue-50 rounded-lg">
+            <div className="text-sm font-medium text-gray-500">Hours This Month</div>
+            <div className="mt-1 text-2xl font-semibold text-gray-800">
+              {attendanceHistory.reduce((sum, record) => sum + (record.hours_worked || 0), 0)} hrs
+            </div>
+          </div>
+          <div className="p-4 bg-purple-50 rounded-lg">
+            <div className="text-sm font-medium text-gray-500">Last Absence</div>
+            <div className="mt-1 text-lg font-semibold text-gray-800">
+              {attendanceHistory.find(record => record.status === 'Absent')?.date || 'None recorded'}
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Attendance History Table */}
+      <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-800">Attendance History</h3>
+        </div>
+        
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hours Worked</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {attendanceHistory.length > 0 ? (
+                attendanceHistory.map((record, index) => (
+                  <tr key={index}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDate(record.date)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${attendanceStatusColors[record.status] || 'bg-gray-100 text-gray-800'}`}>
+                        {record.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {record.hours_worked || 0} hrs
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">{record.notes || '-'}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="4" className="px-6 py-4 text-center text-sm text-gray-500">No attendance records found</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Add the missing PerformanceDetailsTab component
+const PerformanceDetailsTab = ({ employee }) => {
+  return (
+    <div className="space-y-6">
+      {/* Performance Summary Card */}
+      <div className="bg-white shadow-sm rounded-lg p-6">
+        <h3 className="text-lg font-medium text-gray-800 mb-4">Performance Summary</h3>
+        <div className="flex items-center mb-6">
+          <div className="mr-6">
+            <div className="text-sm font-medium text-gray-500">Overall Rating</div>
+            <div className="mt-1 text-2xl font-semibold text-gray-800">
+              {employee.performance_rating ? `${employee.performance_rating}/5.0` : 'Not rated'}
+            </div>
+          </div>
+          
+          <div className="flex-grow">
+            <div className="flex items-center">
+              <div className="flex mr-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <svg key={star} className={`w-5 h-5 ${star <= (employee.performance_rating || 0) ? 'text-yellow-400' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                  </svg>
+                ))}
+              </div>
+            </div>
+            <div className="mt-4 text-sm text-gray-500">
+              {employee.performance_rating >= 4.5 ? 'Outstanding performer' :
+               employee.performance_rating >= 4.0 ? 'Exceeds expectations' :
+               employee.performance_rating >= 3.0 ? 'Meets expectations' :
+               employee.performance_rating >= 2.0 ? 'Needs improvement' :
+               employee.performance_rating > 0 ? 'Unsatisfactory' : 'Not yet rated'
+              }
+            </div>
+          </div>
+        </div>
+        
+        {/* Skill Ratings */}
+        <h4 className="text-sm font-medium text-gray-700 mb-3">Skill Ratings</h4>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          <div>
+            <div className="flex justify-between mb-1">
+              <span className="text-sm text-gray-600">Job Knowledge</span>
+              <span className="text-sm font-medium text-gray-900">4.2/5.0</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <div className="bg-green-600 h-2.5 rounded-full" style={{ width: '84%' }}></div>
+            </div>
+          </div>
+          <div>
+            <div className="flex justify-between mb-1">
+              <span className="text-sm text-gray-600">Work Quality</span>
+              <span className="text-sm font-medium text-gray-900">4.0/5.0</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <div className="bg-green-600 h-2.5 rounded-full" style={{ width: '80%' }}></div>
+            </div>
+          </div>
+          <div>
+            <div className="flex justify-between mb-1">
+              <span className="text-sm text-gray-600">Teamwork</span>
+              <span className="text-sm font-medium text-gray-900">4.5/5.0</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <div className="bg-green-600 h-2.5 rounded-full" style={{ width: '90%' }}></div>
+            </div>
+          </div>
+          <div>
+            <div className="flex justify-between mb-1">
+              <span className="text-sm text-gray-600">Reliability</span>
+              <span className="text-sm font-medium text-gray-900">4.8/5.0</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <div className="bg-green-600 h-2.5 rounded-full" style={{ width: '96%' }}></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Performance Reviews List */}
+      <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-800">Performance Reviews</h3>
+        </div>
+        
+        {/* Sample reviews - in a real app, these would come from the database */}
+        <div className="divide-y divide-gray-200">
+          <ReviewItem 
+            date="2023-01-15" 
+            reviewer="John Smith" 
+            rating={4.7} 
+            summary="Alex has been consistently exceeding expectations in their role. Excellent teamwork and problem-solving skills."
+          />
+          <ReviewItem 
+            date="2022-07-10" 
+            reviewer="Sarah Johnson" 
+            rating={4.5} 
+            summary="Great performance in all areas. Consistently delivers high-quality work and maintains positive relationships with colleagues."
+          />
+          <ReviewItem 
+            date="2022-01-05" 
+            reviewer="Michael Brown" 
+            rating={4.2} 
+            summary="Solid performer who has shown significant improvement in technical skills over the past period. Continue developing leadership capabilities."
+          />
+        </div>
+      </div>
+      
+      {/* Goals & Development */}
+      <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-800">Goals & Development</h3>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 mb-2">Current Goals</h4>
+            <ul className="list-disc pl-5 space-y-2 text-sm text-gray-600">
+              <li>Complete advanced training in animal husbandry by Q3</li>
+              <li>Improve milk production efficiency by 5% through process optimization</li>
+              <li>Lead the implementation of new health monitoring procedures</li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 mb-2">Development Areas</h4>
+            <ul className="list-disc pl-5 space-y-2 text-sm text-gray-600">
+              <li>Technical knowledge of new milking equipment</li>
+              <li>Leadership skills for team management</li>
+              <li>Cross-training in feed management systems</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Add the missing PayrollTab component
+const PayrollTab = ({ employee }) => {
+  return (
+    <div className="space-y-6">
+      {/* Payroll Summary Card */}
+      <div className="bg-white shadow-sm rounded-lg p-6">
+        <h3 className="text-lg font-medium text-gray-800 mb-4">Payroll Summary</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <div className="p-4 bg-green-50 rounded-lg">
+            <div className="text-sm font-medium text-gray-500">Annual Salary</div>
+            <div className="mt-1 text-2xl font-semibold text-gray-800">{formatCurrency(employee.salary)}</div>
+          </div>
+          <div className="p-4 bg-blue-50 rounded-lg">
+            <div className="text-sm font-medium text-gray-500">Monthly Salary</div>
+            <div className="mt-1 text-2xl font-semibold text-gray-800">{formatCurrency(employee.salary / 12)}</div>
+          </div>
+          <div className="p-4 bg-purple-50 rounded-lg">
+            <div className="text-sm font-medium text-gray-500">Last Pay Increase</div>
+            <div className="mt-1 text-lg font-semibold text-gray-800">{employee.last_pay_increase_date || 'N/A'}</div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Payment History */}
+      <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-800">Payment History</h3>
+        </div>
+        
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pay Period</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gross Pay</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deductions</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Net Pay</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              <tr>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">April 1-30, 2023</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency(employee.salary / 12)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency((employee.salary / 12) * 0.15)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{formatCurrency((employee.salary / 12) * 0.85)}</td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Paid</span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <a href="#" className="text-blue-600 hover:text-blue-900 mr-4"><Download size={16} className="inline" /> Slip</a>
+                </td>
+              </tr>
+              <tr>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">March 1-31, 2023</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency(employee.salary / 12)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency((employee.salary / 12) * 0.15)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{formatCurrency((employee.salary / 12) * 0.85)}</td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Paid</span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <a href="#" className="text-blue-600 hover:text-blue-900 mr-4"><Download size={16} className="inline" /> Slip</a>
+                </td>
+              </tr>
+              <tr>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">February 1-28, 2023</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency(employee.salary / 12)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency((employee.salary / 12) * 0.15)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{formatCurrency((employee.salary / 12) * 0.85)}</td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Paid</span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <a href="#" className="text-blue-600 hover:text-blue-900 mr-4"><Download size={16} className="inline" /> Slip</a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      {/* Compensation History */}
+      <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-800">Compensation History</h3>
+        </div>
+        
+        <div className="p-6">
+          <div className="space-y-4">
+            <div className="border-b border-gray-200 pb-4">
+              <div className="flex justify-between mb-1">
+                <span className="text-sm font-medium text-gray-900">Current Salary</span>
+                <span className="text-sm font-medium text-gray-900">{formatCurrency(employee.salary)}</span>
+              </div>
+              <div className="text-sm text-gray-500">Effective from {formatDate(employee.date_joined)}</div>
+            </div>
+            
+            <div className="pt-2">
+              <h4 className="text-sm font-medium text-gray-700 mb-3">Salary History</h4>
+              <div className="space-y-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">{formatCurrency(employee.salary * 0.9)}</div>
+                    <div className="text-xs text-gray-500">From {formatDate('2022-04-01')} to {formatDate('2023-03-31')}</div>
+                  </div>
+                  <div className="text-sm text-green-600">+10% increase</div>
+                </div>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">{formatCurrency(employee.salary * 0.85)}</div>
+                    <div className="text-xs text-gray-500">From {formatDate('2021-04-01')} to {formatDate('2022-03-31')}</div>
+                  </div>
+                  <div className="text-sm text-green-600">+5.9% increase</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Attendance Tab Component
-const AttendanceTab = ({ employees }) => {
+const AttendanceTab = ({ attendanceData = { summary: [], statistics: null }, employees = [] }) => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [view, setView] = useState('day');
   
@@ -1270,182 +1451,229 @@ const AttendanceTab = ({ employees }) => {
         </div>
         
         {view === 'day' && (
-          <div>
-            <h3 className="text-lg font-medium text-gray-800 mb-4">Daily Attendance - {formatDate(selectedDate)}</h3>
+        <div>
+          <h3 className="text-lg font-medium text-gray-800 mb-4">Daily Attendance - {formatDate(selectedDate)}</h3>
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Employee
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Clock In
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Clock Out
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Hours
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Notes
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {Array.isArray(employees) && employees.length > 0 ? (
+                employees.map(employee => {
+                  if (!employee) return null;
+                  
+                  // Safely access attendanceHistory
+                  const attendanceHistory = employee.attendanceHistory || [];
+                  
+                  // Find today's record or create a placeholder
+                  const todayRecord = attendanceHistory.find(
+                    record => record && record.date === '2023-04-26'
+                  ) || { 
+                    status: 'No Record', 
+                    hoursWorked: 0,
+                    notes: '-' 
+                  };
+                  
+                  return (
+                    <tr key={employee.id || Math.random()}>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-10 w-10">
+                            <img 
+                              className="h-10 w-10 rounded-full" 
+                              src={emp}
+                              alt="" 
+                            />
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-medium text-gray-900">{employee.name || 'Unknown'}</div>
+                            <div className="text-sm text-gray-500">{employee.jobTitle || employee.job_title || 'Unknown'}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          attendanceStatusColors[todayRecord.status] || 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {todayRecord.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {(todayRecord.status === 'Present' || todayRecord.status === 'Late') ? '8:00 AM' : '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {(todayRecord.status === 'Present' || todayRecord.status === 'Late') ? '5:30 PM' : '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {todayRecord.hoursWorked || 0}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {todayRecord.status === 'Late' ? 'Arrived at 8:30 AM' : todayRecord.notes || '-'}
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                    No employee data available
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+        
+        {view === 'week' && (
+        <div>
+          <h3 className="text-lg font-medium text-gray-800 mb-4">Weekly Attendance - Week of April 23, 2023</h3>
+          <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Employee
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
+                  <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Monday<br/>Apr 24
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Clock In
+                  <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Tuesday<br/>Apr 25
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Clock Out
+                  <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Wednesday<br/>Apr 26
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Hours
+                  <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Thursday<br/>Apr 27
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Notes
+                  <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Friday<br/>Apr 28
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Total Hours
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {employees.map(employee => {
-                  const todayRecord = employee.attendanceHistory.find(
-                    record => record.date === '2023-04-26'
-                  );
-                  
-                  return (
-                    <tr key={employee.id}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10">
-                            <img className="h-10 w-10 rounded-full" src={employee.image} alt="" />
+                {Array.isArray(employees) && employees.length > 0 ? (
+                  employees.map(employee => {
+                    if (!employee) return null;
+                    
+                    // Safely access attendanceHistory
+                    const attendanceHistory = employee.attendanceHistory || [];
+                    
+                    // Get attendance records for each day with safe checks
+                    const mondayRecord = attendanceHistory.find(
+                      record => record && record.date === '2023-04-24'
+                    );
+                    const tuesdayRecord = attendanceHistory.find(
+                      record => record && record.date === '2023-04-25'
+                    );
+                    const wednesdayRecord = attendanceHistory.find(
+                      record => record && record.date === '2023-04-26'
+                    );
+                    
+                    // Calculate total hours safely
+                    const totalHours = [mondayRecord, tuesdayRecord, wednesdayRecord]
+                      .reduce((sum, record) => sum + (record && record.hoursWorked ? record.hoursWorked : 0), 0);
+                    
+                    return (
+                      <tr key={employee.id || Math.random()}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-10 w-10">
+                              <img 
+                                className="h-10 w-10 rounded-full" 
+                                src={emp}
+                                alt="" 
+                              />
+                            </div>
+                            <div className="ml-4">
+                              <div className="text-sm font-medium text-gray-900">{employee.name || 'Unknown'}</div>
+                              <div className="text-sm text-gray-500">{employee.jobTitle || employee.job_title || 'Unknown'}</div>
+                            </div>
                           </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">{employee.name}</div>
-                            <div className="text-sm text-gray-500">{employee.jobTitle}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${attendanceStatusColors[todayRecord.status]}`}>
-                          {todayRecord.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {todayRecord.status === 'Present' || todayRecord.status === 'Late' ? '8:00 AM' : '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {todayRecord.status === 'Present' || todayRecord.status === 'Late' ? '5:30 PM' : '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {todayRecord.hoursWorked}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {todayRecord.status === 'Late' ? 'Arrived at 8:30 AM' : '-'}
-                      </td>
-                    </tr>
-                  );
-                })}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          {mondayRecord ? (
+                            <div>
+                              <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${attendanceStatusColors[mondayRecord.status] || 'bg-gray-100 text-gray-800'}`}>
+                                {mondayRecord.status}
+                              </span>
+                              <div className="text-xs text-gray-500 mt-1">{mondayRecord.hoursWorked || 0} hrs</div>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-500">No data</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          {tuesdayRecord ? (
+                            <div>
+                              <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${attendanceStatusColors[tuesdayRecord.status] || 'bg-gray-100 text-gray-800'}`}>
+                                {tuesdayRecord.status}
+                              </span>
+                              <div className="text-xs text-gray-500 mt-1">{tuesdayRecord.hoursWorked || 0} hrs</div>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-500">No data</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          {wednesdayRecord ? (
+                            <div>
+                              <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${attendanceStatusColors[wednesdayRecord.status] || 'bg-gray-100 text-gray-800'}`}>
+                                {wednesdayRecord.status}
+                              </span>
+                              <div className="text-xs text-gray-500 mt-1">{wednesdayRecord.hoursWorked || 0} hrs</div>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-500">No data</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <span className="text-xs text-gray-500">Scheduled</span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <span className="text-xs text-gray-500">Scheduled</span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right font-medium">
+                          {totalHours} hrs
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
+                      No employee data available
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
-        )}
-        
-        {view === 'week' && (
-          <div>
-            <h3 className="text-lg font-medium text-gray-800 mb-4">Weekly Attendance - Week of April 23, 2023</h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Employee
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Monday<br/>Apr 24
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Tuesday<br/>Apr 25
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Wednesday<br/>Apr 26
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Thursday<br/>Apr 27
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Friday<br/>Apr 28
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Total Hours
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {employees.map(employee => {
-                    // Get attendance records for each day
-                    const mondayRecord = employee.attendanceHistory.find(
-                        record => record.date === '2023-04-24'
-                      );
-                      const tuesdayRecord = employee.attendanceHistory.find(
-                        record => record.date === '2023-04-25'
-                      );
-                      const wednesdayRecord = employee.attendanceHistory.find(
-                        record => record.date === '2023-04-26'
-                      );
-                      
-                      // Calculate total hours
-                      const totalHours = [mondayRecord, tuesdayRecord, wednesdayRecord]
-                        .reduce((sum, record) => sum + (record ? record.hoursWorked : 0), 0);
-                      
-                      return (
-                        <tr key={employee.id}>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <div className="flex-shrink-0 h-10 w-10">
-                                <img className="h-10 w-10 rounded-full" src={employee.image} alt="" />
-                              </div>
-                              <div className="ml-4">
-                                <div className="text-sm font-medium text-gray-900">{employee.name}</div>
-                                <div className="text-sm text-gray-500">{employee.jobTitle}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-center">
-                            {mondayRecord && (
-                              <div>
-                                <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${attendanceStatusColors[mondayRecord.status]}`}>
-                                  {mondayRecord.status}
-                                </span>
-                                <div className="text-xs text-gray-500 mt-1">{mondayRecord.hoursWorked} hrs</div>
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-center">
-                            {tuesdayRecord && (
-                              <div>
-                                <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${attendanceStatusColors[tuesdayRecord.status]}`}>
-                                  {tuesdayRecord.status}
-                                </span>
-                                <div className="text-xs text-gray-500 mt-1">{tuesdayRecord.hoursWorked} hrs</div>
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-center">
-                            {wednesdayRecord && (
-                              <div>
-                                <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${attendanceStatusColors[wednesdayRecord.status]}`}>
-                                  {wednesdayRecord.status}
-                                </span>
-                                <div className="text-xs text-gray-500 mt-1">{wednesdayRecord.hoursWorked} hrs</div>
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-center">
-                            <span className="text-xs text-gray-500">Scheduled</span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-center">
-                            <span className="text-xs text-gray-500">Scheduled</span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right font-medium">
-                            {totalHours} hrs
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+        </div>
+      )}
           
           {view === 'month' && (
             <div>
@@ -1523,7 +1751,7 @@ const AttendanceTab = ({ employees }) => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <div className="flex-shrink-0 h-10 w-10">
-                            <img className="h-10 w-10 rounded-full" src={employee.image} alt="" />
+                            <img className="h-10 w-10 rounded-full" src={emp} alt="" />
                           </div>
                           <div className="ml-4">
                             <div className="text-sm font-medium text-gray-900">{employee.name}</div>
@@ -1614,7 +1842,7 @@ const AttendanceTab = ({ employees }) => {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10">
-                          <img className="h-10 w-10 rounded-full" src={employee.image} alt="" />
+                          <img className="h-10 w-10 rounded-full" src={emp} alt="" />
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">{employee.name}</div>
@@ -1666,131 +1894,378 @@ const AttendanceTab = ({ employees }) => {
   };
   
   // Shifts Tab Component
-  const ShiftsTab = ({ employees }) => {
+  const ShiftsTab = ({ shiftsData = [], employees = [], onRefreshData = null }) => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [view, setView] = useState('week');
+    const [isLoading, setIsLoading] = useState(false);
+    const [localShiftsData, setLocalShiftsData] = useState(shiftsData);
     
-    // Generate times for the schedule
-    const timeSlots = Array.from({ length: 14 }, (_, i) => {
-      const hour = i + 6; // Start from 6 AM
-      return `${hour > 12 ? hour - 12 : hour}:00 ${hour >= 12 ? 'PM' : 'AM'}`;
-    });
-    
-    // Mock shifts data
-    const shifts = [
-      { 
-        employeeId: 'E001', 
-        name: 'John Doe',
-        shifts: [
-          { day: 'Monday', startTime: '08:00', endTime: '17:30', colorClass: 'bg-blue-100 border-blue-300' },
-          { day: 'Tuesday', startTime: '08:00', endTime: '17:00', colorClass: 'bg-blue-100 border-blue-300' },
-          { day: 'Wednesday', startTime: '08:00', endTime: '17:30', colorClass: 'bg-blue-100 border-blue-300' },
-          { day: 'Thursday', startTime: '08:00', endTime: '17:00', colorClass: 'bg-blue-100 border-blue-300' },
-          { day: 'Friday', startTime: '08:00', endTime: '17:00', colorClass: 'bg-blue-100 border-blue-300' }
-        ]
-      },
-      { 
-        employeeId: 'E002', 
-        name: 'Jane Smith',
-        shifts: [
-          { day: 'Monday', startTime: '08:00', endTime: '16:30', colorClass: 'bg-green-100 border-green-300' },
-          { day: 'Tuesday', startTime: '08:00', endTime: '16:30', colorClass: 'bg-green-100 border-green-300' },
-          { day: 'Wednesday', startTime: '08:00', endTime: '16:30', colorClass: 'bg-green-100 border-green-300' },
-          { day: 'Thursday', startTime: '08:00', endTime: '16:30', colorClass: 'bg-green-100 border-green-300' },
-          { day: 'Friday', startTime: '08:00', endTime: '16:30', colorClass: 'bg-green-100 border-green-300' }
-        ]
-      },
-      { 
-        employeeId: 'E003', 
-        name: 'David Johnson',
-        shifts: [
-          { day: 'Monday', startTime: '06:00', endTime: '12:00', colorClass: 'bg-purple-100 border-purple-300' },
-          { day: 'Tuesday', startTime: '06:00', endTime: '12:00', colorClass: 'bg-purple-100 border-purple-300' },
-          { day: 'Wednesday', startTime: '', endTime: '', colorClass: '' }, // Day off
-          { day: 'Thursday', startTime: '06:00', endTime: '12:00', colorClass: 'bg-purple-100 border-purple-300' },
-          { day: 'Friday', startTime: '06:00', endTime: '12:00', colorClass: 'bg-purple-100 border-purple-300' }
-        ]
-      },
-      { 
-        employeeId: 'E004', 
-        name: 'Emily Williams',
-        shifts: [
-          { day: 'Monday', startTime: '09:00', endTime: '17:00', colorClass: 'bg-amber-100 border-amber-300' },
-          { day: 'Tuesday', startTime: '09:00', endTime: '17:00', colorClass: 'bg-amber-100 border-amber-300' },
-          { day: 'Wednesday', startTime: '09:00', endTime: '17:00', colorClass: 'bg-amber-100 border-amber-300' },
-          { day: 'Thursday', startTime: '09:00', endTime: '17:00', colorClass: 'bg-amber-100 border-amber-300' },
-          { day: 'Friday', startTime: '09:00', endTime: '17:00', colorClass: 'bg-amber-100 border-amber-300' }
-        ]
-      },
-      { 
-        employeeId: 'E005', 
-        name: 'Michael Brown',
-        shifts: [
-          { day: 'Monday', startTime: '07:00', endTime: '15:30', colorClass: 'bg-red-100 border-red-300' },
-          { day: 'Tuesday', startTime: '07:00', endTime: '15:00', colorClass: 'bg-red-100 border-red-300' },
-          { day: 'Wednesday', startTime: '07:00', endTime: '15:30', colorClass: 'bg-red-100 border-red-300' },
-          { day: 'Thursday', startTime: '07:00', endTime: '15:00', colorClass: 'bg-red-100 border-red-300' },
-          { day: 'Friday', startTime: '07:00', endTime: '15:30', colorClass: 'bg-red-100 border-red-300' }
-        ]
+    // Quick Assign state
+    const [assignData, setAssignData] = useState({
+      employeeId: '',
+      shiftTemplate: '',
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: new Date().toISOString().split('T')[0],
+      workingDays: {
+        Mon: true,
+        Tue: true,
+        Wed: true, 
+        Thu: true,
+        Fri: true,
+        Sat: false,
+        Sun: false
       }
-    ];
+    });
+    const [assignLoading, setAssignLoading] = useState(false);
+    const [assignMessage, setAssignMessage] = useState({ type: '', text: '' });
     
     // Days of the week
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    
-    // Get shift for specific employee and day
-    const getShift = (employeeId, day) => {
-      const employee = shifts.find(e => e.employeeId === employeeId);
-      if (!employee) return null;
+    const dayAbbreviations = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    // Load shifts data when date changes
+  useEffect(() => {
+    loadShiftsForDate(currentDate);
+  }, [currentDate, view]);
+  
+  // Load shifts data for the selected date
+  const loadShiftsForDate = async (date) => {
+    try {
+      setIsLoading(true);
       
-      return employee.shifts.find(s => s.day === day);
+      // Calculate week start based on the selected date
+      const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, ...
+      const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust to get Monday
+      const weekStart = new Date(new Date(date).setDate(diff));
+      
+      // For month view, get the first day of the month
+      const monthStart = view === 'month' 
+        ? new Date(date.getFullYear(), date.getMonth(), 1)
+        : null;
+      
+      // Fetch shifts data for the selected period
+      const shifts = await getEmployeeShifts(view === 'month' ? monthStart : weekStart);
+      setLocalShiftsData(shifts);
+      
+    } catch (err) {
+      console.error('Error loading shifts for selected date:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+    
+    // Handle form field changes for Quick Assign
+    const handleAssignChange = (e) => {
+      const { name, value, type, checked } = e.target;
+      
+      if (name.startsWith('day-')) {
+        // Handle checkbox changes for working days
+        const day = name.split('-')[1]; // Extract day abbreviation (Mon, Tue, etc.)
+        setAssignData(prev => ({
+          ...prev,
+          workingDays: {
+            ...prev.workingDays,
+            [day]: checked
+          }
+        }));
+      } else {
+        // Handle other form fields
+        setAssignData(prev => ({
+          ...prev,
+          [name]: value
+        }));
+      }
     };
+    
+    // Handle shift assignment submission
+    const handleAssignShift = async (e) => {
+      e.preventDefault();
+      
+      // Validate inputs
+      if (!assignData.employeeId) {
+        setAssignMessage({ type: 'error', text: 'Please select an employee' });
+        return;
+      }
+      
+      if (!assignData.shiftTemplate) {
+        setAssignMessage({ type: 'error', text: 'Please select a shift template' });
+        return;
+      }
+      
+      // Check if at least one day is selected
+      const hasSelectedDay = Object.values(assignData.workingDays).some(value => value === true);
+      if (!hasSelectedDay) {
+        setAssignMessage({ type: 'error', text: 'Please select at least one working day' });
+        return;
+      }
+      
+      // Check date range validity
+      if (new Date(assignData.startDate) > new Date(assignData.endDate)) {
+        setAssignMessage({ type: 'error', text: 'End date must be after start date' });
+        return;
+      }
+      
+      try {
+        setAssignLoading(true);
+        setAssignMessage({ type: '', text: '' });
+        
+        // Map shift template to start/end times
+        const shiftTimes = {
+          'morning': { start_time: '06:00', end_time: '14:00', shift_type: 'Morning' },
+          'day': { start_time: '08:00', end_time: '17:00', shift_type: 'Day' },
+          'evening': { start_time: '14:00', end_time: '22:00', shift_type: 'Evening' }
+        };
+        
+        const selectedShift = shiftTimes[assignData.shiftTemplate];
+        
+        // Call the updated assignShifts function
+        await assignShifts(
+          assignData.employeeId,
+          selectedShift, 
+          {
+            startDate: assignData.startDate,
+            endDate: assignData.endDate,
+            workingDays: assignData.workingDays
+          }
+        );
+        
+        // Reset form and show success message
+        setAssignData({
+          employeeId: '',
+          shiftTemplate: '',
+          startDate: new Date().toISOString().split('T')[0],
+          endDate: new Date().toISOString().split('T')[0],
+          workingDays: {
+            Mon: true,
+            Tue: true,
+            Wed: true, 
+            Thu: true,
+            Fri: true,
+            Sat: false,
+            Sun: false
+          }
+        });
+        
+        setAssignMessage({ 
+          type: 'success', 
+          text: 'Successfully assigned shifts to the employee.' 
+        });
+        
+        // Refresh shift data after a short delay
+        setTimeout(() => {
+          // Call the refresh function if provided
+          if (onRefreshData) onRefreshData();
+        }, 1500);
+        
+      } catch (error) {
+        console.error('Error assigning shifts:', error);
+        setAssignMessage({ 
+          type: 'error', 
+          text: error.message || 'Failed to assign shifts. Please try again.' 
+        });
+      } finally {
+        setAssignLoading(false);
+      }
+    };
+  
+    // Helper function to format shifts for display
+    const formatShiftsForDisplay = () => {
+      if (!localShiftsData || !Array.isArray(localShiftsData) || localShiftsData.length === 0) {
+        return [];
+      }
+      
+      // Group shifts by employee
+      const employeeShifts = {};
+      
+      localShiftsData.forEach(shiftRecord => {
+        if (!shiftRecord || !shiftRecord.employee_id || !shiftRecord.shifts) return;
+        
+        const employeeId = shiftRecord.employee_id;
+        
+        if (!employeeShifts[employeeId]) {
+          // Find employee details from the joined data or employees array
+          const employee = shiftRecord.employees || 
+                          employees.find(e => e.id === employeeId) || 
+                          { name: 'Unknown', job_title: 'Unknown' };
+          
+          employeeShifts[employeeId] = {
+            employeeId,
+            name: employee.name,
+            jobTitle: employee.job_title,
+            shifts: []
+          };
+        }
+        
+        // Add each shift from the JSONB array to employee's shifts
+        shiftRecord.shifts.forEach(shift => {
+          employeeShifts[employeeId].shifts.push({
+            day: shift.day,
+            startTime: formatTime(shift.start_time),
+            endTime: formatTime(shift.end_time),
+            colorClass: getShiftColorClass(shift.shift_type)
+          });
+        });
+      });
+      
+      return Object.values(employeeShifts);
+    };
+    
+    // Helper function to format time 
+    const formatTime = (timeString) => {
+      if (!timeString) return '';
+      
+      // Handle different time formats
+      if (timeString.includes(':')) {
+        const [hours, minutes] = timeString.split(':').map(Number);
+        const period = hours >= 12 ? 'PM' : 'AM';
+        const displayHours = hours > 12 ? hours - 12 : (hours === 0 ? 12 : hours);
+        return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+      }
+      
+      return timeString;
+    };
+    
+    // Helper function to determine shift color based on shift type
+    const getShiftColorClass = (shiftType) => {
+      switch (shiftType?.toLowerCase()) {
+        case 'morning':
+          return 'bg-blue-100 border-blue-300';
+        case 'day':
+          return 'bg-green-100 border-green-300';
+        case 'evening':
+          return 'bg-purple-100 border-purple-300';
+        case 'night':
+          return 'bg-gray-100 border-gray-300';
+        default:
+          return 'bg-blue-100 border-blue-300';
+      }
+    };
+    
+    // Get all shifts for display
+    const formattedShifts = formatShiftsForDisplay();
+    
+    // Navigate to previous week/month
+  const navigatePrevious = () => {
+    const newDate = new Date(currentDate);
+    if (view === 'week') {
+      newDate.setDate(newDate.getDate() - 7);
+    } else {
+      newDate.setMonth(newDate.getMonth() - 1);
+    }
+    setCurrentDate(newDate);
+  };
+  
+  // Navigate to next week/month
+  const navigateNext = () => {
+    const newDate = new Date(currentDate);
+    if (view === 'week') {
+      newDate.setDate(newDate.getDate() + 7);
+    } else {
+      newDate.setMonth(newDate.getMonth() + 1);
+    }
+    setCurrentDate(newDate);
+  };
+  
+  // Handler for when view changes (week/month)
+  const handleViewChange = (newView) => {
+    setView(newView);
+    // Reset to current date when switching views to prevent confusion
+    if (newView !== view) {
+      setCurrentDate(new Date());
+    }
+  };
+    
+    // Format date range for display
+    const getDateRangeDisplay = () => {
+      if (view === 'week') {
+        // Calculate the Monday of the current week
+        const dayOfWeek = currentDate.getDay() || 7; // Convert Sunday (0) to 7
+        const mondayDate = new Date(currentDate);
+        mondayDate.setDate(currentDate.getDate() - dayOfWeek + 1);
+        
+        // Calculate the Sunday of the current week
+        const sundayDate = new Date(mondayDate);
+        sundayDate.setDate(mondayDate.getDate() + 6);
+        
+        // Format dates
+        const options = { month: 'long', day: 'numeric' };
+        const mondayDisplay = mondayDate.toLocaleDateString('en-US', options);
+        const sundayDisplay = sundayDate.toLocaleDateString('en-US', options);
+        const year = mondayDate.getFullYear();
+        
+        return `${mondayDisplay} - ${sundayDisplay}, ${year}`;
+      } else {
+        // Month view
+        return currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      }
+    };
+    
+    // If no shifts or employees, show a placeholder message
+    if ((!formattedShifts || formattedShifts.length === 0) && (!employees || employees.length === 0)) {
+      return (
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6 text-center py-12">
+          <p className="text-gray-500">No shift data available to display.</p>
+        </div>
+      );
+    }
     
     return (
       <div>
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6">
-            <div className="flex items-center mb-4 sm:mb-0">
-              <button
-                onClick={() => setView('week')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md ${
-                  view === 'week' 
-                    ? 'bg-green-600 text-white' 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Week
-              </button>
-              <button
-                onClick={() => setView('month')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md ml-2 ${
-                  view === 'month' 
-                    ? 'bg-green-600 text-white' 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Month
-              </button>
-            </div>
-            
-            <div className="flex items-center">
-              <button className="p-1 rounded-full hover:bg-gray-100">
-                <ChevronLeft size={18} className="text-gray-500" />
-              </button>
-              <span className="mx-4 text-sm font-medium">
-                {view === 'week' && 'Week of April 24 - 30, 2023'}
-                {view === 'month' && 'April 2023'}
-              </span>
-              <button className="p-1 rounded-full hover:bg-gray-100">
-                <ChevronRight size={18} className="text-gray-500" />
-              </button>
-              <button className="ml-4 px-3 py-1 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">
-                Today
-              </button>
-            </div>
+      <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6">
+          <div className="flex items-center mb-4 sm:mb-0">
+            <button
+              onClick={() => handleViewChange('week')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md ${
+                view === 'week' 
+                  ? 'bg-green-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Week
+            </button>
+            <button
+              onClick={() => handleViewChange('month')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md ml-2 ${
+                view === 'month' 
+                  ? 'bg-green-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Month
+            </button>
           </div>
           
-          {view === 'week' && (
+          <div className="flex items-center">
+            <button 
+              className="p-1 rounded-full hover:bg-gray-100"
+              onClick={navigatePrevious}
+            >
+              <ChevronLeft size={18} className="text-gray-500" />
+            </button>
+            <span className="mx-4 text-sm font-medium">
+              {getDateRangeDisplay()}
+            </span>
+            <button 
+              className="p-1 rounded-full hover:bg-gray-100"
+              onClick={navigateNext}
+            >
+              <ChevronRight size={18} className="text-gray-500" />
+            </button>
+            <button 
+              className="ml-4 px-3 py-1 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+              onClick={() => setCurrentDate(new Date())}
+            >
+              Today
+            </button>
+          </div>
+        </div>
+          
+          {isLoading ? (
+            <div className="flex justify-center py-12">
+              <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-green-500"></div>
+            </div>
+          ) : view === 'week' ? (
             <div className="overflow-x-auto">
               <table className="min-w-full border-separate" style={{ borderSpacing: 0 }}>
                 <thead>
@@ -1806,51 +2281,57 @@ const AttendanceTab = ({ employees }) => {
                   </tr>
                 </thead>
                 <tbody className="bg-white">
-                  {shifts.map(employee => (
-                    <tr key={employee.employeeId}>
-                      <td className="sticky left-0 bg-white border-b border-gray-200 px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10">
-                            <img 
-                              src={employees.find(e => e.id === employee.employeeId).image} 
-                              alt="" 
-                              className="h-10 w-10 rounded-full"
-                            />
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">{employee.name}</div>
-                            <div className="text-sm text-gray-500">
-                              {employees.find(e => e.id === employee.employeeId).jobTitle}
+                  {formattedShifts.length > 0 ? (
+                    formattedShifts.map(employee => (
+                      <tr key={employee.employeeId}>
+                        <td className="sticky left-0 bg-white border-b border-gray-200 px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-10 w-10">
+                              <img 
+                                src={emp} 
+                                alt={employee.name} 
+                                className="h-10 w-10 rounded-full"
+                              />
+                            </div>
+                            <div className="ml-4">
+                              <div className="text-sm font-medium text-gray-900">{employee.name}</div>
+                              <div className="text-sm text-gray-500">
+                                {employee.jobTitle}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
-                      {days.slice(0, 5).map(day => {
-                        const shift = employee.shifts.find(s => s.day === day);
-                        return (
-                          <td key={day} className="border-b border-gray-200 px-6 py-4">
-                            {shift && shift.startTime ? (
-                              <div className={`px-2 py-2 rounded border ${shift.colorClass}`}>
-                                <div className="text-sm font-medium text-gray-900 text-center">
-                                  {shift.startTime} - {shift.endTime}
+                        </td>
+                        {days.slice(0, 5).map(day => {
+                          const shift = employee.shifts.find(s => s.day === day);
+                          return (
+                            <td key={day} className="border-b border-gray-200 px-6 py-4">
+                              {shift ? (
+                                <div className={`px-2 py-2 rounded border ${shift.colorClass}`}>
+                                  <div className="text-sm font-medium text-gray-900 text-center">
+                                    {shift.startTime} - {shift.endTime}
+                                  </div>
                                 </div>
-                              </div>
-                            ) : (
-                              <div className="px-2 py-2">
-                                <div className="text-sm text-gray-500 text-center">Off</div>
-                              </div>
-                            )}
-                          </td>
-                        );
-                      })}
+                              ) : (
+                                <div className="px-2 py-2">
+                                  <div className="text-sm text-gray-500 text-center">Off</div>
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="6" className="px-6 py-8 text-center text-gray-500 border-b border-gray-200">
+                        No shift data available for this period
+                      </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
-          )}
-          
-          {view === 'month' && (
+          ) : (
             <div className="text-center p-10">
               <p className="text-gray-500">Month view would display a calendar with all shifts for the month</p>
             </div>
@@ -1871,7 +2352,7 @@ const AttendanceTab = ({ employees }) => {
                 </div>
                 <p className="text-sm text-gray-600">6:00 AM - 2:00 PM</p>
                 <div className="mt-2 flex items-center text-xs text-gray-500">
-                  <span>Assigned to 2 employees</span>
+                  <span>Assigned to {formattedShifts.filter(e => e.shifts.some(s => s.startTime.includes('6:00'))).length} employees</span>
                 </div>
               </div>
               
@@ -1885,7 +2366,7 @@ const AttendanceTab = ({ employees }) => {
                 </div>
                 <p className="text-sm text-gray-600">8:00 AM - 5:00 PM</p>
                 <div className="mt-2 flex items-center text-xs text-gray-500">
-                  <span>Assigned to 3 employees</span>
+                  <span>Assigned to {formattedShifts.filter(e => e.shifts.some(s => s.startTime.includes('8:00'))).length} employees</span>
                 </div>
               </div>
               
@@ -1899,7 +2380,7 @@ const AttendanceTab = ({ employees }) => {
                 </div>
                 <p className="text-sm text-gray-600">2:00 PM - 10:00 PM</p>
                 <div className="mt-2 flex items-center text-xs text-gray-500">
-                  <span>Assigned to 0 employees</span>
+                  <span>Assigned to {formattedShifts.filter(e => e.shifts.some(s => s.startTime.includes('2:00 PM'))).length} employees</span>
                 </div>
               </div>
               
@@ -1911,13 +2392,28 @@ const AttendanceTab = ({ employees }) => {
           
           <div className="bg-white rounded-lg shadow-sm p-6">
           <h3 className="text-lg font-medium text-gray-800 mb-4">Quick Assign</h3>
-          <div className="space-y-4">
+          
+          {/* Show success/error message */}
+          {assignMessage.text && (
+            <div className={`mb-4 p-3 rounded-md ${
+              assignMessage.type === 'success' 
+                ? 'bg-green-50 text-green-700 border border-green-200' 
+                : 'bg-red-50 text-red-700 border border-red-200'
+            }`}>
+              {assignMessage.text}
+            </div>
+          )}
+          
+          <form onSubmit={handleAssignShift} className="space-y-4">
             <div>
-              <label htmlFor="employee" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="employeeId" className="block text-sm font-medium text-gray-700 mb-1">
                 Employee
               </label>
               <select
-                id="employee"
+                id="employeeId"
+                name="employeeId"
+                value={assignData.employeeId}
+                onChange={handleAssignChange}
                 className="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md"
               >
                 <option value="">Select an employee</option>
@@ -1928,11 +2424,14 @@ const AttendanceTab = ({ employees }) => {
             </div>
             
             <div>
-              <label htmlFor="shift" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="shiftTemplate" className="block text-sm font-medium text-gray-700 mb-1">
                 Shift Template
               </label>
               <select
-                id="shift"
+                id="shiftTemplate"
+                name="shiftTemplate"
+                value={assignData.shiftTemplate}
+                onChange={handleAssignChange}
                 className="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md"
               >
                 <option value="">Select a shift</option>
@@ -1948,18 +2447,24 @@ const AttendanceTab = ({ employees }) => {
               </label>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="start-date" className="sr-only">Start Date</label>
+                  <label htmlFor="startDate" className="sr-only">Start Date</label>
                   <input
                     type="date"
-                    id="start-date"
+                    id="startDate"
+                    name="startDate"
+                    value={assignData.startDate}
+                    onChange={handleAssignChange}
                     className="block w-full pl-3 pr-3 py-2 text-base border border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md"
                   />
                 </div>
                 <div>
-                  <label htmlFor="end-date" className="sr-only">End Date</label>
+                  <label htmlFor="endDate" className="sr-only">End Date</label>
                   <input
                     type="date"
-                    id="end-date"
+                    id="endDate"
+                    name="endDate"
+                    value={assignData.endDate}
+                    onChange={handleAssignChange}
                     className="block w-full pl-3 pr-3 py-2 text-base border border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md"
                   />
                 </div>
@@ -1971,19 +2476,41 @@ const AttendanceTab = ({ employees }) => {
                 Working Days
               </label>
               <div className="flex flex-wrap gap-2">
-                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+                {dayAbbreviations.map(day => (
                   <label key={day} className="inline-flex items-center">
-                    <input type="checkbox" className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded" checked={day !== 'Sat' && day !== 'Sun'} />
+                    <input 
+                      type="checkbox" 
+                      name={`day-${day}`}
+                      checked={assignData.workingDays[day]} 
+                      onChange={handleAssignChange}
+                      className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded" 
+                    />
                     <span className="ml-2 text-sm text-gray-700">{day}</span>
                   </label>
                 ))}
               </div>
             </div>
             
-            <button className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
-              Assign Shift
+            <button 
+              type="submit"
+              disabled={assignLoading}
+              className={`w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
+                assignLoading 
+                  ? 'bg-green-400 cursor-not-allowed' 
+                  : 'bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500'
+              }`}
+            >
+              {assignLoading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Assigning...
+                </>
+              ) : 'Assign Shift'}
             </button>
-          </div>
+          </form>
         </div>
       </div>
     </div>
@@ -1991,7 +2518,26 @@ const AttendanceTab = ({ employees }) => {
 };
 
 // Performance Tab Component
-const PerformanceTab = ({ employees }) => {
+const PerformanceTab = ({ performanceData = [], scheduledReviews = [], employees = [] }) => {
+  // Add null checks for arrays and objects
+  if (!employees || !Array.isArray(employees) || employees.length === 0) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm p-6 mb-6 text-center py-12">
+        <p className="text-gray-500">No employee data available to display performance metrics.</p>
+      </div>
+    );
+  }
+
+  // Calculate average performance rating
+  const avgRating = employees.reduce((sum, emp) => {
+    return sum + (emp.performance_rating || 0);
+  }, 0) / (employees.filter(emp => emp.performance_rating).length || 1);
+
+  // Find top performer
+  const topPerformer = [...employees].sort((a, b) => 
+    (b.performance_rating || 0) - (a.performance_rating || 0)
+  )[0];
+
   return (
     <div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
@@ -1999,7 +2545,7 @@ const PerformanceTab = ({ employees }) => {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-sm font-medium text-gray-500">Average Performance</p>
-              <p className="text-2xl font-semibold text-gray-800 mt-1">4.4/5.0</p>
+              <p className="text-2xl font-semibold text-gray-800 mt-1">{avgRating.toFixed(1)}/5.0</p>
             </div>
             <div className="p-2 rounded-full bg-green-50 text-green-600">
               <Award size={20} />
@@ -2008,7 +2554,7 @@ const PerformanceTab = ({ employees }) => {
           <div className="mt-4 flex items-center">
             <div className="flex mr-2">
               {[1, 2, 3, 4, 5].map((star) => (
-                <svg key={star} className={`w-5 h-5 ${star <= 4 ? 'text-yellow-400' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 20 20">
+                <svg key={star} className={`w-5 h-5 ${star <= Math.round(avgRating) ? 'text-yellow-400' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 20 20">
                   <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                 </svg>
               ))}
@@ -2021,21 +2567,30 @@ const PerformanceTab = ({ employees }) => {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-sm font-medium text-gray-500">Upcoming Reviews</p>
-              <p className="text-2xl font-semibold text-gray-800 mt-1">2</p>
+              <p className="text-2xl font-semibold text-gray-800 mt-1">{scheduledReviews.length}</p>
             </div>
             <div className="p-2 rounded-full bg-amber-50 text-amber-600">
               <Calendar size={20} />
             </div>
           </div>
           <div className="mt-4 space-y-1">
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-700">Jane Smith</span>
-              <span className="text-gray-500">Due in 5 days</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-700">Michael Brown</span>
-              <span className="text-gray-500">Due in 12 days</span>
-            </div>
+            {scheduledReviews.slice(0, 2).map((review, index) => (
+              <div key={index} className="flex justify-between text-xs">
+                <span className="text-gray-700">{review.employees?.name || 'Unknown'}</span>
+                <span className="text-gray-500">
+                  {(() => {
+                    const reviewDate = new Date(review.review_date);
+                    const today = new Date();
+                    const diffTime = reviewDate - today;
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    return `Due in ${diffDays} days`;
+                  })()}
+                </span>
+              </div>
+            ))}
+            {scheduledReviews.length === 0 && (
+              <span className="text-xs text-gray-500">No upcoming reviews</span>
+            )}
           </div>
         </div>
         
@@ -2043,16 +2598,16 @@ const PerformanceTab = ({ employees }) => {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-sm font-medium text-gray-500">Top Performer</p>
-              <p className="text-2xl font-semibold text-gray-800 mt-1">John Doe</p>
+              <p className="text-2xl font-semibold text-gray-800 mt-1">{topPerformer?.name || "None"}</p>
             </div>
             <div className="p-2 rounded-full bg-blue-50 text-blue-600">
               <Award size={20} />
             </div>
           </div>
           <div className="mt-4 text-xs text-gray-600 flex items-center">
-            <span>Rating: 4.8/5.0</span>
+            <span>Rating: {topPerformer?.performance_rating || "N/A"}/5.0</span>
             <span className="mx-2">•</span>
-            <span>Farm Manager</span>
+            <span>{topPerformer?.job_title || ""}</span>
           </div>
         </div>
       </div>
@@ -2087,98 +2642,93 @@ const PerformanceTab = ({ employees }) => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {employees.sort((a, b) => b.performanceRating - a.performanceRating).map(employee => (
-                <tr key={employee.id}>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0 h-10 w-10">
-                        <img className="h-10 w-10 rounded-full" src={employee.image} alt="" />
-                      </div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">{employee.name}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {employee.jobTitle}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <span className="text-sm font-medium text-gray-900 mr-2">{employee.performanceRating}</span>
-                      <div className="flex">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <svg key={star} className={`w-4 h-4 ${star <= Math.floor(employee.performanceRating) ? 'text-yellow-400' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                          </svg>
-                        ))}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <span className="text-sm text-gray-900 mr-2">
-                        {employee.id === 'E001' ? '4.7' : 
-                         employee.id === 'E002' ? '4.5' : 
-                         employee.id === 'E003' ? '4.0' : 
-                         employee.id === 'E004' ? '4.6' : '4.2'}
-                      </span>
-                      <div className="w-24 bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-green-600 h-2 rounded-full" 
-                          style={{ width: `${(employee.id === 'E001' ? 4.7 : 
-                                            employee.id === 'E002' ? 4.5 : 
-                                            employee.id === 'E003' ? 4.0 : 
-                                            employee.id === 'E004' ? 4.6 : 4.2) * 20}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <span className="text-sm text-gray-900 mr-2">
-                        {employee.id === 'E001' ? '4.8' : 
-                         employee.id === 'E002' ? '4.7' : 
-                         employee.id === 'E003' ? '4.1' : 
-                         employee.id === 'E004' ? '4.4' : '4.0'}
-                      </span>
-                      <div className="w-24 bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-green-600 h-2 rounded-full" 
-                          style={{ width: `${(employee.id === 'E001' ? 4.8 : 
-                                            employee.id === 'E002' ? 4.7 : 
-                                            employee.id === 'E003' ? 4.1 : 
-                                            employee.id === 'E004' ? 4.4 : 4.0) * 20}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <span className="text-sm text-gray-900 mr-2">
-                        {employee.id === 'E001' ? '4.9' : 
-                         employee.id === 'E002' ? '4.6' : 
-                         employee.id === 'E003' ? '4.2' : 
-                         employee.id === 'E004' ? '4.8' : '3.8'}
-                      </span>
-                      <div className="w-24 bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-green-600 h-2 rounded-full" 
-                          style={{ width: `${(employee.id === 'E001' ? 4.9 : 
-                                            employee.id === 'E002' ? 4.6 : 
-                                            employee.id === 'E003' ? 4.2 : 
-                                            employee.id === 'E004' ? 4.8 : 3.8) * 20}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {employee.id === 'E001' ? 'Jan 15, 2023' : 
-                     employee.id === 'E002' ? 'Feb 10, 2023' : 
-                     employee.id === 'E003' ? 'Mar 05, 2023' : 
-                     employee.id === 'E004' ? 'Dec 20, 2022' : 'Mar 15, 2023'}
-                  </td>
-                </tr>
-              ))}
+              {employees
+                .filter(employee => employee && employee.id) // Filter out empty/incomplete records
+                .sort((a, b) => (b.performance_rating || 0) - (a.performance_rating || 0))
+                .map(employee => {
+                  // Find employee's performance data - get the latest review
+                  const employeeReview = performanceData
+                    .filter(p => p.employee_id === employee.id)
+                    .sort((a, b) => new Date(b.review_date) - new Date(a.review_date))[0] || {};
+                  
+                  return (
+                    <tr key={employee.id}>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-10 w-10">
+                            <img 
+                              className="h-10 w-10 rounded-full" 
+                              src={employee.image_url || emp} 
+                              alt="" 
+                            />
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-medium text-gray-900">{employee.name}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {employee.job_title}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <span className="text-sm font-medium text-gray-900 mr-2">
+                            {employee.performance_rating || "N/A"}
+                          </span>
+                          <div className="flex">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <svg key={star} className={`w-4 h-4 ${star <= Math.floor(employee.performance_rating || 0) ? 'text-yellow-400' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                              </svg>
+                            ))}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <span className="text-sm text-gray-900 mr-2">
+                            {employeeReview.job_knowledge_rating || "N/A"}
+                          </span>
+                          <div className="w-24 bg-gray-200 rounded-full h-2">
+                            <div 
+                              className="bg-green-600 h-2 rounded-full" 
+                              style={{ width: `${(employeeReview.job_knowledge_rating || 0) * 20}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <span className="text-sm text-gray-900 mr-2">
+                            {employeeReview.work_quality_rating || "N/A"}
+                          </span>
+                          <div className="w-24 bg-gray-200 rounded-full h-2">
+                            <div 
+                              className="bg-green-600 h-2 rounded-full" 
+                              style={{ width: `${(employeeReview.work_quality_rating || 0) * 20}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <span className="text-sm text-gray-900 mr-2">
+                            {employeeReview.teamwork_rating || "N/A"}
+                          </span>
+                          <div className="w-24 bg-gray-200 rounded-full h-2">
+                            <div 
+                              className="bg-green-600 h-2 rounded-full" 
+                              style={{ width: `${(employeeReview.teamwork_rating || 0) * 20}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {employeeReview.review_date ? formatDate(employeeReview.review_date) : 'No review yet'}
+                      </td>
+                    </tr>
+                  );
+                })}
             </tbody>
           </table>
         </div>
@@ -2217,95 +2767,62 @@ const PerformanceTab = ({ employees }) => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              <tr>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 h-10 w-10">
-                      <img className="h-10 w-10 rounded-full" src={employees[1].image} alt="" />
-                    </div>
-                    <div className="ml-4">
-                      <div className="text-sm font-medium text-gray-900">{employees[1].name}</div>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  Quarterly Review
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  May 01, 2023
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  John Doe
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                    Scheduled
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <a href="#" className="text-green-600 hover:text-green-900 mr-4">Edit</a>
-                  <a href="#" className="text-red-600 hover:text-red-900">Cancel</a>
-                </td>
-              </tr>
-              <tr>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 h-10 w-10">
-                      <img className="h-10 w-10 rounded-full" src={employees[4].image} alt="" />
-                    </div>
-                    <div className="ml-4">
-                      <div className="text-sm font-medium text-gray-900">{employees[4].name}</div>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  Quarterly Review
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  May 08, 2023
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  John Doe
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                    Scheduled
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <a href="#" className="text-green-600 hover:text-green-900 mr-4">Edit</a>
-                  <a href="#" className="text-red-600 hover:text-red-900">Cancel</a>
-                </td>
-              </tr>
-              <tr>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 h-10 w-10">
-                      <img className="h-10 w-10 rounded-full" src={employees[2].image} alt="" />
-                    </div>
-                    <div className="ml-4">
-                      <div className="text-sm font-medium text-gray-900">{employees[2].name}</div>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  Performance Improvement
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  Apr 15, 2023
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  Jane Smith
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                    Completed
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <a href="#" className="text-blue-600 hover:text-blue-900">View</a>
-                </td>
-              </tr>
+              {scheduledReviews.length > 0 ? (
+                scheduledReviews.map(review => (
+                  <tr key={review.id}>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 h-10 w-10">
+                          <img 
+                            className="h-10 w-10 rounded-full" 
+                            src={review.employees?.image_url || emp} 
+                            alt="" 
+                          />
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">
+                            {review.employees?.name || 'Unknown Employee'}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {review.review_type}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatDate(review.review_date)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {review.reviewer?.name || 'Unassigned'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        review.status === 'Completed' 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {review.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      {review.status === 'Completed' ? (
+                        <a href="#" className="text-blue-600 hover:text-blue-900">View</a>
+                      ) : (
+                        <>
+                          <a href="#" className="text-green-600 hover:text-green-900 mr-4">Edit</a>
+                          <a href="#" className="text-red-600 hover:text-red-900">Cancel</a>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                    No scheduled reviews found
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -2315,7 +2832,7 @@ const PerformanceTab = ({ employees }) => {
 };
 
 // Add Employee Modal Component
-const AddEmployeeModal = ({ onClose }) => {
+const AddEmployeeModal = ({ onClose, onSubmit, isLoading }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
     firstName: '',
@@ -2343,8 +2860,7 @@ const AddEmployeeModal = ({ onClose }) => {
   // Handle form submission
   const handleSubmit = (e) => {
     e.preventDefault();
-    console.log('Form data submitted:', formData);
-    // Here you would make an API call to create the employee
+    onSubmit(formData);
     onClose();
   };
   
@@ -2733,9 +3249,18 @@ const AddEmployeeModal = ({ onClose }) => {
                 ) : (
                   <button
                     type="submit"
-                    className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                    disabled={isLoading}
+                    className={`py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${isLoading ? 'opacity-75 cursor-not-allowed' : ''}`}
                   >
-                    Add Employee
+                    {isLoading ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Adding...
+                      </>
+                    ) : 'Add Employee'}
                   </button>
                 )}
               </div>
@@ -3069,7 +3594,7 @@ const RecordAttendanceModal = ({ employee, onClose, onSave }) => {
           <div className="px-6 py-4 space-y-4">
             <div className="flex items-center">
               <div className="flex-shrink-0 h-12 w-12">
-                <img className="h-12 w-12 rounded-full" src={employee.image} alt={employee.name} />
+                <img className="h-12 w-12 rounded-full" src={emp} alt={employee.name} />
               </div>
               <div className="ml-4">
                 <h4 className="text-lg font-medium text-gray-900">{employee.name}</h4>
@@ -3200,4 +3725,4 @@ const RecordAttendanceModal = ({ employee, onClose, onSave }) => {
   );
 };
   
-  export default EmployeeManagement;
+export default EmployeeManagement;

@@ -358,31 +358,31 @@ const calculateAge = (dateOfBirth) => {
 
 // Fetch health history for a cow
 export const fetchHealthHistory = async (cowId) => {
-    try {
-      const { data, error } = await supabase
-        .from('health_events')
-        .select('*')
-        .eq('cow_id', cowId)
-        .order('event_date', { ascending: false });
+  try {
+    const { data, error } = await supabase
+      .from('health_events')
+      .select('*')
+      .eq('cow_id', cowId)
+      .order('event_date', { ascending: false });
+    
+    if (error) throw error;
+    
+    return data.map(event => {
+      // This is where the error is happening - trying to parse medications that might be a string
+      const medications = typeof event.medications === 'string' 
+        ? (event.medications === '[object Object]' ? [] : JSON.parse(event.medications)) 
+        : (Array.isArray(event.medications) ? event.medications : []);
       
-      if (error) throw error;
-      
-      return data.map(event => ({
-        id: event.id,
-        date: event.event_date,
-        type: event.event_type,
-        description: event.description,
-        performedBy: event.performed_by,
-        status: event.status,
-        medications: event.medications ? JSON.parse(event.medications) : [],
-        notes: event.notes,
-        followUp: event.follow_up
-      }));
-    } catch (error) {
-      console.error('Error fetching health history:', error);
-      throw error;
-    }
-  };
+      return {
+        ...event,
+        medications
+      };
+    });
+  } catch (error) {
+    console.error(`Error fetching health history for cow ${cowId}:`, error);
+    throw error;
+  }
+};
   
   // Fetch breeding events for a cow
   export const fetchBreedingEvents = async (cowId) => {

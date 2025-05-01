@@ -788,6 +788,7 @@ const EmployeeProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleReco
     reproductive: false,
     activity: false
   });
+  const [error, setError] = useState(null);
   
   // Safely check for milkProduction array and ensure it has data
   const hasMilkProductionData = cow?.milkProduction && Array.isArray(cow.milkProduction) && cow.milkProduction.length > 0;
@@ -840,21 +841,30 @@ const EmployeeProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleReco
   // Fetch health history when tab changes to health
   useEffect(() => {
     if (activeTab === 'health' && cow && cow.id && !healthHistory.length) {
-      const loadHealthHistory = async () => {
-        try {
-          setLoading(prev => ({ ...prev, health: true }));
-          const data = await fetchHealthHistory(cow.id);
-          setHealthHistory(data);
-        } catch (error) {
-          console.error('Failed to load health history:', error);
-        } finally {
-          setLoading(prev => ({ ...prev, health: false }));
-        }
-      };
-      
       loadHealthHistory();
     }
   }, [activeTab, cow, healthHistory.length]);
+
+  // Fixed loadHealthHistory function
+  const loadHealthHistory = async () => {
+    try {
+      setLoading(prev => ({ ...prev, health: true }));
+      const history = await fetchHealthHistory(cow.id);
+      
+      // Sanitize the history data to ensure medications is always an array
+      const sanitizedHistory = history.map(event => ({
+        ...event,
+        medications: Array.isArray(event.medications) ? event.medications : []
+      }));
+      
+      setHealthHistory(sanitizedHistory);
+    } catch (err) {
+      console.error('Failed to load health history:', err);
+      setError(`Failed to load health history: ${err.message}`);
+    } finally {
+      setLoading(prev => ({ ...prev, health: false }));
+    }
+  };
   
   // Fetch breeding events when tab changes to breeding
   useEffect(() => {

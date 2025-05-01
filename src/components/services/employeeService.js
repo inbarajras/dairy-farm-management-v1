@@ -1,0 +1,523 @@
+import { supabase } from '../../lib/supabase';
+
+// Fetch all employees with basic details
+export const fetchEmployees = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('employees')
+      .select('*')
+      .order('name');
+    
+    if (error) throw error;
+    
+    return data;
+  } catch (error) {
+    console.error('Error fetching employees:', error);
+    throw error;
+  }
+};
+
+// Fetch complete employee details by ID including attendance history
+export const fetchEmployeeById = async (employeeId) => {
+  try {
+    // Fetch employee basic info
+    const { data: employee, error: employeeError } = await supabase
+      .from('employees')
+      .select('*')
+      .eq('id', employeeId)
+      .single();
+    
+    if (employeeError) throw employeeError;
+    
+    // Fetch attendance history for this employee
+    const { data: attendanceHistory, error: attendanceError } = await supabase
+      .from('employee_attendance')
+      .select('*')
+      .eq('employee_id', employeeId)
+      .order('date', { ascending: false });
+    
+    if (attendanceError) throw attendanceError;
+    
+    // Return employee with attendance history
+    return {
+      ...employee,
+      attendanceHistory: attendanceHistory || []
+    };
+  } catch (error) {
+    console.error(`Error fetching employee with ID ${employeeId}:`, error);
+    throw error;
+  }
+};
+
+// Add a new employee
+export const addEmployee = async (employeeData) => {
+    try {
+      // Prepare employee record
+      const employee = {
+        name: `${employeeData.firstName} ${employeeData.lastName}`,
+        email: employeeData.email,
+        phone: employeeData.phone,
+        address: employeeData.address || null,
+        job_title: employeeData.jobTitle,
+        department: employeeData.department,
+        date_joined: employeeData.dateJoined,
+        status: 'Active',
+        salary: parseFloat(employeeData.salary),
+        schedule: employeeData.schedule,
+        attendance_rate: 100, // Default for new employee
+        performance_rating: null, // Default for new employee
+        skills: [],
+        certifications: []
+      };
+      
+      // Handle photo upload if provided
+      if (employeeData.photo) {
+        // Generate unique filename
+        const fileExt = employeeData.photo.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+        const filePath = `employees/${fileName}`;
+        
+        // Upload photo to storage
+        const { error: uploadError } = await supabase.storage
+          .from('images')
+          .upload(filePath, employeeData.photo);
+        
+        if (uploadError) throw uploadError;
+        
+        // Get public URL for the uploaded file
+        const { data: { publicUrl } } = supabase.storage
+          .from('images')
+          .getPublicUrl(filePath);
+        
+        // Add image URL to employee data
+        employee.image_url = publicUrl;
+      } else {
+        // Use default avatar
+        employee.image_url = 'https://via.placeholder.com/150';
+      }
+      
+      // Add employee to database
+      const { data: newEmployee, error } = await supabase
+        .from('employees')
+        .insert(employee)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      // Try to create default shifts for the new employee
+      try {
+        // Get the current date's Monday (start of the week)
+        const today = new Date();
+        const dayOfWeek = today.getDay();
+        const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust when day is Sunday
+        const monday = new Date(today.setDate(diff));
+        monday.setHours(0, 0, 0, 0);
+        
+        // Create default shift pattern
+        const defaultShift = {
+          employee_id: newEmployee.id,
+          week_start: monday.toISOString().split('T')[0],
+          shifts: [
+            { day: 'Monday', start_time: '08:00', end_time: '17:00' },
+            { day: 'Tuesday', start_time: '08:00', end_time: '17:00' },
+            { day: 'Wednesday', start_time: '08:00', end_time: '17:00' },
+            { day: 'Thursday', start_time: '08:00', end_time: '17:00' },
+            { day: 'Friday', start_time: '08:00', end_time: '17:00' }
+          ]
+        };
+        
+        // Try to insert the shift - if table doesn't exist yet, this will fail silently
+        await supabase
+          .from('employee_shifts')
+          .insert(defaultShift)
+          .catch(shiftError => {
+            console.log('Could not add default shift, table may not exist yet:', shiftError);
+          });
+        
+      } catch (shiftError) {
+        // Log but don't fail if we can't add shifts
+        console.warn('Could not add default shifts for new employee:', shiftError);
+      }
+      
+      return newEmployee;
+    } catch (error) {
+      console.error('Error adding employee:', error);
+      throw error;
+    }
+  };
+
+// Update an employee
+export const updateEmployee = async (employeeId, employeeData) => {
+  try {
+    const { data, error } = await supabase
+      .from('employees')
+      .update(employeeData)
+      .eq('id', employeeId)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error(`Error updating employee with ID ${employeeId}:`, error);
+    throw error;
+  }
+};
+
+// Record attendance for an employee
+export const recordAttendance = async (attendanceData) => {
+  try {
+    const record = {
+      employee_id: attendanceData.employeeId,
+      date: attendanceData.date,
+      status: attendanceData.status,
+      hours_worked: attendanceData.hoursWorked,
+      notes: attendanceData.notes || null
+    };
+    
+    const { data, error } = await supabase
+      .from('employee_attendance')
+      .insert(record)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error recording attendance:', error);
+    throw error;
+  }
+};
+
+// Get monthly attendance summary
+export const getMonthlyAttendanceSummary = async (month, year) => {
+  try {
+    const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0];
+    const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+    
+    const { data, error } = await supabase
+      .from('employee_attendance')
+      .select(`
+        *,
+        employees:employee_id (id, name, job_title, image_url)
+      `)
+      .gte('date', startDate)
+      .lte('date', endDate)
+      .order('date', { ascending: false });
+    
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error fetching monthly attendance summary:', error);
+    throw error;
+  }
+};
+
+// Get attendance statistics
+export const getAttendanceStatistics = async (month, year) => {
+    try {
+      const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0];
+      const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+      
+      // First, fetch all attendance records for the period
+      const { data, error } = await supabase
+        .from('employee_attendance')
+        .select('status')
+        .gte('date', startDate)
+        .lte('date', endDate);
+      
+      if (error) throw error;
+      
+      // If no data, return default values
+      if (!data || data.length === 0) {
+        return {
+          total: 0,
+          present: 0,
+          absent: 0,
+          late: 0,
+          attendanceRate: 0
+        };
+      }
+      
+      // Count statuses manually in JavaScript
+      const countByStatus = data.reduce((acc, record) => {
+        const status = record.status;
+        if (!acc[status]) acc[status] = 0;
+        acc[status]++;
+        return acc;
+      }, {});
+      
+      // Calculate the statistics
+      const present = countByStatus['Present'] || 0;
+      const absent = countByStatus['Absent'] || 0;
+      const late = countByStatus['Late'] || 0;
+      const totalDays = data.length;
+      
+      const attendanceRate = totalDays ? ((present + late) / totalDays * 100).toFixed(1) : 0;
+      
+      return {
+        total: totalDays,
+        present,
+        absent,
+        late,
+        attendanceRate
+      };
+    } catch (error) {
+      console.error('Error fetching attendance statistics:', error);
+      throw error;
+    }
+  };
+
+// Get employee shifts
+export const getEmployeeShifts = async (weekStart) => {
+    try {
+      const formattedWeekStart = weekStart.toISOString().split('T')[0];
+      
+      // Fetch shifts for the week
+      const { data, error } = await supabase
+        .from('employee_shifts')
+        .select(`
+          id,
+          employee_id,
+          week_start,
+          shifts,
+          employees:employee_id (id, name, job_title, image_url)
+        `)
+        .eq('week_start', formattedWeekStart);
+      
+      if (error) throw error;
+      
+      // If no data is found, check if the table even exists
+      if ((!data || data.length === 0) && !error) {
+        // Try to select just to check if table exists
+        const { error: tableCheckError } = await supabase
+          .from('employee_shifts')
+          .select('id')
+          .limit(1);
+        
+        // If table doesn't exist or has structural issues, return empty array
+        if (tableCheckError && tableCheckError.message.includes('does not exist')) {
+          console.warn('employee_shifts table does not exist yet');
+          return [];
+        }
+      }
+      
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching employee shifts:', error);
+      return [];
+    }
+  };
+
+export const getEmployeePerformance = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('performance_reviews')
+        .select(`
+          *,
+          employees:employee_id (id, name, job_title, image_url)
+        `)
+        .order('review_date', { ascending: false });
+      
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching employee performance data:', error);
+      return [];
+    }
+  };
+  
+  // Get scheduled performance reviews - This function remains mostly the same
+  export const getScheduledReviews = async () => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      
+      const { data, error } = await supabase
+        .from('scheduled_reviews')
+        .select(`
+          *,
+          employees:employee_id (id, name, job_title, image_url),
+          reviewer:reviewer_id (id, name)
+        `)
+        .gte('review_date', today)
+        .order('review_date');
+      
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching scheduled reviews:', error);
+      return [];
+    }
+  };
+  
+  // Also modify this function if you have it
+  export const schedulePerformanceReview = async (reviewData) => {
+    try {
+      const { data, error } = await supabase
+        .from('scheduled_reviews')
+        .insert({
+          employee_id: reviewData.employeeId,
+          reviewer_id: reviewData.reviewerId,
+          review_type: reviewData.reviewType,
+          review_date: reviewData.reviewDate,
+          status: 'Scheduled',
+          notes: reviewData.notes || null
+        })
+        .select();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error scheduling performance review:', error);
+      throw error;
+    }
+  };
+
+  export const assignShifts = async (employeeId, shiftData, dateRange) => {
+    try {
+      // Get the start of each week in the date range
+      const weeks = getUniqueWeekStarts(dateRange.startDate, dateRange.endDate);
+      const results = [];
+      
+      // For each week, either create a new record or update existing one
+      for (const weekStart of weeks) {
+        const formattedWeekStart = weekStart.toISOString().split('T')[0];
+        
+        // Get the days of this week that fall within the date range and are selected working days
+        const weekDays = getDaysInWeek(weekStart, dateRange.startDate, dateRange.endDate, dateRange.workingDays);
+        
+        if (weekDays.length === 0) continue; // Skip if no days in this week
+        
+        // Create shift objects for each day
+        const newShifts = weekDays.map(day => ({
+          day: getDayName(day.getDay()),
+          date: day.toISOString().split('T')[0],
+          start_time: shiftData.start_time,
+          end_time: shiftData.end_time,
+          shift_type: shiftData.shift_type
+        }));
+        
+        // Check if record already exists for this week
+        const { data: existing } = await supabase
+          .from('employee_shifts')
+          .select('id, shifts')
+          .eq('employee_id', employeeId)
+          .eq('week_start', formattedWeekStart)
+          .maybeSingle();
+        
+        let result;
+        
+        if (existing) {
+          // If record exists, merge new shifts with existing ones, avoiding duplicates
+          const existingShifts = existing.shifts || [];
+          const mergedShifts = mergeShifts(existingShifts, newShifts);
+          
+          const { data, error } = await supabase
+            .from('employee_shifts')
+            .update({
+              shifts: mergedShifts,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existing.id)
+            .select();
+          
+          if (error) throw error;
+          result = data;
+        } else {
+          // If no record exists, create a new one
+          const { data, error } = await supabase
+            .from('employee_shifts')
+            .insert({
+              employee_id: employeeId,
+              week_start: formattedWeekStart,
+              shifts: newShifts
+            })
+            .select();
+          
+          if (error) throw error;
+          result = data;
+        }
+        
+        results.push(result);
+      }
+      
+      return results.flat();
+    } catch (error) {
+      console.error('Error assigning shifts:', error);
+      throw error;
+    }
+  };
+
+  function getUniqueWeekStarts(startDateStr, endDateStr) {
+    const startDate = new Date(startDateStr);
+    const endDate = new Date(endDateStr);
+    const weekStarts = [];
+    
+    // Get the Monday of the start date's week
+    const firstDay = new Date(startDate);
+    const dayOfWeek = firstDay.getDay() || 7; // Convert Sunday (0) to 7
+    firstDay.setDate(firstDay.getDate() - (dayOfWeek - 1)); // Get to Monday
+    firstDay.setHours(0, 0, 0, 0); // Normalize time
+    
+    // Add each Monday until we reach or pass the end date
+    let currentMonday = new Date(firstDay);
+    while (currentMonday <= endDate) {
+      weekStarts.push(new Date(currentMonday));
+      currentMonday.setDate(currentMonday.getDate() + 7);
+    }
+    
+    return weekStarts;
+  }
+  
+  // Get days in a week that fall within a date range and are selected working days
+  function getDaysInWeek(weekStart, rangeStart, rangeEnd, workingDays) {
+    const result = [];
+    const startDate = new Date(rangeStart);
+    const endDate = new Date(rangeEnd);
+    
+    // Check each day of the week
+    let currentDay = new Date(weekStart);
+    for (let i = 0; i < 7; i++) {
+      // Check if current day is within range and is a selected working day
+      if (currentDay >= startDate && 
+          currentDay <= endDate && 
+          isWorkingDay(currentDay, workingDays)) {
+        result.push(new Date(currentDay));
+      }
+      currentDay.setDate(currentDay.getDate() + 1);
+    }
+    
+    return result;
+  }
+  
+  // Check if a date is a selected working day
+  function isWorkingDay(date, workingDays) {
+    const dayAbbreviations = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dayAbbr = dayAbbreviations[date.getDay()];
+    return workingDays[dayAbbr] === true;
+  }
+  
+  // Convert day number to name
+  function getDayName(dayNumber) {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return days[dayNumber];
+  }
+  
+  // Merge shifts arrays, avoiding duplicates by date
+  function mergeShifts(existingShifts, newShifts) {
+    const shiftsMap = {};
+    
+    // Add existing shifts to map
+    existingShifts.forEach(shift => {
+      shiftsMap[shift.date] = shift;
+    });
+    
+    // Add or replace with new shifts
+    newShifts.forEach(shift => {
+      shiftsMap[shift.date] = shift;
+    });
+    
+    // Convert back to array
+    return Object.values(shiftsMap);
+  }
