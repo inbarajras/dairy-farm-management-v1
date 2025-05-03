@@ -225,7 +225,7 @@ const HealthManagement = () => {
             >
               Health Events
             </button>
-            {/* <button
+            <button
               onClick={() => setActiveTab('vaccinations')}
               className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px ${
                 activeTab === 'vaccinations'
@@ -235,7 +235,7 @@ const HealthManagement = () => {
             >
               Vaccinations
             </button>
-            <button
+            {/* <button
               onClick={() => setActiveTab('medications')}
               className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px ${
                 activeTab === 'medications'

@@ -239,20 +239,20 @@ export const fetchCowMilkProduction = async (cowId) => {
   };
 
 // Record breeding event
-export const recordBreedingEvent = async (cowId, eventData) => {
+export const recordBreedingEvent = async (cowId, formData) => {
     try {
       // Insert the breeding event
       const breedingEvent = {
         cow_id: cowId,
-        date: eventData.date,
-        event_type: eventData.eventType,
-        details: eventData.details,
-        result: eventData.result,
-        notes: eventData.notes || null,
-        performed_by: eventData.performedBy || null
+        date: formData.date,
+        event_type: formData.eventType,
+        details: formData.details,
+        result: formData.result,
+        notes: formData.notes || null,
+        performed_by: formData.performedBy || null
       };
       
-      const { data: eventData, error: eventError } = await supabase
+      const { data: respData, error: eventError } = await supabase
         .from('breeding_events')
         .insert(breedingEvent)
         .select();
@@ -260,9 +260,9 @@ export const recordBreedingEvent = async (cowId, eventData) => {
       if (eventError) throw eventError;
       
       // Update reproductive status based on the event
-      await updateReproductiveStatus(cowId, eventData);
+      await updateReproductiveStatus(cowId, respData);
       
-      return eventData[0];
+      return respData[0];
     } catch (error) {
       console.error('Error recording breeding event:', error);
       throw error;

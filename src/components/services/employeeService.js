@@ -150,9 +150,26 @@ export const addEmployee = async (employeeData) => {
 // Update an employee
 export const updateEmployee = async (employeeId, employeeData) => {
   try {
+    const employee = {
+        name: employeeData.name,
+        email: employeeData.email,
+        phone: employeeData.phone,
+        address: employeeData.address || null,
+        job_title: employeeData.jobTitle,
+        department: employeeData.department,
+        date_joined: employeeData.dateJoined,
+        status: 'Active',
+        salary: parseFloat(employeeData.salary),
+        schedule: employeeData.schedule,
+        attendance_rate: employeeData.attendanceRate, // Default for new employee
+        performance_rating: null, // Default for new employee
+        skills: [],
+        certifications: []
+      };
+
     const { data, error } = await supabase
       .from('employees')
-      .update(employeeData)
+      .update(employee)
       .eq('id', employeeId)
       .select()
       .single();

@@ -97,7 +97,7 @@ const EmployeeManagement = () => {
       try {
         if (activeTab === 'attendance') {
           setIsLoading(true);
-          
+        
           // Get current month and year
           const today = new Date();
           const month = today.getMonth() + 1; // JavaScript months are 0-indexed
@@ -107,8 +107,9 @@ const EmployeeManagement = () => {
           const summary = await getMonthlyAttendanceSummary(month, year);
           const statistics = await getAttendanceStatistics(month, year);
           
+          // Store the raw attendance records as summary and the statistics separately
           setAttendanceData({
-            summary,
+            summary, // This should be an array of attendance records
             statistics
           });
           
@@ -569,7 +570,7 @@ const EmployeeManagement = () => {
                           name: employee.name,
                           jobTitle: employee.job_title,
                           dateJoined: employee.date_joined,
-                          image: employee.image_url
+                          image: emp
                         }} 
                         onClick={() => openEmployeeProfile(employee)} 
                         onRecordAttendance={toggleAttendanceModal} 
@@ -619,7 +620,8 @@ const EmployeeManagement = () => {
           {/* Attendance Tab */}
           {activeTab === 'attendance' && (
             <AttendanceTab 
-              attendanceData={attendanceData} 
+              attendanceData={attendanceData.summary} // Pass the summary array directly
+              statistics={attendanceData.statistics} // Pass statistics separately
               employees={employees} 
               isLoading={isLoading} 
             />
@@ -1391,10 +1393,258 @@ const PayrollTab = ({ employee }) => {
 };
 
 // Attendance Tab Component
-const AttendanceTab = ({ attendanceData = { summary: [], statistics: null }, employees = [] }) => {
-  const [selectedDate, setSelectedDate] = useState(new Date());
+const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], isLoading = false }) => {
   const [view, setView] = useState('day');
+  const [selectedDate, setSelectedDate] = useState(new Date());
   
+  // Process attendance data for display
+  const processAttendanceData = () => {
+    // Ensure attendanceData is an array before processing
+    const validAttendanceData = Array.isArray(attendanceData) ? attendanceData : [];
+    console.log("Processing attendance data:", validAttendanceData);
+    
+    if (validAttendanceData.length === 0) {
+      return {
+        daily: {},
+        weekly: {},
+        monthly: {
+          summary: [],
+          statistics: statistics || {
+            total: 0,
+            present: 0,
+            absent: 0,
+            late: 0,
+            attendanceRate: 0
+          }
+        }
+      };
+    }
+    
+    // Process for daily view (filter by selected date)
+    const selectedDateStr = selectedDate.toISOString().split('T')[0];
+    const dailyAttendance = {};
+    
+    // Group daily attendance by employee
+    validAttendanceData
+      .filter(record => record && record.date === selectedDateStr)
+      .forEach(record => {
+        // Store all fields from the record including clock times
+        dailyAttendance[record.employee_id] = {
+          ...record,
+          // Set defaults for optional fields
+          clock_in: record.clock_in || '08:00',
+          clock_out: record.clock_out || '17:00',
+          hours_worked: record.hours_worked || 8,
+          notes: record.notes || ''
+        };
+      });
+    
+    // Process for weekly view
+    const weeklyAttendance = {};
+    
+    // Get the Monday of the current week
+    const dayOfWeek = selectedDate.getDay() || 7; // Convert Sunday (0) to 7
+    const mondayDate = new Date(selectedDate);
+    mondayDate.setDate(selectedDate.getDate() - dayOfWeek + 1);
+    
+    // Get array of dates for the week
+    const weekDates = Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(mondayDate);
+      date.setDate(mondayDate.getDate() + i);
+      return date.toISOString().split('T')[0];
+    });
+    
+    // Group weekly attendance by employee and date
+    validAttendanceData.forEach(record => {
+      if (record && weekDates.includes(record.date)) {
+        if (!weeklyAttendance[record.employee_id]) {
+          weeklyAttendance[record.employee_id] = {
+            employee: record.employees,
+            days: {}
+          };
+        }
+        weeklyAttendance[record.employee_id].days[record.date] = record;
+      }
+    });
+    
+    // Process for monthly view
+    const monthYear = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}`;
+    
+    // Calculate monthly statistics
+    const monthRecords = validAttendanceData.filter(record => record && record.date && record.date.startsWith(monthYear));
+    
+    const statusCounts = monthRecords.reduce((acc, record) => {
+      acc.total++;
+      if (record.status) {
+        const status = record.status.toLowerCase();
+        acc[status] = (acc[status] || 0) + 1;
+      }
+      return acc;
+    }, { total: 0, present: 0, absent: 0, late: 0 });
+    
+    const attendanceRate = statusCounts.total 
+      ? ((statusCounts.present + statusCounts.late) / statusCounts.total * 100).toFixed(1) 
+      : 0;
+    
+    // Group monthly attendance by employee
+    const monthlySummary = [];
+    const employeeMonthStats = {};
+    
+    monthRecords.forEach(record => {
+      if (!record || !record.employee_id) return;
+      
+      const empId = record.employee_id;
+      
+      if (!employeeMonthStats[empId]) {
+        employeeMonthStats[empId] = {
+          id: empId,
+          name: record.employees?.name || 'Unknown',
+          jobTitle: record.employees?.job_title || 'Unknown',
+          imageUrl: emp,
+          present: 0,
+          absent: 0,
+          late: 0,
+          totalHours: 0,
+          attendanceRate: 0
+        };
+      }
+      
+      if (record.status) {
+        const status = record.status.toLowerCase();
+        employeeMonthStats[empId][status] = (employeeMonthStats[empId][status] || 0) + 1;
+      }
+      employeeMonthStats[empId].totalHours += record.hours_worked || 0;
+    });
+    
+    // Calculate attendance rates and prepare summary
+    Object.values(employeeMonthStats).forEach(empStats => {
+      const totalDays = empStats.present + empStats.absent + empStats.late;
+      empStats.attendanceRate = totalDays 
+        ? ((empStats.present + empStats.late) / totalDays * 100).toFixed(1)
+        : 0;
+      
+      monthlySummary.push(empStats);
+    });
+    
+    return {
+      daily: dailyAttendance,
+      weekly: weeklyAttendance,
+      monthly: {
+        summary: monthlySummary,
+        statistics: statistics || {
+          total: statusCounts.total,
+          present: statusCounts.present,
+          absent: statusCounts.absent,
+          late: statusCounts.late,
+          attendanceRate
+        }
+      }
+    };
+  };
+
+  const processedData = processAttendanceData();
+  
+  // Helper function to format time display
+  const formatTimeDisplay = (timeString) => {
+    if (!timeString) return '—';
+    
+    try {
+      // Handle different time formats
+      if (timeString.includes(':')) {
+        const [hours, minutes] = timeString.split(':').map(Number);
+        const period = hours >= 12 ? 'PM' : 'AM';
+        const displayHours = hours % 12 || 12; // Convert 0 to 12 for 12 AM
+        return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+      } else if (timeString.length === 4) {
+        // Handle military time format like "0800"
+        const hours = parseInt(timeString.substring(0, 2), 10);
+        const minutes = parseInt(timeString.substring(2), 10);
+        const period = hours >= 12 ? 'PM' : 'AM';
+        const displayHours = hours % 12 || 12;
+        return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+      }
+      return timeString;
+    } catch (error) {
+      return timeString;
+    }
+  };
+  
+  // Handle date navigation
+  const navigatePrevious = () => {
+    const newDate = new Date(selectedDate);
+    if (view === 'day') {
+      newDate.setDate(newDate.getDate() - 1);
+    } else if (view === 'week') {
+      newDate.setDate(newDate.getDate() - 7);
+    } else {
+      newDate.setMonth(newDate.getMonth() - 1);
+    }
+    setSelectedDate(newDate);
+  };
+  
+  const navigateNext = () => {
+    const newDate = new Date(selectedDate);
+    if (view === 'day') {
+      newDate.setDate(newDate.getDate() + 1);
+    } else if (view === 'week') {
+      newDate.setDate(newDate.getDate() + 7);
+    } else {
+      newDate.setMonth(newDate.getMonth() + 1);
+    }
+    setSelectedDate(newDate);
+  };
+  
+  const goToToday = () => {
+    setSelectedDate(new Date());
+  };
+  
+  // Format date for display
+  const formatDate = (date) => {
+    return date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+  
+  // Calculate week date range for display
+  const weekDateRange = () => {
+    const dayOfWeek = selectedDate.getDay() || 7; // Convert Sunday (0) to 7
+    const mondayDate = new Date(selectedDate);
+    mondayDate.setDate(selectedDate.getDate() - dayOfWeek + 1);
+    
+    const sundayDate = new Date(mondayDate);
+    sundayDate.setDate(mondayDate.getDate() + 6);
+    
+    const options = { month: 'long', day: 'numeric' };
+    return `${mondayDate.toLocaleDateString('en-US', options)} - ${sundayDate.toLocaleDateString('en-US', options)}, ${mondayDate.getFullYear()}`;
+  };
+  
+  // Get date for weekday column headers
+  const getWeekDayDate = (dayOffset) => {
+    const dayOfWeek = selectedDate.getDay() || 7; // Convert Sunday (0) to 7
+    const mondayDate = new Date(selectedDate);
+    mondayDate.setDate(selectedDate.getDate() - dayOfWeek + 1);
+    
+    const date = new Date(mondayDate);
+    date.setDate(mondayDate.getDate() + dayOffset);
+    
+    return {
+      day: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][dayOffset],
+      date: date.getDate(),
+      month: date.toLocaleString('default', { month: 'short' }),
+      isoDate: date.toISOString().split('T')[0]
+    };
+  };
+  
+  // Handle form submission for recording attendance
+  const handleRecordAttendance = async (employeeId) => {
+    // Implement the form submission logic here
+    // For now, this is a placeholder
+    console.log("Recording attendance for:", employeeId);
+  };
+
   return (
     <div>
       <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
@@ -1433,386 +1683,39 @@ const AttendanceTab = ({ attendanceData = { summary: [], statistics: null }, emp
           </div>
           
           <div className="flex items-center">
-            <button className="p-1 rounded-full hover:bg-gray-100">
+            <button 
+              onClick={navigatePrevious}
+              className="p-1 rounded-full hover:bg-gray-100"
+            >
               <ChevronLeft size={18} className="text-gray-500" />
             </button>
             <span className="mx-4 text-sm font-medium">
               {view === 'day' && formatDate(selectedDate)}
-              {view === 'week' && 'Week of April 23, 2023'}
-              {view === 'month' && 'April 2023'}
+              {view === 'week' && weekDateRange()}
+              {view === 'month' && selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
             </span>
-            <button className="p-1 rounded-full hover:bg-gray-100">
+            <button 
+              onClick={navigateNext}
+              className="p-1 rounded-full hover:bg-gray-100"
+            >
               <ChevronRight size={18} className="text-gray-500" />
             </button>
-            <button className="ml-4 px-3 py-1 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">
+            <button 
+              onClick={goToToday}
+              className="ml-4 px-3 py-1 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+            >
               Today
             </button>
           </div>
         </div>
         
-        {view === 'day' && (
-        <div>
-          <h3 className="text-lg font-medium text-gray-800 mb-4">Daily Attendance - {formatDate(selectedDate)}</h3>
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Employee
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Clock In
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Clock Out
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Hours
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Notes
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {Array.isArray(employees) && employees.length > 0 ? (
-                employees.map(employee => {
-                  if (!employee) return null;
-                  
-                  // Safely access attendanceHistory
-                  const attendanceHistory = employee.attendanceHistory || [];
-                  
-                  // Find today's record or create a placeholder
-                  const todayRecord = attendanceHistory.find(
-                    record => record && record.date === '2023-04-26'
-                  ) || { 
-                    status: 'No Record', 
-                    hoursWorked: 0,
-                    notes: '-' 
-                  };
-                  
-                  return (
-                    <tr key={employee.id || Math.random()}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10">
-                            <img 
-                              className="h-10 w-10 rounded-full" 
-                              src={emp}
-                              alt="" 
-                            />
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">{employee.name || 'Unknown'}</div>
-                            <div className="text-sm text-gray-500">{employee.jobTitle || employee.job_title || 'Unknown'}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          attendanceStatusColors[todayRecord.status] || 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {todayRecord.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {(todayRecord.status === 'Present' || todayRecord.status === 'Late') ? '8:00 AM' : '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {(todayRecord.status === 'Present' || todayRecord.status === 'Late') ? '5:30 PM' : '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {todayRecord.hoursWorked || 0}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {todayRecord.status === 'Late' ? 'Arrived at 8:30 AM' : todayRecord.notes || '-'}
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
-                    No employee data available
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-        
-        {view === 'week' && (
-        <div>
-          <h3 className="text-lg font-medium text-gray-800 mb-4">Weekly Attendance - Week of April 23, 2023</h3>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Employee
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Monday<br/>Apr 24
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Tuesday<br/>Apr 25
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Wednesday<br/>Apr 26
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Thursday<br/>Apr 27
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Friday<br/>Apr 28
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Total Hours
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {Array.isArray(employees) && employees.length > 0 ? (
-                  employees.map(employee => {
-                    if (!employee) return null;
-                    
-                    // Safely access attendanceHistory
-                    const attendanceHistory = employee.attendanceHistory || [];
-                    
-                    // Get attendance records for each day with safe checks
-                    const mondayRecord = attendanceHistory.find(
-                      record => record && record.date === '2023-04-24'
-                    );
-                    const tuesdayRecord = attendanceHistory.find(
-                      record => record && record.date === '2023-04-25'
-                    );
-                    const wednesdayRecord = attendanceHistory.find(
-                      record => record && record.date === '2023-04-26'
-                    );
-                    
-                    // Calculate total hours safely
-                    const totalHours = [mondayRecord, tuesdayRecord, wednesdayRecord]
-                      .reduce((sum, record) => sum + (record && record.hoursWorked ? record.hoursWorked : 0), 0);
-                    
-                    return (
-                      <tr key={employee.id || Math.random()}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="flex-shrink-0 h-10 w-10">
-                              <img 
-                                className="h-10 w-10 rounded-full" 
-                                src={emp}
-                                alt="" 
-                              />
-                            </div>
-                            <div className="ml-4">
-                              <div className="text-sm font-medium text-gray-900">{employee.name || 'Unknown'}</div>
-                              <div className="text-sm text-gray-500">{employee.jobTitle || employee.job_title || 'Unknown'}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                          {mondayRecord ? (
-                            <div>
-                              <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${attendanceStatusColors[mondayRecord.status] || 'bg-gray-100 text-gray-800'}`}>
-                                {mondayRecord.status}
-                              </span>
-                              <div className="text-xs text-gray-500 mt-1">{mondayRecord.hoursWorked || 0} hrs</div>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-gray-500">No data</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                          {tuesdayRecord ? (
-                            <div>
-                              <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${attendanceStatusColors[tuesdayRecord.status] || 'bg-gray-100 text-gray-800'}`}>
-                                {tuesdayRecord.status}
-                              </span>
-                              <div className="text-xs text-gray-500 mt-1">{tuesdayRecord.hoursWorked || 0} hrs</div>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-gray-500">No data</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                          {wednesdayRecord ? (
-                            <div>
-                              <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${attendanceStatusColors[wednesdayRecord.status] || 'bg-gray-100 text-gray-800'}`}>
-                                {wednesdayRecord.status}
-                              </span>
-                              <div className="text-xs text-gray-500 mt-1">{wednesdayRecord.hoursWorked || 0} hrs</div>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-gray-500">No data</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                          <span className="text-xs text-gray-500">Scheduled</span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                          <span className="text-xs text-gray-500">Scheduled</span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right font-medium">
-                          {totalHours} hrs
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
-                      No employee data available
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-green-500"></div>
           </div>
-        </div>
-      )}
-          
-          {view === 'month' && (
-            <div>
-              <h3 className="text-lg font-medium text-gray-800 mb-4">Monthly Attendance - April 2023</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Monthly Statistics</h4>
-                  <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                    <div className="px-4 py-5 sm:p-6">
-                      <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
-                        <div className="sm:col-span-1">
-                          <dt className="text-sm font-medium text-gray-500">Total Working Days</dt>
-                          <dd className="mt-1 text-sm text-gray-900">21</dd>
-                        </div>
-                        <div className="sm:col-span-1">
-                          <dt className="text-sm font-medium text-gray-500">Avg. Attendance Rate</dt>
-                          <dd className="mt-1 text-sm text-gray-900">96.5%</dd>
-                        </div>
-                        <div className="sm:col-span-1">
-                          <dt className="text-sm font-medium text-gray-500">Total Present Days</dt>
-                          <dd className="mt-1 text-sm text-gray-900">97</dd>
-                        </div>
-                        <div className="sm:col-span-1">
-                          <dt className="text-sm font-medium text-gray-500">Total Absent Days</dt>
-                          <dd className="mt-1 text-sm text-gray-900">3</dd>
-                        </div>
-                        <div className="sm:col-span-1">
-                          <dt className="text-sm font-medium text-gray-500">Total Late Days</dt>
-                          <dd className="mt-1 text-sm text-gray-900">5</dd>
-                        </div>
-                        <div className="sm:col-span-1">
-                          <dt className="text-sm font-medium text-gray-500">Avg. Working Hours</dt>
-                          <dd className="mt-1 text-sm text-gray-900">8.2 hrs/day</dd>
-                        </div>
-                      </dl>
-                    </div>
-                  </div>
-                </div>
-                
-                <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Attendance Trends</h4>
-                  <div className="h-64 bg-gray-100 rounded-lg p-4 flex items-center justify-center">
-                    <p className="text-gray-500">Attendance trend chart would go here</p>
-                  </div>
-                </div>
-              </div>
-              
-              <h4 className="text-sm font-medium text-gray-700 mt-6 mb-2">Employee Attendance Summary</h4>
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Employee
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Present
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Absent
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Late
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Total Hours
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Attendance Rate
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {employees.map(employee => (
-                    <tr key={employee.id}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10">
-                            <img className="h-10 w-10 rounded-full" src={emp} alt="" />
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">{employee.name}</div>
-                            <div className="text-sm text-gray-500">{employee.jobTitle}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {employee.id === 'E001' ? '21' : 
-                         employee.id === 'E002' ? '21' : 
-                         employee.id === 'E003' ? '19' : 
-                         employee.id === 'E004' ? '21' : '20'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {employee.id === 'E001' ? '0' : 
-                         employee.id === 'E002' ? '0' : 
-                         employee.id === 'E003' ? '2' : 
-                         employee.id === 'E004' ? '0' : '1'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {employee.id === 'E001' ? '0' : 
-                         employee.id === 'E002' ? '1' : 
-                         employee.id === 'E003' ? '0' : 
-                         employee.id === 'E004' ? '0' : '3'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {employee.id === 'E001' ? '172.5' : 
-                         employee.id === 'E002' ? '170.0' : 
-                         employee.id === 'E003' ? '114.0' : 
-                         employee.id === 'E004' ? '168.0' : '164.5'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <span className="text-sm text-gray-900 mr-2">
-                            {employee.attendanceRate}%
-                          </span>
-                          <div className="w-24 bg-gray-200 rounded-full h-2.5">
-                            <div 
-                              className={`h-2.5 rounded-full ${employee.attendanceRate >= 98 ? 'bg-green-600' : employee.attendanceRate >= 95 ? 'bg-green-500' : 'bg-amber-500'}`} 
-                              style={{ width: `${employee.attendanceRate}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-        
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-medium text-gray-800">Record Attendance</h3>
-            <div>
-              <span className="text-sm text-gray-500">Today: {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
-            </div>
-          </div>
-          
-          <div className="overflow-x-auto">
+        ) : view === 'day' && (
+          <div>
+            <h3 className="text-lg font-medium text-gray-800 mb-4">Daily Attendance - {formatDate(selectedDate)}</h3>
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -1829,69 +1732,436 @@ const AttendanceTab = ({ attendanceData = { summary: [], statistics: null }, emp
                     Clock Out
                   </th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Notes
+                    Hours
                   </th>
-                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Notes
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {employees.map(employee => (
-                  <tr key={employee.id}>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10">
-                          <img className="h-10 w-10 rounded-full" src={emp} alt="" />
-                        </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">{employee.name}</div>
-                          <div className="text-sm text-gray-500">{employee.jobTitle}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <select className="block w-full pl-3 pr-10 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500">
-                        <option value="present">Present</option>
-                        <option value="absent">Absent</option>
-                        <option value="late">Late</option>
-                        <option value="vacation">Vacation</option>
-                        <option value="sick">Sick Leave</option>
-                      </select>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <input 
-                        type="time"
-                        defaultValue="08:00"
-                        className="block w-full pl-3 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500"
-                      />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <input 
-                        type="time"
-                        defaultValue="17:00"
-                        className="block w-full pl-3 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500"
-                      />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <input 
-                        type="text"
-                        placeholder="Optional notes..."
-                        className="block w-full pl-3 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500"
-                      />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button className="text-green-600 hover:text-green-900 mr-4">Save</button>
+                {Array.isArray(employees) && employees.length > 0 ? (
+                  employees.map(employee => {
+                    // Find attendance record for this employee on the selected date
+                    const record = processedData.daily[employee.id];
+                    console.log(processedData);
+                    
+                    return (
+                      <tr key={employee.id}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-10 w-10">
+                              <img 
+                                className="h-10 w-10 rounded-full" 
+                                src={emp} 
+                                alt={employee.name} 
+                              />
+                            </div>
+                            <div className="ml-4">
+                              <div className="text-sm font-medium text-gray-900">{employee.name}</div>
+                              <div className="text-sm text-gray-500">{employee.job_title}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {record ? (
+                            <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                              record.status === 'Present' ? 'bg-green-100 text-green-800' : 
+                              record.status === 'Absent' ? 'bg-red-100 text-red-800' : 
+                              'bg-amber-100 text-amber-800'
+                            }`}>
+                              {record.status}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">Not recorded</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {record ? formatTimeDisplay(record.clock_in) : '—'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {record ? formatTimeDisplay(record.clock_out) : '—'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {record ? record.hours_worked : '—'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {record?.notes || '—'}
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                      No employee data available
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
+        )}
+        
+        {view === 'week' && (
+          <div>
+            <h3 className="text-lg font-medium text-gray-800 mb-4">Weekly Attendance - {weekDateRange()}</h3>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Employee
+                    </th>
+                    {Array.from({ length: 7 }, (_, i) => {
+                      const dateObj = getWeekDayDate(i);
+                      return (
+                        <th key={i} scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          {dateObj.day}<br/>{dateObj.month} {dateObj.date}
+                        </th>
+                      );
+                    })}
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Total Hours
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {Array.isArray(employees) && employees.length > 0 ? (
+                    employees.map(employee => {
+                      // Get this employee's weekly attendance
+                      const weekData = processedData.weekly[employee.id] || { days: {} };
+                      
+                      // Calculate total hours
+                      let totalHours = 0;
+                      Object.values(weekData.days || {}).forEach(day => {
+                        totalHours += day.hours_worked || 0;
+                      });
+                      
+                      return (
+                        <tr key={employee.id}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="flex-shrink-0 h-10 w-10">
+                                <img 
+                                  className="h-10 w-10 rounded-full" 
+                                  src={emp} 
+                                  alt={employee.name} 
+                                />
+                              </div>
+                              <div className="ml-4">
+                                <div className="text-sm font-medium text-gray-900">{employee.name}</div>
+                                <div className="text-sm text-gray-500">{employee.job_title}</div>
+                              </div>
+                            </div>
+                          </td>
+                          {Array.from({ length: 7 }, (_, i) => {
+                            const dateObj = getWeekDayDate(i);
+                            const dayRecord = weekData.days?.[dateObj.isoDate];
+                            
+                            return (
+                              <td key={i} className="px-6 py-4 text-center">
+                                {dayRecord ? (
+                                  <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                    dayRecord.status === 'Present' ? 'bg-green-100 text-green-800' : 
+                                    dayRecord.status === 'Absent' ? 'bg-red-100 text-red-800' : 
+                                    'bg-amber-100 text-amber-800'
+                                  }`}>
+                                    {dayRecord.status}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 text-sm">—</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-gray-900">
+                            {totalHours > 0 ? `${totalHours}h` : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan="9" className="px-6 py-4 text-center text-gray-500">
+                        No employee data available
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        
+        {view === 'month' && (
+          <div>
+            <h3 className="text-lg font-medium text-gray-800 mb-4">
+              Monthly Attendance - {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Monthly Statistics</h4>
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                  <div className="px-4 py-5 sm:p-6">
+                    <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
+                      <div className="sm:col-span-1">
+                        <dt className="text-sm font-medium text-gray-500">Total Working Days</dt>
+                        <dd className="mt-1 text-sm text-gray-900">{processedData.monthly.statistics.total}</dd>
+                      </div>
+                      <div className="sm:col-span-1">
+                        <dt className="text-sm font-medium text-gray-500">Avg. Attendance Rate</dt>
+                        <dd className="mt-1 text-sm text-gray-900">{processedData.monthly.statistics.attendanceRate}%</dd>
+                      </div>
+                      <div className="sm:col-span-1">
+                        <dt className="text-sm font-medium text-gray-500">Total Present Days</dt>
+                        <dd className="mt-1 text-sm text-gray-900">{processedData.monthly.statistics.present}</dd>
+                      </div>
+                      <div className="sm:col-span-1">
+                        <dt className="text-sm font-medium text-gray-500">Total Absent Days</dt>
+                        <dd className="mt-1 text-sm text-gray-900">{processedData.monthly.statistics.absent}</dd>
+                      </div>
+                      <div className="sm:col-span-1">
+                        <dt className="text-sm font-medium text-gray-500">Total Late Days</dt>
+                        <dd className="mt-1 text-sm text-gray-900">{processedData.monthly.statistics.late}</dd>
+                      </div>
+                      <div className="sm:col-span-1">
+                        <dt className="text-sm font-medium text-gray-500">Avg. Working Hours</dt>
+                        <dd className="mt-1 text-sm text-gray-900">
+                          {processedData.monthly.statistics.total ? 
+                            (processedData.monthly.summary.reduce((acc, emp) => acc + emp.totalHours, 0) / 
+                              processedData.monthly.statistics.total).toFixed(1) + ' hrs/day' : 
+                            '0 hrs/day'}
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Attendance Trends</h4>
+                <div className="h-64 bg-gray-100 rounded-lg p-4 flex items-center justify-center">
+                  <p className="text-gray-500">Attendance trend chart would go here</p>
+                </div>
+              </div>
+            </div>
+            
+            <h4 className="text-sm font-medium text-gray-700 mt-6 mb-2">Employee Attendance Summary</h4>
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Employee
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Present
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Absent
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Late
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Total Hours
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Attendance Rate
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {processedData.monthly.summary.length > 0 ? (
+                  processedData.monthly.summary.map(employee => (
+                    <tr key={employee.id}>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-10 w-10">
+                            <img className="h-10 w-10 rounded-full" src={emp} alt="" />
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-medium text-gray-900">{employee.name}</div>
+                            <div className="text-sm text-gray-500">{employee.jobTitle}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {employee.present}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {employee.absent}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {employee.late}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {employee.totalHours.toFixed(1)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <span className="text-sm text-gray-900 mr-2">
+                            {employee.attendanceRate}%
+                          </span>
+                          <div className="w-24 bg-gray-200 rounded-full h-2.5">
+                            <div 
+                              className={`h-2.5 rounded-full ${
+                                employee.attendanceRate >= 98 ? 'bg-green-600' : 
+                                employee.attendanceRate >= 95 ? 'bg-green-500' : 
+                                'bg-amber-500'
+                              }`} 
+                              style={{ width: `${employee.attendanceRate}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                      No attendance data available for this month
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-medium text-gray-800">Record Attendance</h3>
+          <div>
+            <span className="text-sm text-gray-500">Today: {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+          </div>
+        </div>
+        
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Employee
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Clock In
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Clock Out
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Notes
+                </th>
+                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {Array.isArray(employees) && employees.length > 0 ? (
+                employees.map(employee => {
+                  // Find if attendance is already recorded for today
+                  const todayStr = new Date().toISOString().split('T')[0];
+                  const isRecorded = Array.isArray(attendanceData) && attendanceData.some(
+                    record => record.employee_id === employee.id && record.date === todayStr
+                  );
+                  
+                  return (
+                    <tr key={employee.id}>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-10 w-10">
+                            <img 
+                              className="h-10 w-10 rounded-full" 
+                              src={emp} 
+                              alt={employee.name} 
+                            />
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-medium text-gray-900">{employee.name}</div>
+                            <div className="text-sm text-gray-500">{employee.job_title}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {isRecorded ? (
+                          <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                            Recorded
+                          </span>
+                        ) : (
+                          <select className="block w-full pl-3 pr-10 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500">
+                            <option value="present">Present</option>
+                            <option value="absent">Absent</option>
+                            <option value="late">Late</option>
+                            <option value="vacation">Vacation</option>
+                            <option value="sick">Sick Leave</option>
+                          </select>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <input 
+                          type="time"
+                          defaultValue="08:00"
+                          disabled={isRecorded}
+                          className={`block w-full pl-3 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 ${
+                            isRecorded ? 'bg-gray-100' : ''
+                          }`}
+                        />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <input 
+                          type="time"
+                          defaultValue="17:00"
+                          disabled={isRecorded}
+                          className={`block w-full pl-3 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 ${
+                            isRecorded ? 'bg-gray-100' : ''
+                          }`}
+                        />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <input 
+                          type="text"
+                          placeholder="Optional notes..."
+                          disabled={isRecorded}
+                          className={`block w-full pl-3 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 ${
+                            isRecorded ? 'bg-gray-100' : ''
+                          }`}
+                        />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        {isRecorded ? (
+                          <button className="text-blue-600 hover:text-blue-900">Update</button>
+                        ) : (
+                          <button 
+                            onClick={() => handleRecordAttendance(employee.id)}
+                            className="text-green-600 hover:text-green-900"
+                          >
+                            Save
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                    No employee data available
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
-    );
-  };
+    </div>
+  );
+};
   
   // Shifts Tab Component
   const ShiftsTab = ({ shiftsData = [], employees = [], onRefreshData = null }) => {
@@ -2658,7 +2928,7 @@ const PerformanceTab = ({ performanceData = [], scheduledReviews = [], employees
                           <div className="flex-shrink-0 h-10 w-10">
                             <img 
                               className="h-10 w-10 rounded-full" 
-                              src={employee.image_url || emp} 
+                              src={emp} 
                               alt="" 
                             />
                           </div>
@@ -2775,7 +3045,7 @@ const PerformanceTab = ({ performanceData = [], scheduledReviews = [], employees
                         <div className="flex-shrink-0 h-10 w-10">
                           <img 
                             className="h-10 w-10 rounded-full" 
-                            src={review.employees?.image_url || emp} 
+                            src={emp} 
                             alt="" 
                           />
                         </div>
