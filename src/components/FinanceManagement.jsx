@@ -1,162 +1,1232 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Download, DollarSign, CreditCard, Briefcase, Calendar, ChevronDown, TrendingUp, TrendingDown, PieChart, IndianRupee } from 'lucide-react';
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell,Pie } from 'recharts';
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, Pie } from 'recharts';
+import { getFinancialDashboardData, addCustomer, addExpense, addInvoice, processPayroll,updateExpense, deleteExpense, getExpensesByPage,getEmployeePayrollHistory,updateEmployeePayrollInfo,getPayrollDetails,voidPayrollPayment,getInvoices, getInvoiceById, updateInvoiceStatus, deleteInvoice,getInvoiceAgingSummary,generateInvoiceNumber,getCustomers,updateCustomer,deleteCustomer } from './services/financialService';
+import { supabase } from '../lib/supabase';
 
-// Mock data for finances
-const mockFinancialData = {
-  // Revenue data
-  revenue: {
-    monthly: [
-      { month: 'Jan', income: 32500, expenses: 26800, profit: 5700 },
-      { month: 'Feb', income: 30200, expenses: 25100, profit: 5100 },
-      { month: 'Mar', income: 34800, expenses: 27500, profit: 7300 },
-      { month: 'Apr', income: 34300, expenses: 28650, profit: 5650 }
-    ],
-    categories: [
-      { name: 'Milk Sales', value: 28450, percentage: 83, color: '#2E7D32' },
-      { name: 'Cattle Sales', value: 3200, percentage: 9, color: '#1565C0' },
-      { name: 'Manure Sales', value: 1850, percentage: 5, color: '#FFA000' },
-      { name: 'Other', value: 800, percentage: 3, color: '#6D4C41' }
-    ],
-    customers: [
-      { id: 'C001', name: 'Dairy Processors Inc.', type: 'Wholesaler', totalPurchases: 21500, status: 'Active', lastOrder: '2023-04-22' },
-      { id: 'C002', name: 'Fresh Foods Market', type: 'Retailer', totalPurchases: 4300, status: 'Active', lastOrder: '2023-04-25' },
-      { id: 'C003', name: 'Organic Farms Co-op', type: 'Distributor', totalPurchases: 2650, status: 'Active', lastOrder: '2023-04-20' }
-    ]
-  },
+
+const statusColors = {
+  'Active': 'bg-green-100 text-green-800',
+  'Inactive': 'bg-gray-100 text-gray-800',
+  'On Leave': 'bg-amber-100 text-amber-800',
+  'Terminated': 'bg-red-100 text-red-800',
+  'Pending': 'bg-yellow-100 text-yellow-800',
+  'Paid': 'bg-green-100 text-green-800',
+  'Overdue': 'bg-red-100 text-red-800',
+  'Completed': 'bg-blue-100 text-blue-800',
+  'Processing': 'bg-purple-100 text-purple-800',
+  'Cancelled': 'bg-gray-100 text-gray-800'
+};
+
+// Formatting utility functions
+// Format currency values with dollar sign and commas
+const formatCurrency = (amount) => {
+  if (amount === null || amount === undefined) return '$0.00';
+  return new Intl.NumberFormat('en-US', { 
+    style: 'currency', 
+    currency: 'INR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(amount);
+};
+
+// Format dates from ISO to readable format
+const formatDate = (dateString) => {
+  if (!dateString) return 'N/A';
   
-  // Expenses data
-  expenses: {
-    monthly: [
-      { month: 'Jan', feed: 12500, labor: 8700, utilities: 2100, veterinary: 1800, maintenance: 1700 },
-      { month: 'Feb', feed: 11800, labor: 8500, utilities: 1950, veterinary: 1250, maintenance: 1600 },
-      { month: 'Mar', feed: 13200, labor: 8900, utilities: 2050, veterinary: 1650, maintenance: 1700 },
-      { month: 'Apr', feed: 13800, labor: 9100, utilities: 2150, veterinary: 1900, maintenance: 1700 }
-    ],
-    categories: [
-      { name: 'Feed', value: 13800, percentage: 48, color: '#2E7D32' },
-      { name: 'Labor', value: 9100, percentage: 32, color: '#1565C0' },
-      { name: 'Utilities', value: 2150, percentage: 8, color: '#FFA000' },
-      { name: 'Veterinary', value: 1900, percentage: 6, color: '#F44336' },
-      { name: 'Maintenance', value: 1700, percentage: 6, color: '#9E9E9E' }
-    ],
-    recent: [
-      { id: 'E001', date: '2023-04-26', category: 'Feed', amount: 3450, vendor: 'Quality Feed Supplies', status: 'Paid' },
-      { id: 'E002', date: '2023-04-25', category: 'Veterinary', amount: 650, vendor: 'Animal Health Services', status: 'Paid' },
-      { id: 'E003', date: '2023-04-22', category: 'Utilities', amount: 520, vendor: 'Power & Water Co.', status: 'Pending' },
-      { id: 'E004', date: '2023-04-20', category: 'Maintenance', amount: 380, vendor: 'Farm Equipment Repairs', status: 'Paid' },
-      { id: 'E005', date: '2023-04-18', category: 'Labor', amount: 2275, vendor: 'Weekly Payroll', status: 'Paid' }
-    ]
-  },
-  
-  // Payroll data
-  payroll: {
-    employees: [
-      { id: 'E001', name: 'John Doe', position: 'Farm Manager', salary: 75000, hourlyRate: null, payPeriod: 'Monthly', lastPaid: '2023-04-01' },
-      { id: 'E002', name: 'Jane Smith', position: 'Livestock Specialist', salary: 62000, hourlyRate: null, payPeriod: 'Monthly', lastPaid: '2023-04-01' },
-      { id: 'E003', name: 'David Johnson', position: 'Milking Technician', salary: null, hourlyRate: 22, payPeriod: 'Bi-weekly', lastPaid: '2023-04-15' },
-      { id: 'E004', name: 'Emily Williams', position: 'Administrative Assistant', salary: 48000, hourlyRate: null, payPeriod: 'Monthly', lastPaid: '2023-04-01' },
-      { id: 'E005', name: 'Michael Brown', position: 'Farm Hand', salary: 45000, hourlyRate: null, payPeriod: 'Monthly', lastPaid: '2023-04-01' }
-    ],
-    paymentHistory: [
-      { id: 'P001', date: '2023-04-01', type: 'Monthly Salary', amount: 24200, employees: 4, status: 'Completed' },
-      { id: 'P002', date: '2023-04-15', type: 'Bi-weekly Wages', amount: 1760, employees: 1, status: 'Completed' },
-      { id: 'P003', date: '2023-03-15', type: 'Bi-weekly Wages', amount: 1670, employees: 1, status: 'Completed' },
-      { id: 'P004', date: '2023-03-01', type: 'Monthly Salary', amount: 24200, employees: 4, status: 'Completed' }
-    ],
-    upcoming: [
-      { id: 'UP001', date: '2023-05-01', type: 'Monthly Salary', estimatedAmount: 24200, employees: 4 },
-      { id: 'UP002', date: '2023-04-30', type: 'Bi-weekly Wages', estimatedAmount: 1760, employees: 1 }
-    ]
-  },
-  
-  // Invoices data
-  invoices: {
-    recent: [
-      { id: 'INV001', date: '2023-04-25', customer: 'Dairy Processors Inc.', amount: 7650, status: 'Paid', dueDate: '2023-05-10' },
-      { id: 'INV002', date: '2023-04-22', customer: 'Fresh Foods Market', amount: 1250, status: 'Pending', dueDate: '2023-05-07' },
-      { id: 'INV003', date: '2023-04-18', customer: 'Organic Farms Co-op', amount: 920, status: 'Pending', dueDate: '2023-05-03' },
-      { id: 'INV004', date: '2023-04-15', customer: 'Dairy Processors Inc.', amount: 7800, status: 'Paid', dueDate: '2023-04-30' },
-      { id: 'INV005', date: '2023-04-10', customer: 'Fresh Foods Market', amount: 1320, status: 'Paid', dueDate: '2023-04-25' }
-    ],
-    aging: [
-      { period: 'Current', amount: 9820, percentage: 68 },
-      { period: '1-30 days', amount: 3450, percentage: 24 },
-      { period: '31-60 days', amount: 850, percentage: 6 },
-      { period: '61-90 days', amount: 300, percentage: 2 },
-      { period: '90+ days', amount: 0, percentage: 0 }
-    ]
-  },
-  
-  // Financial stats/KPIs
-  financialStats: {
-    netProfit: {
-      current: 5650,
-      previous: 7300, 
-      change: -22.6
-    },
-    revenue: {
-      current: 34300,
-      previous: 34800,
-      change: -1.4
-    },
-    expenses: {
-      current: 28650,
-      previous: 27500,
-      change: 4.2
-    },
-    cashflow: {
-      current: 6850,
-      previous: 8200,
-      change: -16.5
-    }
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Invalid Date';
+    
+    return new Intl.DateTimeFormat('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    }).format(date);
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return 'Invalid Date';
   }
 };
 
-// Status badge colors
-const statusColors = {
-  'Paid': 'bg-green-100 text-green-800',
-  'Pending': 'bg-amber-100 text-amber-800',
-  'Overdue': 'bg-red-100 text-red-800',
-  'Completed': 'bg-green-100 text-green-800',
-  'Active': 'bg-green-100 text-green-800',
-  'Inactive': 'bg-gray-100 text-gray-800'
-};
-
-// Format currency
-const formatCurrency = (amount) => {
-  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
-};
-
-// Format date
-const formatDate = (dateString) => {
-  const options = { year: 'numeric', month: 'long', day: 'numeric' };
-  return new Date(dateString).toLocaleDateString('en-US', options);
-};
-
-// Main financial management component
+// Main component - updated to use Supabase
 const FinancesManagement = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [dateRange, setDateRange] = useState('month');
-  const [financialData, setFinancialData] = useState(mockFinancialData);
+  const [financialData, setFinancialData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [isAddExpenseModalOpen, setIsAddExpenseModalOpen] = useState(false);
   const [isAddInvoiceModalOpen, setIsAddInvoiceModalOpen] = useState(false);
   const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = useState(false);
-  
-  // Toggle add expense modal
-  const toggleAddExpenseModal = () => {
-    setIsAddExpenseModalOpen(!isAddExpenseModalOpen);
+  const [isProcessPayrollModalOpen, setIsProcessPayrollModalOpen] = useState(false);
+  const [expenseSearchQuery, setExpenseSearchQuery] = useState('');
+  const [expensePage, setExpensePage] = useState(1);
+  const [expensesPerPage] = useState(10);
+  const [totalExpenses, setTotalExpenses] = useState(0);
+  const [expensesList, setExpensesList] = useState([]);
+  const [isEditExpenseModalOpen, setIsEditExpenseModalOpen] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState(null);
+  const [isExpenseLoading, setIsExpenseLoading] = useState(false);
+  const [expenseSummary, setExpenseSummary] = useState({
+    totalYTD: 0,
+    avgMonthly: 0,
+    projectedAnnual: 0
+  });
+  const [expenseTrends, setExpenseTrends] = useState([]);
+  const [expenseDateRange, setExpenseDateRange] = useState('month');
+  const [customDateRange, setCustomDateRange] = useState({  
+    startDate: '',
+    endDate: ''
+  });
+  const [isViewPayrollHistoryModalOpen, setIsViewPayrollHistoryModalOpen] = useState(false);
+  const [isEditEmployeePayrollModalOpen, setIsEditEmployeePayrollModalOpen] = useState(false);
+  const [isPayrollDetailsModalOpen, setIsPayrollDetailsModalOpen] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [selectedPayrollPayment, setSelectedPayrollPayment] = useState(null);
+  const [employeePayrollHistory, setEmployeePayrollHistory] = useState([]);
+  const [payrollDetails, setPayrollDetails] = useState(null);
+  const [isLoadingPayrollHistory, setIsLoadingPayrollHistory] = useState(false);
+  const [isLoadingPayrollDetails, setIsLoadingPayrollDetails] = useState(false);
+  const [invoicesPage, setInvoicesPage] = useState(1);
+  const [invoicesPerPage] = useState(10);
+  const [totalInvoices, setTotalInvoices] = useState(0);
+  const [invoicesList, setInvoicesList] = useState([]);
+  const [isInvoiceLoading, setIsInvoiceLoading] = useState(false);
+  const [invoiceSearchQuery, setInvoiceSearchQuery] = useState('');
+  const [isViewInvoiceModalOpen, setIsViewInvoiceModalOpen] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [isInvoiceDetailsLoading, setIsInvoiceDetailsLoading] = useState(false);
+  const [agingSummary, setAgingSummary] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [isViewCustomerModalOpen, setIsViewCustomerModalOpen] = useState(false);
+  const [isEditCustomerModalOpen, setIsEditCustomerModalOpen] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
+
+
+  const toggleViewPayrollHistoryModal = async (employee = null) => {
+    if (employee) {
+      setSelectedEmployee(employee);
+      await fetchEmployeePayrollHistory(employee.id);
+    }
+    setIsViewPayrollHistoryModalOpen(!isViewPayrollHistoryModalOpen);
   };
   
-  // Toggle add invoice modal
-  const toggleAddInvoiceModal = () => {
-    setIsAddInvoiceModalOpen(!isAddInvoiceModalOpen);
+  const toggleEditEmployeePayrollModal = (employee = null) => {
+    setSelectedEmployee(employee);
+    setIsEditEmployeePayrollModalOpen(!isEditEmployeePayrollModalOpen);
+  };
+  
+  const togglePayrollDetailsModal = async (paymentId = null) => {
+    if (paymentId) {
+      setSelectedPayrollPayment(paymentId);
+      await fetchPayrollDetails(paymentId);
+    }
+    setIsPayrollDetailsModalOpen(!isPayrollDetailsModalOpen);
   };
 
-  // Toggle add customer modal
-  const toggleAddCustomerModal = () => {
-    setIsAddCustomerModalOpen(!isAddCustomerModalOpen);
+  const toggleViewCustomerModal = (customer = null) => {
+    setSelectedCustomer(customer);
+    setIsViewCustomerModalOpen(!isViewCustomerModalOpen);
   };
+  
+  const toggleEditCustomerModal = (customer = null) => {
+    setSelectedCustomer(customer);
+    setIsEditCustomerModalOpen(!isEditCustomerModalOpen);
+  };
+  
+  // Function to fetch customers
+  const fetchCustomers = async () => {
+    try {
+      setIsLoadingCustomers(true);
+      const data = await getCustomers();
+      setCustomers(data || []);
+      return data;
+    } catch (err) {
+      console.error('Error fetching customers:', err);
+      setError('Failed to load customers. Please try again.');
+      return [];
+    } finally {
+      setIsLoadingCustomers(false);
+    }
+  };
+  
+  // Handle customer creation/update
+  const handleCustomerSubmit = async (customerData) => {
+    try {
+      setIsLoading(true);
+      await addCustomer(customerData);
+      
+      // Refresh customer list
+      await fetchCustomers();
+      
+      return true;
+    } catch (err) {
+      console.error('Error submitting customer:', err);
+      setError('Failed to add customer. Please try again.');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Handle customer update
+  const handleCustomerUpdate = async (customerId, customerData) => {
+    try {
+      setIsLoading(true);
+      await updateCustomer(customerId, customerData);
+      
+      // Refresh customer list
+      await fetchCustomers();
+      
+      toggleEditCustomerModal();
+      return true;
+    } catch (err) {
+      console.error('Error updating customer:', err);
+      setError('Failed to update customer. Please try again.');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Handle customer deletion
+  const handleCustomerDelete = async (customerId) => {
+    if (!window.confirm('Are you sure you want to delete this customer? This will affect any related invoices.')) {
+      return;
+    }
+    
+    try {
+      setIsLoading(true);
+      await deleteCustomer(customerId);
+      
+      // Refresh customer list
+      await fetchCustomers();
+      
+      return true;
+    } catch (err) {
+      console.error('Error deleting customer:', err);
+      setError('Failed to delete customer. Please try again.');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Function to fetch employee payroll history
+  const fetchEmployeePayrollHistory = async (employeeId) => {
+    try {
+      setIsLoadingPayrollHistory(true);
+      const data = await getEmployeePayrollHistory(employeeId);
+      setEmployeePayrollHistory(data);
+    } catch (err) {
+      console.error('Error fetching employee payroll history:', err);
+      // Display error notification
+    } finally {
+      setIsLoadingPayrollHistory(false);
+    }
+  };
+  
+  // Function to fetch payroll payment details
+  const fetchPayrollDetails = async (paymentId) => {
+    try {
+      setIsLoadingPayrollDetails(true);
+      const data = await getPayrollDetails(paymentId);
+      setPayrollDetails(data);
+    } catch (err) {
+      console.error('Error fetching payroll details:', err);
+      // Display error notification
+    } finally {
+      setIsLoadingPayrollDetails(false);
+    }
+  };
+  
+  // Handle edit employee payroll info
+  const handleEditEmployeePayroll = async (employeeId, payrollInfo) => {
+    try {
+      setIsLoading(true);
+      await updateEmployeePayrollInfo(employeeId, payrollInfo);
+      
+      // Refresh data
+      const data = await getFinancialDashboardData();
+      setFinancialData(data);
+      
+      // Close modal
+      toggleEditEmployeePayrollModal();
+      return true;
+    } catch (err) {
+      console.error('Error updating employee payroll:', err);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Handle void payment
+  const handleVoidPayment = async (paymentId) => {
+    if (!window.confirm('Are you sure you want to void this payment? This action cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      setIsLoading(true);
+      await voidPayrollPayment(paymentId);
+      
+      // Refresh data
+      const data = await getFinancialDashboardData();
+      setFinancialData(data);
+      
+      // Close details modal if open
+      if (isPayrollDetailsModalOpen) {
+        togglePayrollDetailsModal();
+      }
+      
+      return true;
+    } catch (err) {
+      console.error('Error voiding payment:', err);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchExpenseSummary = async (dateFilter = expenseDateRange, customDates = customDateRange) => {
+    try {
+      // Calculate date range based on filter
+      let startDate = null;
+      let endDate = null;
+      
+      const now = new Date();
+      
+      switch (dateFilter) {
+        case 'month':
+          // Current month
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          break;
+        case 'quarter':
+          // Current quarter
+          const currentQuarter = Math.floor(now.getMonth() / 3);
+          startDate = new Date(now.getFullYear(), currentQuarter * 3, 1);
+          break;
+        case 'year':
+          // Current year
+          startDate = new Date(now.getFullYear(), 0, 1);
+          break;
+        case 'custom':
+          // Custom date range
+          if (customDates.startDate) 
+            startDate = new Date(customDates.startDate);
+          break;
+        default:
+          // Default to current year
+          startDate = new Date(now.getFullYear(), 0, 1);
+      }
+      
+      // Format date to ISO string for API
+      const formattedStartDate = startDate ? startDate.toISOString().split('T')[0] : null;
+      
+      // Fetch expenses for the period
+      const { data: periodData, error: periodError } = await supabase
+        .from('expenses')
+        .select('amount, date')
+        .gte('date', formattedStartDate);
+        
+      if (periodError) throw periodError;
+      
+      // Calculate total for the period
+      const totalForPeriod = periodData.reduce((sum, item) => sum + parseFloat(item.amount), 0);
+      
+      // For average and projection, use different logic based on date range
+      let avgMonthly = 0;
+      let projectedAnnual = 0;
+      
+      if (dateFilter === 'month') {
+        // For monthly view, calculate daily average and project to month
+        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        const daysElapsed = Math.min(now.getDate(), daysInMonth);
+        avgMonthly = totalForPeriod;
+        projectedAnnual = totalForPeriod * 12;
+      } else if (dateFilter === 'quarter') {
+        // For quarterly view
+        const monthsElapsed = now.getMonth() % 3 + 1;
+        avgMonthly = monthsElapsed > 0 ? totalForPeriod / monthsElapsed : 0;
+        projectedAnnual = avgMonthly * 12;
+      } else {
+        // Year or custom
+        // Get current month (1-based)
+        const currentMonth = now.getMonth() + 1;
+        // Calculate average monthly expenses
+        avgMonthly = currentMonth > 0 ? totalForPeriod / currentMonth : 0;
+        // Calculate projected annual expenses
+        projectedAnnual = currentMonth > 0 ? (totalForPeriod / currentMonth) * 12 : 0;
+      }
+      
+      setExpenseSummary({
+        totalYTD: totalForPeriod,
+        avgMonthly,
+        projectedAnnual
+      });
+    } catch (err) {
+      console.error('Error fetching expense summary:', err);
+      setExpenseSummary({
+        totalYTD: 0,
+        avgMonthly: 0,
+        projectedAnnual: 0
+      });
+    }
+  };
+
+  const fetchExpenseTrends = async (dateFilter = expenseDateRange, customDates = customDateRange) => {
+    try {
+      // Calculate date range based on filter
+      let startDate = null;
+      let endDate = null;
+      
+      const now = new Date();
+      
+      switch (dateFilter) {
+        case 'month':
+          // Current month
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+          break;
+        case 'quarter':
+          // Current quarter
+          const currentQuarter = Math.floor(now.getMonth() / 3);
+          startDate = new Date(now.getFullYear(), currentQuarter * 3, 1);
+          endDate = new Date(now.getFullYear(), (currentQuarter + 1) * 3, 0);
+          break;
+        case 'year':
+          // Current year
+          startDate = new Date(now.getFullYear(), 0, 1);
+          endDate = new Date(now.getFullYear(), 11, 31);
+          break;
+        case 'custom':
+          // Custom date range
+          if (customDates.startDate) 
+            startDate = new Date(customDates.startDate);
+          if (customDates.endDate) 
+            endDate = new Date(customDates.endDate);
+          break;
+        default:
+          // Default to last 12 months if no valid filter
+          startDate = new Date(now.getFullYear(), now.getMonth() - 12, 1);
+          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      }
+      
+      // Format dates to ISO string for API
+      const formattedStartDate = startDate ? startDate.toISOString().split('T')[0] : null;
+      const formattedEndDate = endDate ? endDate.toISOString().split('T')[0] : null;
+      
+      console.log(`Fetching expense trends from ${formattedStartDate} to ${formattedEndDate}`);
+      
+      // Get all expenses within the date range
+      const { data: expenseData, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .gte('date', formattedStartDate)
+        .lte('date', formattedEndDate)
+        .order('date', { ascending: true });
+        
+      if (error) throw error;
+      
+      console.log('Raw expense data:', expenseData);
+      
+      // Group expenses by month and category
+      const monthlyData = {};
+      
+      expenseData.forEach(expense => {
+        const expenseDate = new Date(expense.date);
+        const monthKey = `${expenseDate.getFullYear()}-${String(expenseDate.getMonth() + 1).padStart(2, '0')}`;
+        
+        if (!monthlyData[monthKey]) {
+          monthlyData[monthKey] = {
+            month: new Date(expenseDate.getFullYear(), expenseDate.getMonth(), 1),
+            feed: 0,
+            labor: 0,
+            utilities: 0,
+            veterinary: 0,
+            maintenance: 0
+          };
+        }
+        
+        // Categorize the expense
+        switch (expense.category) {
+          case 'Feed':
+            monthlyData[monthKey].feed += parseFloat(expense.amount);
+            break;
+          case 'Labor':
+            monthlyData[monthKey].labor += parseFloat(expense.amount);
+            break;
+          case 'Utilities':
+            monthlyData[monthKey].utilities += parseFloat(expense.amount);
+            break;
+          case 'Veterinary':
+            monthlyData[monthKey].veterinary += parseFloat(expense.amount);
+            break;
+          case 'Maintenance':
+            monthlyData[monthKey].maintenance += parseFloat(expense.amount);
+            break;
+          default:
+            // For other categories, you might want to add them to a miscellaneous category
+            break;
+        }
+      });
+      
+      // Convert to array sorted by month and format month names
+      const formattedData = Object.values(monthlyData)
+        .sort((a, b) => a.month - b.month)
+        .map(item => ({
+          ...item,
+          month: new Date(item.month).toLocaleString('default', { month: 'short' }),
+          year: new Date(item.month).getFullYear()
+        }));
+      
+      console.log('Aggregated expense trends:', formattedData);
+      setExpenseTrends(formattedData);
+    } catch (err) {
+      console.error('Error fetching expense trends:', err);
+      setExpenseTrends([]);
+    }
+  };
+  
+  // Fetch data from Supabase on component mount
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        const data = await getFinancialDashboardData();
+        setFinancialData(data);
+        setError(null);
+      } catch (err) {
+        console.error('Error loading financial data:', err);
+        setError('Failed to load financial data. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, []);
+  
+  // Toggle modals
+  const toggleAddExpenseModal = () => setIsAddExpenseModalOpen(!isAddExpenseModalOpen);
+  const toggleAddInvoiceModal = () => setIsAddInvoiceModalOpen(!isAddInvoiceModalOpen);
+  const toggleAddCustomerModal = () => setIsAddCustomerModalOpen(!isAddCustomerModalOpen);
+  const toggleProcessPayrollModal = () => setIsProcessPayrollModalOpen(!isProcessPayrollModalOpen);
+  const toggleEditExpenseModal = (expense = null) => {
+    setSelectedExpense(expense);
+    setIsEditExpenseModalOpen(!isEditExpenseModalOpen);
+  };
+  
+  // Handle payroll processing
+  const handleProcessPayroll = async (payrollData) => {
+    try {
+      setIsLoading(true);
+      await processPayroll(payrollData);
+      
+      // Refresh data after successful submission
+      const data = await getFinancialDashboardData();
+      setFinancialData(data);
+      
+      return true;
+    } catch (err) {
+      console.error('Error processing payroll:', err);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchExpenses = async (page = 1, query = '', dateFilter = expenseDateRange) => {
+    try {
+      setIsExpenseLoading(true);
+      
+      // Calculate date range based on filter
+      let startDate = null;
+      let endDate = null;
+      
+      const now = new Date();
+      
+      switch (dateFilter) {
+        case 'month':
+          // Current month
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+          break;
+        case 'quarter':
+          // Current quarter
+          const currentQuarter = Math.floor(now.getMonth() / 3);
+          startDate = new Date(now.getFullYear(), currentQuarter * 3, 1);
+          endDate = new Date(now.getFullYear(), (currentQuarter + 1) * 3, 0);
+          break;
+        case 'year':
+          // Current year
+          startDate = new Date(now.getFullYear(), 0, 1);
+          endDate = new Date(now.getFullYear(), 11, 31);
+          break;
+        case 'custom':
+          // Custom date range
+          if (customDateRange.startDate) 
+            startDate = new Date(customDateRange.startDate);
+          if (customDateRange.endDate) 
+            endDate = new Date(customDateRange.endDate);
+          break;
+        default:
+          startDate = null;
+          endDate = null;
+      }
+      
+      // Format dates to ISO string for API
+      const formattedStartDate = startDate ? startDate.toISOString().split('T')[0] : null;
+      const formattedEndDate = endDate ? endDate.toISOString().split('T')[0] : null;
+      
+      // Call the API with date filters
+      const { data, count } = await getExpensesByPage(
+        page, 
+        expensesPerPage, 
+        query,
+        formattedStartDate,
+        formattedEndDate
+      );
+      
+      setExpensesList(data);
+      setTotalExpenses(count);
+      setExpensePage(page);
+    } catch (err) {
+      console.error('Error fetching expenses:', err);
+      setError('Failed to load expense data. Please try again.');
+    } finally {
+      setIsExpenseLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'expenses') {
+      fetchExpenses(expensePage, expenseSearchQuery, expenseDateRange);
+      fetchExpenseSummary(expenseDateRange, customDateRange);
+      fetchExpenseTrends(expenseDateRange, customDateRange);
+    }
+  }, [activeTab, expensePage, expenseSearchQuery]);
+
+  useEffect(() => {
+    if (activeTab === 'invoices') {
+      fetchInvoices(invoicesPage, invoiceSearchQuery);
+      fetchAgingSummary();
+      fetchCustomers();
+    }
+  }, [activeTab, invoicesPage, invoiceSearchQuery]);
+
+  // Handle expense submission from modal
+  const handleExpenseSubmit = async (expenseData) => {
+    try {
+      setIsLoading(true);
+      
+      // Add the expense to the database
+      const newExpense = await addExpense(expenseData);
+      
+      // Update the financial data state
+      setFinancialData(prevData => ({
+        ...prevData,
+        expenses: {
+          ...prevData.expenses,
+          recent: [newExpense, ...prevData.expenses.recent.slice(0, 4)]
+        }
+      }));
+      
+      // If on expenses tab, refresh the expenses list
+      if (activeTab === 'expenses') {
+        fetchExpenses(expensePage, expenseSearchQuery);
+      }
+      
+      // Close the modal
+      toggleAddExpenseModal();
+    } catch (err) {
+      console.error('Error submitting expense:', err);
+      setError('Failed to add expense. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDateRangeChange = (e) => {
+    const value = e.target.value;
+    setExpenseDateRange(value);
+    
+    // Reset custom date range if not on custom
+    if (value !== 'custom') {
+      setCustomDateRange({ startDate: '', endDate: '' });
+      // Fetch expenses with the new date range
+      fetchExpenses(1, expenseSearchQuery, value);
+    }
+  };
+  
+  // 4. Add handler for custom date range inputs
+  const handleCustomDateChange = (field, value) => {
+    setCustomDateRange(prev => {
+      const updated = { ...prev, [field]: value };
+      
+      // If both dates are set, fetch data
+      if (updated.startDate && updated.endDate) {
+        fetchExpenses(1, expenseSearchQuery, 'custom');
+      }
+      
+      return updated;
+    });
+  };
+  
+  // Handle expense update
+  const handleExpenseUpdate = async (expenseId, expenseData) => {
+    try {
+      setIsLoading(true);
+      
+      // Update the expense in the database
+      const updatedExpense = await updateExpense(expenseId, expenseData);
+      
+      // Update the financial data state
+      setFinancialData(prevData => {
+        const updatedRecent = prevData.expenses.recent.map(expense => 
+          expense.id === expenseId ? updatedExpense : expense
+        );
+        
+        return {
+          ...prevData,
+          expenses: {
+            ...prevData.expenses,
+            recent: updatedRecent
+          }
+        };
+      });
+      
+      // If on expenses tab, refresh the expenses list
+      if (activeTab === 'expenses') {
+        fetchExpenses(expensePage, expenseSearchQuery);
+      }
+      
+      // Close the edit modal
+      toggleEditExpenseModal();
+    } catch (err) {
+      console.error('Error updating expense:', err);
+      setError('Failed to update expense. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Handle expense deletion
+  const handleExpenseDelete = async (expenseId) => {
+    if (!window.confirm('Are you sure you want to delete this expense?')) {
+      return;
+    }
+    
+    try {
+      setIsLoading(true);
+      
+      // Delete the expense from the database
+      await deleteExpense(expenseId);
+      
+      // Update the financial data state
+      setFinancialData(prevData => {
+        const filteredRecent = prevData.expenses.recent.filter(expense => 
+          expense.id !== expenseId
+        );
+        
+        return {
+          ...prevData,
+          expenses: {
+            ...prevData.expenses,
+            recent: filteredRecent
+          }
+        };
+      });
+      
+      // If on expenses tab, refresh the expenses list
+      if (activeTab === 'expenses') {
+        fetchExpenses(expensePage, expenseSearchQuery);
+      }
+    } catch (err) {
+      console.error('Error deleting expense:', err);
+      setError('Failed to delete expense. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Loading state
+  if (isLoading && !financialData) {
+    return (
+      <div className="h-full bg-gray-100 flex justify-center items-center">
+        <div className="flex flex-col items-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500 mb-4"></div>
+          <p className="text-gray-600">Loading financial data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const handleExpenseSearch = (e) => {
+    const query = e.target.value;
+    setExpenseSearchQuery(query);
+    // Reset to first page when searching
+    setExpensePage(1);
+    // Debounce search to avoid too many requests
+    const timeoutId = setTimeout(() => {
+      fetchExpenses(1, query);
+    }, 300);
+    
+    return () => clearTimeout(timeoutId);
+  };
+  
+  // Handle expense status change
+  const handleExpenseStatusChange = async (expenseId, newStatus) => {
+    try {
+      setIsLoading(true);
+      
+      await updateExpense(expenseId, { status: newStatus });
+      
+      // Update the financial data state
+      setFinancialData(prevData => {
+        const updatedRecent = prevData.expenses.recent.map(expense => 
+          expense.id === expenseId ? { ...expense, status: newStatus } : expense
+        );
+        
+        return {
+          ...prevData,
+          expenses: {
+            ...prevData.expenses,
+            recent: updatedRecent
+          }
+        };
+      });
+      
+      // If on expenses tab, refresh the expenses list
+      if (activeTab === 'expenses') {
+        fetchExpenses(expensePage, expenseSearchQuery);
+      }
+    } catch (err) {
+      console.error('Error updating expense status:', err);
+      setError('Failed to update expense status. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchInvoices = async (page = 1, query = '') => {
+    try {
+      setIsInvoiceLoading(true);
+      const { data, count } = await getInvoices(page, invoicesPerPage, query);
+      
+      // Initialize with empty array if data is null or undefined
+      setInvoicesList(data || []);
+      setTotalInvoices(count || 0);
+      setInvoicesPage(page);
+      return { data, count };
+    } catch (error) {
+      console.error('Error fetching invoices:', error);
+      setError('Failed to fetch invoices. Please try again.');
+      // Initialize with empty arrays on error
+      setInvoicesList([]);
+      setTotalInvoices(0);
+      return { data: [], count: 0 };
+    } finally {
+      setIsInvoiceLoading(false);
+    }
+  };
+  
+  const fetchAgingSummary = async () => {
+    try {
+      const data = await getInvoiceAgingSummary();
+      setAgingSummary(data);
+    } catch (err) {
+      console.error('Error fetching aging summary:', err);
+    }
+  };
+  
+  const handleInvoiceSearch = (e) => {
+    const query = e.target.value;
+    setInvoiceSearchQuery(query);
+    // Reset to first page when searching
+    setInvoicesPage(1);
+    // Debounce search to avoid too many requests
+    const timeoutId = setTimeout(() => {
+      fetchInvoices(1, query);
+    }, 300);
+    
+    return () => clearTimeout(timeoutId);
+  };
+  
+  // Toggle view invoice modal
+  const toggleViewInvoiceModal = async (invoice = null) => {
+    if (invoice) {
+      setSelectedInvoice(invoice);
+      try {
+        setIsInvoiceDetailsLoading(true);
+        const data = await getInvoiceById(invoice.id);
+        setSelectedInvoice(data);
+      } catch (err) {
+        console.error('Error fetching invoice details:', err);
+      } finally {
+        setIsInvoiceDetailsLoading(false);
+      }
+    }
+    setIsViewInvoiceModalOpen(!isViewInvoiceModalOpen);
+  };
+  
+  // Handle invoice status change
+  const handleInvoiceStatusChange = async (invoiceId, newStatus) => {
+    try {
+      setIsLoading(true);
+      await updateInvoiceStatus(invoiceId, newStatus);
+      
+      // Refresh invoices list
+      await fetchInvoices(invoicesPage, invoiceSearchQuery);
+      
+      // If we're viewing the invoice, refresh the selected invoice data
+      if (selectedInvoice && selectedInvoice.id === invoiceId) {
+        const updatedInvoice = await getInvoiceById(invoiceId);
+        setSelectedInvoice(updatedInvoice);
+      }
+      
+      // Update the financial dashboard data
+      const data = await getFinancialDashboardData();
+      setFinancialData(data);
+      
+      return true;
+    } catch (err) {
+      console.error('Error updating invoice status:', err);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Handle invoice submission from modal
+  const handleInvoiceSubmit = async (invoiceData, invoiceItems) => {
+    try {
+      setIsLoading(true);
+      
+      // Generate an invoice number if needed
+      const invoiceNumber = generateInvoiceNumber();
+      
+      // Format data for the API
+      const formattedData = {
+        ...invoiceData,
+        invoiceNumber,
+        customerId: invoiceData.customerId // Ensure this is passed correctly
+      };
+      
+      // Call the API
+      await addInvoice(formattedData, invoiceItems);
+      
+      // Refresh the invoices list
+      await fetchInvoices(invoicesPage, invoiceSearchQuery);
+      
+      // Update the financial dashboard data
+      const data = await getFinancialDashboardData();
+      setFinancialData(data);
+      
+      return true;
+    } catch (err) {
+      console.error('Error creating invoice:', err);
+      setError('Failed to create invoice. Please try again.');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Handle invoice deletion
+  const handleInvoiceDelete = async (invoiceId) => {
+    if (!window.confirm('Are you sure you want to delete this invoice? This action cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      setIsLoading(true);
+      await deleteInvoice(invoiceId);
+      
+      // Refresh invoices list
+      await fetchInvoices(invoicesPage, invoiceSearchQuery);
+      
+      // Close the details modal if it's open
+      if (isViewInvoiceModalOpen && selectedInvoice?.id === invoiceId) {
+        toggleViewInvoiceModal();
+      }
+      
+      // Update the financial dashboard data
+      const data = await getFinancialDashboardData();
+      setFinancialData(data);
+      
+      return true;
+    } catch (err) {
+      console.error('Error deleting invoice:', err);
+      setError('Failed to delete invoice. Please try again.');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  
+  // Update the InvoiceModal to use the real API
+  // const handleSubmit = async (e) => {
+  //   e.preventDefault();
+    
+  //   try {
+  //     // Format items correctly
+  //     const formattedItems = formData.items.map(item => ({
+  //       description: item.description,
+  //       quantity: parseFloat(item.quantity),
+  //       unitPrice: parseFloat(item.unitPrice),
+  //       amount: parseFloat(item.amount)
+  //     }));
+      
+  //     const success = await handleInvoiceSubmit(formData, formattedItems);
+  //     if (success) {
+  //       onClose();
+  //     }
+  //   } catch (err) {
+  //     console.error('Error creating invoice:', err);
+  //   }
+  // };
+  
+  // Update Expenses Tab JSX to use the new state and handlers
+  const renderExpensesTab = () => {
+    return (
+      <div>
+        {/* Expense Summary - fixed structure to remove duplicate div */}
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold text-gray-800">Expense Summary</h2>
+            <button 
+              onClick={toggleAddExpenseModal}
+              className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            >
+              <Plus size={20} className="mr-2" />
+              Add Expense
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-1 gap-6 w-full">
+            <div className="w-full">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">Monthly Expense Trends</h3>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={expenseTrends.length > 0 ? expenseTrends : []}
+                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip 
+                      formatter={(value) => [formatCurrency(value), '']}
+                      contentStyle={{ background: '#fff', border: '1px solid #f1f1f1', borderRadius: '4px' }}
+                    />
+                    <Legend />
+                    <Bar dataKey="feed" name="Feed" fill="#2E7D32" />
+                    <Bar dataKey="labor" name="Labor" fill="#1565C0" />
+                    <Bar dataKey="utilities" name="Utilities" fill="#FFA000" />
+                    <Bar dataKey="veterinary" name="Veterinary" fill="#F44336" />
+                    <Bar dataKey="maintenance" name="Maintenance" fill="#9E9E9E" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+          
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <h3 className="text-sm font-medium text-gray-700 mb-3">Expense Statistics</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-500">Total Expenses (YTD)</p>
+                <p className="text-xl font-semibold text-gray-800">{formatCurrency(expenseSummary.totalYTD)}</p>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-500">Avg. Monthly Expenses</p>
+                <p className="text-xl font-semibold text-gray-800">{formatCurrency(expenseSummary.avgMonthly)}</p>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-500">Projected Annual Expenses</p>
+                <p className="text-xl font-semibold text-gray-800">{formatCurrency(expenseSummary.projectedAnnual)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Expense List - update to use the new variables and handlers */}
+        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+            <h2 className="text-lg font-semibold text-gray-800">Expense Transactions</h2>
+            <div className="flex space-x-2">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="text"
+                  value={expenseSearchQuery}
+                  onChange={handleExpenseSearch}
+                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  placeholder="Search expenses..."
+                />
+              </div>
+              <button className="flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                <Download size={16} className="mr-2" />
+                Export
+              </button>
+            </div>
+          </div>
+          
+          {isExpenseLoading ? (
+            <div className="px-6 py-12 flex justify-center">
+              <div className="flex flex-col items-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-500 mb-4"></div>
+                <p className="text-gray-600">Loading expenses...</p>
+              </div>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      ID
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Category
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Vendor
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Amount
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {expensesList.length > 0 ? (
+                    expensesList.map(expense => (
+                      <tr key={expense.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {expense.id.substring(0, 8)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatDate(expense.date)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {expense.category}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {expense.vendor}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {formatCurrency(expense.amount)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <select
+                            value={expense.status}
+                            onChange={(e) => handleExpenseStatusChange(expense.id, e.target.value)}
+                            className="text-xs border-0 bg-transparent focus:ring-0 cursor-pointer"
+                          >
+                            <option value="Pending">Pending</option>
+                            <option value="Paid">Paid</option>
+                            <option value="Cancelled">Cancelled</option>
+                          </select>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <button 
+                            onClick={() => toggleEditExpenseModal(expense)}
+                            className="text-blue-600 hover:text-blue-900 mr-4"
+                          >
+                            Edit
+                          </button>
+                          <button 
+                            onClick={() => handleExpenseDelete(expense.id)}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="7" className="px-6 py-4 text-center text-sm text-gray-500">
+                        {expenseSearchQuery ? 'No expenses match your search.' : 'No expenses found.'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+          
+          {/* Pagination */}
+          <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center">
+            <div className="text-sm text-gray-500">
+              Showing {expensesList.length ? (expensePage - 1) * expensesPerPage + 1 : 0} to {Math.min(expensePage * expensesPerPage, totalExpenses)} of {totalExpenses} expenses
+            </div>
+            <div className="flex space-x-2">
+              <button 
+                onClick={() => fetchExpenses(expensePage - 1, expenseSearchQuery)}
+                disabled={expensePage === 1}
+                className={`px-3 py-1 border border-gray-300 rounded-md text-sm ${
+                  expensePage === 1 ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                Previous
+              </button>
+              <button 
+                onClick={() => fetchExpenses(expensePage + 1, expenseSearchQuery)}
+                disabled={expensePage * expensesPerPage >= totalExpenses}
+                className={`px-3 py-1 border rounded-md text-sm ${
+                  expensePage * expensesPerPage >= totalExpenses ? 
+                    'border-gray-300 text-gray-400 cursor-not-allowed' : 
+                    'border-transparent bg-green-600 text-white hover:bg-green-700'
+                }`}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+  
+  // Error state
+  if (error) {
+    return (
+      <div className="h-full bg-gray-100 flex justify-center items-center">
+        <div className="bg-white p-8 rounded-lg shadow-md max-w-lg w-full">
+          <div className="text-red-500 mb-4">
+            <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h3 className="text-xl font-medium text-gray-800 text-center mb-2">Error</h3>
+          <p className="text-gray-600 text-center mb-6">{error}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className="h-full bg-gray-100">
@@ -251,8 +1321,8 @@ const FinancesManagement = () => {
         <div className="mb-6 flex items-center space-x-4">
           <span className="text-sm text-gray-600">Date Range:</span>
           <select
-            value={dateRange}
-            onChange={(e) => setDateRange(e.target.value)}
+            value={expenseDateRange}
+            onChange={handleDateRangeChange}
             className="border border-gray-300 rounded-md py-1 px-3 text-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
           >
             <option value="month">This Month</option>
@@ -261,17 +1331,27 @@ const FinancesManagement = () => {
             <option value="custom">Custom Range</option>
           </select>
           
-          {dateRange === 'custom' && (
+          {expenseDateRange === 'custom' && (
             <div className="flex items-center space-x-2">
               <input
                 type="date"
+                value={customDateRange.startDate}
+                onChange={(e) => handleCustomDateChange('startDate', e.target.value)}
                 className="border border-gray-300 rounded-md py-1 px-3 text-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
               />
               <span>to</span>
               <input
                 type="date"
+                value={customDateRange.endDate}
+                onChange={(e) => handleCustomDateChange('endDate', e.target.value)}
                 className="border border-gray-300 rounded-md py-1 px-3 text-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
               />
+              <button 
+                onClick={() => fetchExpenses(1, expenseSearchQuery, 'custom')}
+                className="px-3 py-1 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
+              >
+                Apply
+              </button>
             </div>
           )}
         </div>
@@ -527,8 +1607,8 @@ const FinancesManagement = () => {
                   </button>
                 </div>
                 <div className="divide-y divide-gray-200">
-                  {financialData.invoices.recent.map(invoice => (
-                    <div key={invoice.id} className="px-6 py-4">
+                {financialData?.invoices?.recent ? financialData.invoices.recent.map(invoice => (
+                  <div key={invoice.id} className="px-6 py-4">
                       <div className="flex justify-between items-start">
                         <div>
                           <div className="flex items-center">
@@ -550,7 +1630,11 @@ const FinancesManagement = () => {
                         </div>
                       </div>
                     </div>
-                  ))}
+                  )) : (
+                    <div className="px-6 py-4 text-center text-gray-500">
+                      No recent invoices to display
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -725,193 +1809,7 @@ const FinancesManagement = () => {
         )}
         
         {/* Expenses Tab */}
-        {activeTab === 'expenses' && (
-          <div>
-            {/* Expense Summary */}
-            <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold text-gray-800">Expense Summary</h2>
-                <button 
-                  onClick={toggleAddExpenseModal}
-                  className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                >
-                  <Plus size={20} className="mr-2" />
-                  Add Expense
-                </button>
-              </div>
-              
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="col-span-2">
-                  <h3 className="text-sm font-medium text-gray-700 mb-3">Monthly Expense Trends</h3>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={financialData.expenses.monthly}
-                        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                        stackOffset="expand"
-                      >
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="month" />
-                        <YAxis />
-                        <Tooltip 
-                          formatter={(value) => [formatCurrency(value), '']}
-                          contentStyle={{ background: '#fff', border: '1px solid #f1f1f1', borderRadius: '4px' }}
-                        />
-                        <Legend />
-                        <Bar dataKey="feed" name="Feed" stackId="a" fill="#2E7D32" />
-                        <Bar dataKey="labor" name="Labor" stackId="a" fill="#1565C0" />
-                        <Bar dataKey="utilities" name="Utilities" stackId="a" fill="#FFA000" />
-                        <Bar dataKey="veterinary" name="Veterinary" stackId="a" fill="#F44336" />
-                        <Bar dataKey="maintenance" name="Maintenance" stackId="a" fill="#9E9E9E" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-                
-                <div>
-                  <h3 className="text-sm font-medium text-gray-700 mb-3">Current Month Breakdown</h3>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={financialData.expenses.categories}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          outerRadius={80}
-                          fill="#8884d8"
-                          dataKey="value"
-                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                        >
-                          {financialData.expenses.categories.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip 
-                          formatter={(value) => [formatCurrency(value), '']}
-                          contentStyle={{ background: '#fff', border: '1px solid #f1f1f1', borderRadius: '4px' }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <h3 className="text-sm font-medium text-gray-700 mb-3">Expense Statistics</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-sm text-gray-500">Total Expenses (YTD)</p>
-                    <p className="text-xl font-semibold text-gray-800">{formatCurrency(108050)}</p>
-                  </div>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-sm text-gray-500">Avg. Monthly Expenses</p>
-                    <p className="text-xl font-semibold text-gray-800">{formatCurrency(27012.5)}</p>
-                  </div>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-sm text-gray-500">Projected Annual Expenses</p>
-                    <p className="text-xl font-semibold text-gray-800">{formatCurrency(324150)}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            {/* Expense List */}
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                <h2 className="text-lg font-semibold text-gray-800">Expense Transactions</h2>
-                <div className="flex space-x-2">
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Search className="h-5 w-5 text-gray-400" />
-                    </div>
-                    <input
-                      type="text"
-                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                      placeholder="Search expenses..."
-                    />
-                  </div>
-                  <button className="flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
-                    <Download size={16} className="mr-2" />
-                    Export
-                  </button>
-                </div>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        ID
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Date
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Category
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Vendor
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Amount
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {financialData.expenses.recent.map(expense => (
-                      <tr key={expense.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {expense.id}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {formatDate(expense.date)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {expense.category}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {expense.vendor}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {formatCurrency(expense.amount)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColors[expense.status]}`}>
-                            {expense.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <a href="#" className="text-green-600 hover:text-green-900 mr-4">View</a>
-                          <a href="#" className="text-blue-600 hover:text-blue-900">Edit</a>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center">
-                <div className="text-sm text-gray-500">
-                  Showing 5 of 24 transactions
-                </div>
-                <div className="flex space-x-2">
-                  <button className="px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-700">
-                    Previous
-                  </button>
-                  <button className="px-3 py-1 border border-transparent bg-green-600 text-white rounded-md text-sm">
-                    Next
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {activeTab === 'expenses' && renderExpensesTab()}
         
         {/* Payroll Tab */}
         {activeTab === 'payroll' && (
@@ -920,81 +1818,15 @@ const FinancesManagement = () => {
             <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-semibold text-gray-800">Payroll Summary</h2>
-                <button className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                <button 
+                  onClick={toggleProcessPayrollModal}
+                  className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                >
                   <Plus size={20} className="mr-2" />
                   Process Payroll
                 </button>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-500">Total Monthly Payroll</p>
-                  <p className="text-xl font-semibold text-gray-800">{formatCurrency(25960)}</p>
-                  <p className="text-xs text-gray-500 mt-1">5 employees</p>
-                </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-500">Next Payment Date</p>
-                  <p className="text-xl font-semibold text-gray-800">May 1, 2023</p>
-                  <p className="text-xs text-gray-500 mt-1">Monthly salary payments</p>
-                </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-500">Payroll YTD</p>
-                  <p className="text-xl font-semibold text-gray-800">{formatCurrency(77830)}</p>
-                  <p className="text-xs text-gray-500 mt-1">Jan - Apr 2023</p>
-                </div>
-              </div>
-              
-              <h3 className="text-sm font-medium text-gray-700 mb-3">Upcoming Payments</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Payment ID
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Date
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Type
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Employees
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Amount
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {financialData.payroll.upcoming.map(payment => (
-                      <tr key={payment.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {payment.id}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {formatDate(payment.date)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {payment.type}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {payment.employees}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {formatCurrency(payment.estimatedAmount)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <a href="#" className="text-green-600 hover:text-green-900">Process Now</a>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
             </div>
             
             {/* Employee Payroll Information */}
@@ -1050,8 +1882,18 @@ const FinancesManagement = () => {
                           {formatDate(employee.lastPaid)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <a href="#" className="text-green-600 hover:text-green-900 mr-4">View History</a>
-                          <a href="#" className="text-blue-600 hover:text-blue-900">Edit</a>
+                          <button 
+                            onClick={() => toggleViewPayrollHistoryModal(employee)}
+                            className="text-green-600 hover:text-green-900 mr-4"
+                          >
+                            View History
+                          </button>
+                          <button 
+                            onClick={() => toggleEditEmployeePayrollModal(employee)}
+                            className="text-blue-600 hover:text-blue-900"
+                          >
+                            Edit
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -1120,7 +1962,20 @@ const FinancesManagement = () => {
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <a href="#" className="text-blue-600 hover:text-blue-900">Details</a>
+                          <button 
+                            onClick={() => togglePayrollDetailsModal(payment.id)}
+                            className="text-blue-600 hover:text-blue-900 mr-4"
+                          >
+                            Details
+                          </button>
+                          {payment.status !== 'Voided' && (
+                            <button 
+                              onClick={() => handleVoidPayment(payment.id)}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              Void
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -1133,49 +1988,50 @@ const FinancesManagement = () => {
         
         {/* Invoices Tab */}
         {activeTab === 'invoices' && (
-          <div>
-            {/* Invoice Summary */}
-            <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold text-gray-800">Invoice Summary</h2>
-                <button 
-                  onClick={toggleAddInvoiceModal}
-                  className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                >
-                  <Plus size={20} className="mr-2" />
-                  Create Invoice
-                </button>
+        <div>
+          {/* Invoice Summary */}
+          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-gray-800">Invoice Summary</h2>
+              <button 
+                onClick={toggleAddInvoiceModal}
+                className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              >
+                <Plus size={20} className="mr-2" />
+                Create Invoice
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-500">Total Outstanding</p>
+                <p className="text-xl font-semibold text-gray-800">{formatCurrency(financialData?.invoices?.outstanding || 0)}</p>
+                <p className="text-xs text-gray-500 mt-1">{financialData?.invoices?.unpaidCount || 0} unpaid invoices</p>
               </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-500">Total Outstanding</p>
-                  <p className="text-xl font-semibold text-gray-800">{formatCurrency(9820)}</p>
-                  <p className="text-xs text-gray-500 mt-1">3 unpaid invoices</p>
-                </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-500">Overdue</p>
-                  <p className="text-xl font-semibold text-gray-800">{formatCurrency(0)}</p>
-                  <p className="text-xs text-gray-500 mt-1">0 overdue invoices</p>
-                </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-500">Paid This Month</p>
-                  <p className="text-xl font-semibold text-gray-800">{formatCurrency(9120)}</p>
-                  <p className="text-xs text-gray-500 mt-1">2 paid invoices</p>
-                </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-500">Invoiced This Month</p>
-                  <p className="text-xl font-semibold text-gray-800">{formatCurrency(18940)}</p>
-                  <p className="text-xs text-gray-500 mt-1">5 invoices</p>
-                </div>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-500">Overdue</p>
+                <p className="text-xl font-semibold text-gray-800">{formatCurrency(financialData?.invoices?.overdue || 0)}</p>
+                <p className="text-xs text-gray-500 mt-1">{financialData?.invoices?.overdueCount || 0} overdue invoices</p>
               </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h3 className="text-sm font-medium text-gray-700 mb-3">Aging Summary</h3>
-                  <div className="space-y-4">
-                    {financialData.invoices.aging.map(period => (
-                      <div key={period.period}>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-500">Paid This Month</p>
+                <p className="text-xl font-semibold text-gray-800">{formatCurrency(financialData?.invoices?.paidThisMonth || 0)}</p>
+                <p className="text-xs text-gray-500 mt-1">{financialData?.invoices?.paidCountThisMonth || 0} paid invoices</p>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-500">Invoiced This Month</p>
+                <p className="text-xl font-semibold text-gray-800">{formatCurrency(financialData?.invoices?.issuedThisMonth || 0)}</p>
+                <p className="text-xs text-gray-500 mt-1">{financialData?.invoices?.issuedCountThisMonth || 0} invoices</p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h3 className="text-sm font-medium text-gray-700 mb-3">Aging Summary</h3>
+                <div className="space-y-4">
+                  {agingSummary.length > 0 ? (
+                    agingSummary.map(period => (
+                      <div key={period.id}>
                         <div className="flex justify-between mb-1">
                           <span className="text-sm font-medium text-gray-700">{period.period}</span>
                           <span className="text-sm font-medium text-gray-700">{formatCurrency(period.amount)}</span>
@@ -1193,69 +2049,188 @@ const FinancesManagement = () => {
                           ></div>
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    ))
+                  ) : (
+                    <div className="text-sm text-gray-500">No aging data available</div>
+                  )}
                 </div>
-                
-                <div>
-                  <h3 className="text-sm font-medium text-gray-700 mb-3">Invoice Status</h3>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={[
-                            { name: 'Paid', value: 9120, color: '#4CAF50' },
-                            { name: 'Pending', value: 9820, color: '#FFC107' }
-                          ]}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          outerRadius={80}
-                          fill="#8884d8"
-                          dataKey="value"
-                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                        >
-                          <Cell fill="#4CAF50" />
-                          <Cell fill="#FFC107" />
-                        </Pie>
-                        <Tooltip 
-                          formatter={(value) => [formatCurrency(value), '']}
-                          contentStyle={{ background: '#fff', border: '1px solid #f1f1f1', borderRadius: '4px' }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
+              </div>
+              
+              <div>
+                <h3 className="text-sm font-medium text-gray-700 mb-3">Invoice Status</h3>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                         data={financialData?.invoices ? [
+                          { name: 'Paid', value: financialData.invoices.paid || 0, color: '#4CAF50' },
+                          { name: 'Pending', value: (financialData.invoices.outstanding || 0) - (financialData.invoices.overdue || 0), color: '#FFC107' },
+                          { name: 'Overdue', value: financialData.invoices.overdue || 0, color: '#F44336' }
+                        ] : [
+                          { name: 'Paid', value: 0, color: '#4CAF50' },
+                          { name: 'Pending', value: 0, color: '#FFC107' },
+                          { name: 'Overdue', value: 0, color: '#F44336' }
+                        ]}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      >
+                        <Cell fill="#4CAF50" />
+                        <Cell fill="#FFC107" />
+                        <Cell fill="#F44336" />
+                      </Pie>
+                      <Tooltip 
+                        formatter={(value) => [formatCurrency(value), '']}
+                        contentStyle={{ background: '#fff', border: '1px solid #f1f1f1', borderRadius: '4px' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
             </div>
-            
-            {/* Invoice List */}
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                <h2 className="text-lg font-semibold text-gray-800">Recent Invoices</h2>
-                <div className="flex space-x-2">
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Search className="h-5 w-5 text-gray-400" />
-                    </div>
-                    <input
-                      type="text"
-                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                      placeholder="Search invoices..."
-                    />
+          </div>
+
+          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-gray-800">Customer Management</h2>
+              <button 
+                onClick={toggleAddCustomerModal}
+                className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              >
+                <Plus size={20} className="mr-2" />
+                Add Customer
+              </button>
+            </div>
+
+            {/* Customers Table */}
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Name
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Type
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Contact
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Email
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Payment Terms
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {customers.length > 0 ? (
+                    customers.map((customer) => (
+                      <tr key={customer.id}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="font-medium text-gray-900">{customer.name}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {customer.type}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">{customer.contact_person}</div>
+                          <div className="text-sm text-gray-500">{customer.phone}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {customer.email}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {customer.payment_terms}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColors[customer.status]}`}>
+                            {customer.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <button 
+                            onClick={() => toggleViewCustomerModal(customer)}
+                            className="text-green-600 hover:text-green-900 mr-3"
+                          >
+                            View
+                          </button>
+                          <button 
+                            onClick={() => toggleEditCustomerModal(customer)}
+                            className="text-blue-600 hover:text-blue-900 mr-3"
+                          >
+                            Edit
+                          </button>
+                          <button 
+                            onClick={() => handleCustomerDelete(customer.id)}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="7" className="px-6 py-4 text-center text-sm text-gray-500">
+                        No customers found. Add a customer to get started.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          
+          {/* Invoice List */}
+          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold text-gray-800">Invoices</h2>
+              <div className="flex space-x-2">
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search className="h-5 w-5 text-gray-400" />
                   </div>
-                  <button className="flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
-                    <Download size={16} className="mr-2" />
-                    Export
-                  </button>
+                  <input
+                    type="text"
+                    value={invoiceSearchQuery}
+                    onChange={handleInvoiceSearch}
+                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                    placeholder="Search invoices..."
+                  />
+                </div>
+                <button className="flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                  <Download size={16} className="mr-2" />
+                  Export
+                </button>
+              </div>
+            </div>
+            
+            {isInvoiceLoading ? (
+              <div className="px-6 py-12 flex justify-center">
+                <div className="flex flex-col items-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-500 mb-4"></div>
+                  <p className="text-gray-600">Loading invoices...</p>
                 </div>
               </div>
+            ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Invoice ID
+                        Invoice #
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Date
@@ -1278,57 +2253,108 @@ const FinancesManagement = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {financialData.invoices.recent.map(invoice => (
-                      <tr key={invoice.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {invoice.id}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {formatDate(invoice.date)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {invoice.customer}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                          {formatCurrency(invoice.amount)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {formatDate(invoice.dueDate)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColors[invoice.status]}`}>
-                            {invoice.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <a href="#" className="text-green-600 hover:text-green-900 mr-4">View</a>
-                          <a href="#" className="text-blue-600 hover:text-blue-900 mr-4">Edit</a>
-                          {invoice.status === 'Pending' && (
-                            <a href="#" className="text-indigo-600 hover:text-indigo-900">Mark Paid</a>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    {Array.isArray(invoicesList) && invoicesList.length > 0 ? (
+                      invoicesList.map(invoice => (
+                        <tr key={invoice.id}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {invoice.invoice_number || '-'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {formatDate(invoice.date)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {invoice.customers?.name || 'Unknown Customer'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                            {formatCurrency(invoice.amount)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {formatDate(invoice.due_date)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <select
+                              value={invoice.status}
+                              onChange={(e) => handleInvoiceStatusChange(invoice.id, e.target.value)}
+                              className={`px-2 py-1 text-xs inline-flex rounded-full leading-5 font-semibold ${statusColors[invoice.status]} border-0 bg-transparent focus:ring-0 cursor-pointer`}
+                            >
+                              <option value="Pending">Pending</option>
+                              <option value="Paid">Paid</option>
+                              <option value="Overdue">Overdue</option>
+                              <option value="Cancelled">Cancelled</option>
+                            </select>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <button 
+                              onClick={() => toggleViewInvoiceModal(invoice)}
+                              className="text-green-600 hover:text-green-900 mr-4"
+                            >
+                              View
+                            </button>
+                            {invoice.status === 'Pending' && (
+                              <button 
+                                onClick={() => handleInvoiceStatusChange(invoice.id, 'Paid')}
+                                className="text-indigo-600 hover:text-indigo-900 mr-4"
+                              >
+                                Mark Paid
+                              </button>
+                            )}
+                            <button 
+                              onClick={() => handleInvoiceDelete(invoice.id)}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="7" className="px-6 py-4 text-center text-sm text-gray-500">
+                            {invoiceSearchQuery 
+                              ? 'No invoices match your search.' 
+                              : 'No invoices found. Click "Create Invoice" to add one.'}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            
+            
+            {/* Pagination - only show if we have invoices */}
+            {Array.isArray(invoicesList) && invoicesList.length > 0 && (
               <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center">
                 <div className="text-sm text-gray-500">
-                  Showing 5 of 12 invoices
+                  Showing {invoicesList.length ? (invoicesPage - 1) * invoicesPerPage + 1 : 0} to {Math.min(invoicesPage * invoicesPerPage, totalInvoices)} of {totalInvoices} invoices
                 </div>
                 <div className="flex space-x-2">
-                  <button className="px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-700">
+                  <button 
+                    onClick={() => fetchInvoices(invoicesPage - 1, invoiceSearchQuery)}
+                    disabled={invoicesPage === 1}
+                    className={`px-3 py-1 border border-gray-300 rounded-md text-sm ${
+                      invoicesPage === 1 ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
                     Previous
                   </button>
-                  <button className="px-3 py-1 border border-transparent bg-green-600 text-white rounded-md text-sm">
+                  <button 
+                    onClick={() => fetchInvoices(invoicesPage + 1, invoiceSearchQuery)}
+                    disabled={invoicesPage * invoicesPerPage >= totalInvoices}
+                    className={`px-3 py-1 border rounded-md text-sm ${
+                      invoicesPage * invoicesPerPage >= totalInvoices ? 
+                        'border-gray-300 text-gray-400 cursor-not-allowed' : 
+                        'border-transparent bg-green-600 text-white hover:bg-green-700'
+                    }`}
+                  >
                     Next
                   </button>
                 </div>
               </div>
-            </div>
+            )}
           </div>
+         </div> 
         )}
-        
         {/* Reports Tab */}
         {activeTab === 'reports' && (
           <div>
@@ -1468,20 +2494,606 @@ const FinancesManagement = () => {
         )}
       </div>
       
-      {/* Add Expense Modal */}
+      {/* Modals */}
       {isAddExpenseModalOpen && (
-        <AddExpenseModal onClose={toggleAddExpenseModal} />
-      )}
-
-      {/* Add Customer Modal */}
-      {isAddCustomerModalOpen && (
-        <AddCustomerModal onClose={toggleAddCustomerModal} />
+        <AddExpenseModal 
+          onClose={toggleAddExpenseModal} 
+          onSubmit={handleExpenseSubmit}
+        />
       )}
       
-      {/* Add Invoice Modal */}
-      {isAddInvoiceModalOpen && (
-        <AddInvoiceModal onClose={toggleAddInvoiceModal} />
+      {isEditExpenseModalOpen && selectedExpense && (
+        <EditExpenseModal 
+          expense={selectedExpense}
+          onClose={toggleEditExpenseModal} 
+          onSubmit={(data) => handleExpenseUpdate(selectedExpense.id, data)}
+        />
       )}
+      
+      {isAddCustomerModalOpen && (
+        <AddCustomerModal 
+          onClose={toggleAddCustomerModal} 
+          onSubmit={handleCustomerSubmit}
+        />
+      )}
+      
+      {isAddInvoiceModalOpen && (
+        <AddInvoiceModal 
+          onClose={toggleAddInvoiceModal} 
+          onSubmit={handleInvoiceSubmit} 
+          customers={customers || []}
+          toggleAddCustomerModal={toggleAddCustomerModal}
+        />
+      )}
+      
+      {isProcessPayrollModalOpen && (
+        <ProcessPayrollModal 
+          onClose={toggleProcessPayrollModal} 
+          onSubmit={handleProcessPayroll}
+          employees={financialData?.payroll?.employees || []}
+        />
+      )}
+      
+      {isViewPayrollHistoryModalOpen && selectedEmployee && (
+        <ViewPayrollHistoryModal 
+          employee={selectedEmployee}
+          payrollHistory={employeePayrollHistory}
+          isLoading={isLoadingPayrollHistory}
+          onClose={() => toggleViewPayrollHistoryModal()}
+        />
+      )}
+
+      {isEditEmployeePayrollModalOpen && selectedEmployee && (
+        <EditEmployeePayrollModal 
+          employee={selectedEmployee}
+          onClose={() => toggleEditEmployeePayrollModal()}
+          onSubmit={(data) => handleEditEmployeePayroll(selectedEmployee.id, data)}
+        />
+      )}
+
+      {isPayrollDetailsModalOpen && payrollDetails && (
+        <PayrollDetailsModal 
+          payrollData={payrollDetails}
+          isLoading={isLoadingPayrollDetails}
+          onClose={() => togglePayrollDetailsModal()}
+          onVoid={handleVoidPayment}
+        />
+      )}
+      {isViewInvoiceModalOpen && selectedInvoice && (
+        <ViewInvoiceModal 
+          invoice={selectedInvoice}
+          isLoading={isInvoiceDetailsLoading}
+          onClose={() => toggleViewInvoiceModal()}
+          onStatusChange={handleInvoiceStatusChange}
+          onDelete={handleInvoiceDelete}
+        />
+      )}
+
+      {isViewCustomerModalOpen && selectedCustomer && (
+        <ViewCustomerModal 
+          customer={selectedCustomer}
+          onClose={() => toggleViewCustomerModal()}
+        />
+      )}
+
+      {isEditCustomerModalOpen && selectedCustomer && (
+        <EditCustomerModal 
+          customer={selectedCustomer}
+          onClose={() => toggleEditCustomerModal()}
+          onSubmit={handleCustomerUpdate}
+        />
+      )}
+    </div>
+  );
+};
+
+// View Payroll History Modal
+const ViewPayrollHistoryModal = ({ employee, payrollHistory, isLoading, onClose }) => {
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-screen overflow-y-auto">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <h3 className="text-lg font-medium text-gray-800">
+            Payroll History - {employee.name}
+          </h3>
+          <button 
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-500"
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        {isLoading ? (
+          <div className="px-6 py-12 flex justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-500"></div>
+          </div>
+        ) : (
+          <div className="px-6 py-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-500">Position</p>
+                <p className="text-md font-semibold text-gray-800">{employee.position}</p>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-500">Pay Rate</p>
+                <p className="text-md font-semibold text-gray-800">
+                  {employee.salary ? 
+                    formatCurrency(employee.salary) + '/year' : 
+                    formatCurrency(employee.hourlyRate) + '/hour'}
+                </p>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-500">Last Payment</p>
+                <p className="text-md font-semibold text-gray-800">{formatDate(employee.lastPaid)}</p>
+              </div>
+            </div>
+            
+            <h4 className="text-md font-medium text-gray-700 mb-4">Payment History</h4>
+            {payrollHistory.length > 0 ? (
+              <div className="border rounded-md overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Pay Period
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Hours
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Gross
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Deductions
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Net Pay
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {payrollHistory.map((payment) => (
+                      <tr key={payment.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {formatDate(payment.payment_date)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatDate(payment.pay_period_start)} - {formatDate(payment.pay_period_end)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {payment.hours_worked > 0 ? payment.hours_worked : 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {formatCurrency(payment.gross_pay)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {formatCurrency(payment.deductions)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {formatCurrency(payment.net_pay)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            payment.status === 'Completed' ? 'bg-green-100 text-green-800' : 
+                            payment.status === 'Voided' ? 'bg-red-100 text-red-800' : 
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {payment.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                No payment history found for this employee.
+              </div>
+            )}
+            
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Edit Employee Payroll Modal
+const EditEmployeePayrollModal = ({ employee, onClose, onSubmit }) => {
+  const [formData, setFormData] = useState({
+    salary: employee.salary || 0,
+    hourlyRate: employee.hourlyRate || 0,
+    paySchedule: employee.payPeriod || 'Monthly',
+    bankAccount: employee.bankAccount || '',
+    taxWithholding: employee.taxWithholding || 15
+  });
+  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: name === 'taxWithholding' ? parseFloat(value) : value
+    });
+  };
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setIsSubmitting(true);
+      setError(null);
+      const success = await onSubmit(formData);
+      if (!success) {
+        setError('Failed to update payroll information. Please try again.');
+      }
+    } catch (err) {
+      setError('An error occurred. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <h3 className="text-lg font-medium text-gray-800">
+            Edit Payroll Information - {employee.name}
+          </h3>
+          <button 
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-500"
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit}>
+          <div className="px-6 py-4 space-y-4">
+            {error && (
+              <div className="bg-red-50 border-l-4 border-red-400 p-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-red-700">{error}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Payment Type
+                </label>
+                <div className="mt-1">
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center">
+                      <input
+                        id="salary"
+                        name="paymentType"
+                        type="radio"
+                        checked={!formData.hourlyRate}
+                        onChange={() => setFormData({...formData, hourlyRate: 0})}
+                        className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
+                      />
+                      <label htmlFor="salary" className="ml-2 block text-sm text-gray-700">
+                        Salary
+                      </label>
+                    </div>
+                    <div className="flex items-center">
+                      <input
+                        id="hourly"
+                        name="paymentType"
+                        type="radio"
+                        checked={!!formData.hourlyRate}
+                        onChange={() => setFormData({...formData, salary: 0, hourlyRate: 15})}
+                        className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
+                      />
+                      <label htmlFor="hourly" className="ml-2 block text-sm text-gray-700">
+                        Hourly
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <label htmlFor="paySchedule" className="block text-sm font-medium text-gray-700 mb-1">
+                  Pay Schedule
+                </label>
+                <select
+                  id="paySchedule"
+                  name="paySchedule"
+                  value={formData.paySchedule}
+                  onChange={handleChange}
+                  className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                >
+                  <option value="Weekly">Weekly</option>
+                  <option value="Bi-weekly">Bi-weekly</option>
+                  <option value="Monthly">Monthly</option>
+                  <option value="Quarterly">Quarterly</option>
+                </select>
+              </div>
+            </div>
+            
+            {formData.hourlyRate ? (
+              <div>
+                <label htmlFor="hourlyRate" className="block text-sm font-medium text-gray-700 mb-1">
+                  Hourly Rate
+                </label>
+                <div className="mt-1 relative rounded-md shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <span className="text-gray-500 sm:text-sm">$</span>
+                  </div>
+                  <input
+                    type="number"
+                    name="hourlyRate"
+                    id="hourlyRate"
+                    min="0"
+                    step="0.01"
+                    value={formData.hourlyRate}
+                    onChange={handleChange}
+                    className="block w-full pl-7 pr-12 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                    placeholder="0.00"
+                  />
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                    <span className="text-gray-500 sm:text-sm">/ hour</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label htmlFor="salary" className="block text-sm font-medium text-gray-700 mb-1">
+                  Annual Salary
+                </label>
+                <div className="mt-1 relative rounded-md shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <span className="text-gray-500 sm:text-sm">$</span>
+                  </div>
+                  <input
+                    type="number"
+                    name="salary"
+                    id="salary"
+                    min="0"
+                    step="0.01"
+                    value={formData.salary}
+                    onChange={handleChange}
+                    className="block w-full pl-7 pr-12 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                    placeholder="0.00"
+                  />
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                    <span className="text-gray-500 sm:text-sm">/ year</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            <div>
+              <label htmlFor="bankAccount" className="block text-sm font-medium text-gray-700 mb-1">
+                Bank Account (Last 4 digits)
+              </label>
+              <input
+                type="text"
+                name="bankAccount"
+                id="bankAccount"
+                maxLength="4"
+                pattern="[0-9]{4}"
+                value={formData.bankAccount}
+                onChange={handleChange}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                placeholder="1234"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                For security, only enter the last 4 digits of the account number.
+              </p>
+            </div>
+            
+            <div>
+              <label htmlFor="taxWithholding" className="block text-sm font-medium text-gray-700 mb-1">
+                Tax Withholding Rate (%)
+              </label>
+              <input
+                type="number"
+                name="taxWithholding"
+                id="taxWithholding"
+                min="0"
+                max="50"
+                step="0.1"
+                value={formData.taxWithholding}
+                onChange={handleChange}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              />
+            </div>
+          </div>
+          
+          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            >
+              {isSubmitting ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// Payroll Details Modal
+const PayrollDetailsModal = ({ payrollData, isLoading, onClose, onVoid }) => {
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-screen overflow-y-auto">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <h3 className="text-lg font-medium text-gray-800">
+            Payroll Payment Details - {payrollData.payment_id}
+          </h3>
+          <button 
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-500"
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        {isLoading ? (
+          <div className="px-6 py-12 flex justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-500"></div>
+          </div>
+        ) : (
+          <div className="px-6 py-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-500">Payment Date</p>
+                <p className="text-md font-semibold text-gray-800">{formatDate(payrollData.payment_date)}</p>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-500">Payment Type</p>
+                <p className="text-md font-semibold text-gray-800">{payrollData.payment_type}</p>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-500">Total Amount</p>
+                <p className="text-md font-semibold text-gray-800">{formatCurrency(payrollData.total_amount)}</p>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-500">Status</p>
+                <p className={`text-md font-semibold ${
+                  payrollData.status === 'Completed' ? 'text-green-600' :
+                  payrollData.status === 'Voided' ? 'text-red-600' :
+                  'text-gray-800'
+                }`}>
+                  {payrollData.status}
+                </p>
+              </div>
+            </div>
+            
+            {payrollData.notes && (
+              <div className="mb-6">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Notes</h4>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <p className="text-sm text-gray-800">{payrollData.notes}</p>
+                </div>
+              </div>
+            )}
+            
+            <h4 className="text-md font-medium text-gray-700 mb-4">Payment Items</h4>
+            <div className="border rounded-md overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Employee
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Position
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Pay Period
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Hours
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Gross Pay
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Deductions
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Net Pay
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {payrollData.items.map((item) => (
+                    <tr key={item.id}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {item.employees.name}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {item.employees.position}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(item.pay_period_start)} - {formatDate(item.pay_period_end)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {item.hours_worked > 0 ? item.hours_worked : 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {formatCurrency(item.gross_pay)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {formatCurrency(item.deductions)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {formatCurrency(item.net_pay)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            
+            <div className="flex justify-between mt-6">
+              <div>
+                {payrollData.status === 'Completed' && (
+                  <button
+                    onClick={() => onVoid(payrollData.id)}
+                    className="px-4 py-2 border border-red-300 text-red-700 rounded-md hover:bg-red-50"
+                  >
+                    Void Payment
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={onClose}
+                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -1529,17 +3141,20 @@ const ReportItem = ({ title, type, date, format, size }) => {
 };
 
 // Add Customer Modal Component
-const AddCustomerModal = ({ onClose }) => {
-    const [formData, setFormData] = useState({
-      name: '',
-      type: 'Wholesaler',
-      contactPerson: '',
-      email: '',
-      phone: '',
-      address: '',
-      paymentTerms: 'Net 30',
-      notes: ''
-    });
+const AddCustomerModal = ({ onClose, onSubmit }) => {
+  const [formData, setFormData] = useState({
+    name: '',
+    type: 'Wholesaler',
+    contactPerson: '',
+    email: '',
+    phone: '',
+    address: '',
+    paymentTerms: 'Net 30',
+    notes: ''
+  });
+  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
     
     // Handle form field changes
     const handleChange = (e) => {
@@ -1551,11 +3166,21 @@ const AddCustomerModal = ({ onClose }) => {
     };
     
     // Handle form submission
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
       e.preventDefault();
-      console.log('Customer form data submitted:', formData);
-      // Here you would make an API call to add the customer
-      onClose();
+      try {
+        setIsSubmitting(true);
+        const success = await onSubmit(formData);
+        if (success) {
+          onClose();
+        } else {
+          setError('Failed to add customer. Please try again.');
+        }
+      } catch (err) {
+        setError('An error occurred. Please try again.');
+      } finally {
+        setIsSubmitting(false);
+      }
     };
     
     return (
@@ -1730,16 +3355,20 @@ const AddCustomerModal = ({ onClose }) => {
   };
 
 // Add Expense Modal Component
-const AddExpenseModal = ({ onClose }) => {
+const AddExpenseModal = ({ onClose, onSubmit }) => {
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     category: '',
     amount: '',
     vendor: '',
     description: '',
-    paymentMethod: 'Cash',
+    payment_method: 'Cash',
+    status: 'Pending',
     receipt: null
   });
+  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
   
   // Handle form field changes
   const handleChange = (e) => {
@@ -1751,11 +3380,23 @@ const AddExpenseModal = ({ onClose }) => {
   };
   
   // Handle form submission
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Form data submitted:', formData);
-    // Here you would make an API call to add the expense
-    onClose();
+    try {
+      setIsSubmitting(true);
+      setError(null);
+      
+      // Send data to parent component's onSubmit handler
+      await onSubmit(formData);
+      
+      // Close modal on success
+      onClose();
+    } catch (err) {
+      console.error('Error submitting expense:', err);
+      setError('Failed to add expense. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   
   // Handle file selection
@@ -1785,6 +3426,21 @@ const AddExpenseModal = ({ onClose }) => {
         
         <form onSubmit={handleSubmit}>
           <div className="px-6 py-4 space-y-4">
+            {error && (
+              <div className="bg-red-50 border-l-4 border-red-400 p-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-red-700">{error}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <div>
               <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
                 Date *
@@ -1878,13 +3534,13 @@ const AddExpenseModal = ({ onClose }) => {
             </div>
             
             <div>
-              <label htmlFor="paymentMethod" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="payment_method" className="block text-sm font-medium text-gray-700 mb-1">
                 Payment Method *
               </label>
               <select
-                id="paymentMethod"
-                name="paymentMethod"
-                value={formData.paymentMethod}
+                id="payment_method"
+                name="payment_method"
+                value={formData.payment_method}
                 onChange={handleChange}
                 required
                 className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
@@ -1898,40 +3554,58 @@ const AddExpenseModal = ({ onClose }) => {
             </div>
             
             <div>
-              <label htmlFor="receipt" className="block text-sm font-medium text-gray-700 mb-1">
-                Receipt (Optional)
+              <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
+                Status *
               </label>
-              <div className="mt-1 flex items-center">
-                {formData.receipt ? (
-                  <div className="flex items-center">
-                    <span className="text-sm text-gray-500 mr-2">
-                      {formData.receipt.name}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setFormData({...formData, receipt: null})}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                ) : (
-                  <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-green-600 hover:text-green-500 focus-within:outline-none">
-                    <span>Upload a file</span>
-                    <input 
-                      id="file-upload" 
-                      name="file-upload" 
-                      type="file" 
-                      className="sr-only" 
-                      onChange={handleFileChange}
-                      accept="image/*,.pdf"
-                    />
-                  </label>
-                )}
-              </div>
+              <select
+                id="status"
+                name="status"
+                value={formData.status}
+                onChange={handleChange}
+                required
+                className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              >
+                <option value="Pending">Pending</option>
+                <option value="Paid">Paid</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
             </div>
+            
+            <div>
+            <label htmlFor="receipt" className="block text-sm font-medium text-gray-700 mb-1">
+              Receipt (Optional)
+            </label>
+            <div className="mt-1 flex items-center">
+              {formData.receipt ? (
+                <div className="flex items-center">
+                  <span className="text-sm text-gray-500 mr-2">
+                    {formData.receipt.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({...formData, receipt: null})}
+                    className="text-red-600 hover:text-red-900"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ) : (
+                <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-green-600 hover:text-green-500 focus-within:outline-none">
+                  <span>Upload a file</span>
+                  <input 
+                    id="file-upload" 
+                    name="file-upload" 
+                    type="file" 
+                    className="sr-only" 
+                    onChange={handleFileChange}
+                    accept="image/*,.pdf"
+                  />
+                </label>
+              )}
+            </div>
+          </div>
           </div>
           
           <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
@@ -1939,14 +3613,16 @@ const AddExpenseModal = ({ onClose }) => {
               type="button"
               onClick={onClose}
               className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              disabled={isSubmitting}
             >
               Cancel
             </button>
             <button
               type="submit"
               className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              disabled={isSubmitting}
             >
-              Save
+              {isSubmitting ? 'Saving...' : 'Save'}
             </button>
           </div>
         </form>
@@ -1955,25 +3631,21 @@ const AddExpenseModal = ({ onClose }) => {
   );
 };
 
-// Add Invoice Modal Component
-const AddInvoiceModal = ({ onClose }) => {
+const EditExpenseModal = ({ expense, onClose, onSubmit }) => {
   const [formData, setFormData] = useState({
-    customer: '',
-    date: new Date().toISOString().split('T')[0],
-    dueDate: '',
-    items: [{ description: '', quantity: 1, unitPrice: '', amount: 0 }],
-    notes: ''
+    date: expense.date,
+    category: expense.category,
+    amount: expense.amount,
+    vendor: expense.vendor,
+    description: expense.description || '',
+    payment_method: expense.payment_method,
+    status: expense.status,
+    receipt: null,
+    receipt_url: expense.receipt_url || null
   });
   
-  // Calculate due date 15 days from now as default
-  useEffect(() => {
-    const defaultDueDate = new Date();
-    defaultDueDate.setDate(defaultDueDate.getDate() + 15);
-    setFormData({
-      ...formData,
-      dueDate: defaultDueDate.toISOString().split('T')[0]
-    });
-  }, []);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
   
   // Handle form field changes
   const handleChange = (e) => {
@@ -1984,53 +3656,794 @@ const AddInvoiceModal = ({ onClose }) => {
     });
   };
   
-  // Handle item changes
-  const handleItemChange = (index, field, value) => {
-    const newItems = [...formData.items];
-    newItems[index][field] = value;
+  // Handle form submission
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setIsSubmitting(true);
+      setError(null);
+      await onSubmit(formData);
+    } catch (err) {
+      console.error('Error updating expense:', err);
+      setError('Failed to update expense. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  
+  // Handle file selection
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setFormData({
+        ...formData,
+        receipt: e.target.files[0],
+        receipt_url: null // Clear existing URL as we'll upload a new one
+      });
+    }
+  };
+  
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <h3 className="text-lg font-medium text-gray-800">Edit Expense</h3>
+          <button 
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-500"
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit}>
+          <div className="px-6 py-4 space-y-4">
+            {error && (
+              <div className="bg-red-50 border-l-4 border-red-400 p-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-red-700">{error}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            <div>
+              <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
+                Date *
+              </label>
+              <input
+                type="date"
+                id="date"
+                name="date"
+                value={formData.date}
+                onChange={handleChange}
+                required
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
+                Category *
+              </label>
+              <select
+                id="category"
+                name="category"
+                value={formData.category}
+                onChange={handleChange}
+                required
+                className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              >
+                <option value="">Select a category</option>
+                <option value="Feed">Feed</option>
+                <option value="Labor">Labor</option>
+                <option value="Utilities">Utilities</option>
+                <option value="Veterinary">Veterinary</option>
+                <option value="Maintenance">Maintenance</option>
+                <option value="Supplies">Supplies</option>
+                <option value="Equipment">Equipment</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            
+            <div>
+              <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">
+                Amount *
+              </label>
+              <div className="relative rounded-md shadow-sm">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <span className="text-gray-500 sm:text-sm">$</span>
+                </div>
+                <input
+                  type="number"
+                  id="amount"
+                  name="amount"
+                  value={formData.amount}
+                  onChange={handleChange}
+                  required
+                  min="0"
+                  step="0.01"
+                  className="block w-full pl-7 pr-12 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label htmlFor="vendor" className="block text-sm font-medium text-gray-700 mb-1">
+                Vendor *
+              </label>
+              <input
+                type="text"
+                id="vendor"
+                name="vendor"
+                value={formData.vendor}
+                onChange={handleChange}
+                required
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+                Description
+              </label>
+              <textarea
+                id="description"
+                name="description"
+                rows={3}
+                value={formData.description}
+                onChange={handleChange}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                placeholder="Additional details about this expense..."
+              ></textarea>
+            </div>
+            
+            <div>
+              <label htmlFor="payment_method" className="block text-sm font-medium text-gray-700 mb-1">
+                Payment Method *
+              </label>
+              <select
+                id="payment_method"
+                name="payment_method"
+                value={formData.payment_method}
+                onChange={handleChange}
+                required
+                className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              >
+                <option value="Cash">Cash</option>
+                <option value="Credit Card">Credit Card</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+                <option value="Check">Check</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            
+            <div>
+              <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
+                Status *
+              </label>
+              <select
+                id="status"
+                name="status"
+                value={formData.status}
+                onChange={handleChange}
+                required
+                className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              >
+                <option value="Pending">Pending</option>
+                <option value="Paid">Paid</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="receipt" className="block text-sm font-medium text-gray-700 mb-1">
+              Receipt (Optional)
+            </label>
+            <div className="mt-1">
+              {formData.receipt ? (
+                <div className="flex items-center">
+                  <span className="text-sm text-gray-500 mr-2">
+                    {formData.receipt.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({
+                      ...formData, 
+                      receipt: null,
+                      receipt_url: expense.receipt_url // Restore original URL
+                    })}
+                    className="text-red-600 hover:text-red-900"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ) : formData.receipt_url ? (
+                <div className="flex items-center">
+                  <a 
+                    href={formData.receipt_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-600 hover:text-blue-800 mr-2"
+                  >
+                    View current receipt
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({...formData, receipt_url: null})}
+                    className="text-red-600 hover:text-red-900"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ) : (
+                <label htmlFor="file-upload-edit" className="relative cursor-pointer bg-white rounded-md font-medium text-green-600 hover:text-green-500 focus-within:outline-none">
+                  <span>Upload a file</span>
+                  <input 
+                    id="file-upload-edit" 
+                    name="file-upload-edit" 
+                    type="file" 
+                    className="sr-only" 
+                    onChange={handleFileChange}
+                    accept="image/*,.pdf"
+                  />
+                </label>
+              )}
+            </div>
+          </div>
+          
+          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const ProcessPayrollModal = ({ onClose, onSubmit, employees }) => {
+  const [formData, setFormData] = useState({
+    date: new Date().toISOString().split('T')[0],
+    type: 'Monthly Salary',
+    notes: '',
+    selectedEmployees: []
+  });
+  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  
+  // Initialize with all employees selected
+  useEffect(() => {
+    if (employees && employees.length > 0) {
+      const initialSelected = employees
+        .filter(emp => 
+          (formData.type === 'Monthly Salary' && !emp.hourlyRate) || 
+          (formData.type === 'Bi-weekly Wages' && emp.hourlyRate)
+        )
+        .map(emp => ({
+          employee_id: emp.id,
+          name: emp.name,
+          position: emp.position,
+          salary: emp.salary,
+          hourly_rate: emp.hourlyRate,
+          hours_worked: emp.hourlyRate ? 80 : 0, // Default 80 hours for bi-weekly
+          gross_pay: emp.hourlyRate ? (emp.hourlyRate * 80) : (emp.salary / 12),
+          deductions: emp.hourlyRate ? ((emp.hourlyRate * 80) * 0.15) : ((emp.salary / 12) * 0.15),
+          net_pay: emp.hourlyRate ? ((emp.hourlyRate * 80) * 0.85) : ((emp.salary / 12) * 0.85),
+          pay_period_start: new Date(new Date().getFullYear(), new Date().getMonth() - 1, 16).toISOString().split('T')[0],
+          pay_period_end: new Date(new Date().getFullYear(), new Date().getMonth(), 15).toISOString().split('T')[0]
+        }));
+      
+      setFormData(prev => ({
+        ...prev,
+        selectedEmployees: initialSelected
+      }));
+    }
+  }, [employees, formData.type]);
+  
+  // Calculate total amount
+  const totalAmount = formData.selectedEmployees.reduce((sum, emp) => sum + emp.gross_pay, 0);
+  
+  // Handle form field changes
+  const handleChange = (e) => {
+    const { name, value } = e.target;
     
-    // Calculate item amount if unit price or quantity changes
-    if (field === 'unitPrice' || field === 'quantity') {
-      const quantity = parseFloat(newItems[index].quantity) || 0;
-      const unitPrice = parseFloat(newItems[index].unitPrice) || 0;
-      newItems[index].amount = quantity * unitPrice;
+    if (name === 'type') {
+      // Filter employees based on payment type
+      const filteredEmployees = employees
+        .filter(emp => 
+          (value === 'Monthly Salary' && !emp.hourlyRate) || 
+          (value === 'Bi-weekly Wages' && emp.hourlyRate)
+        )
+        .map(emp => ({
+          employee_id: emp.id,
+          name: emp.name,
+          position: emp.position,
+          salary: emp.salary,
+          hourly_rate: emp.hourlyRate,
+          hours_worked: emp.hourlyRate ? 80 : 0,
+          gross_pay: emp.hourlyRate ? (emp.hourlyRate * 80) : (emp.salary / 12),
+          deductions: emp.hourlyRate ? ((emp.hourlyRate * 80) * 0.15) : ((emp.salary / 12) * 0.15),
+          net_pay: emp.hourlyRate ? ((emp.hourlyRate * 80) * 0.85) : ((emp.salary / 12) * 0.85),
+          pay_period_start: new Date(new Date().getFullYear(), new Date().getMonth() - 1, 16).toISOString().split('T')[0],
+          pay_period_end: new Date(new Date().getFullYear(), new Date().getMonth(), 15).toISOString().split('T')[0]
+        }));
+      
+      setFormData({
+        ...formData,
+        [name]: value,
+        selectedEmployees: filteredEmployees
+      });
+    } else {
+      setFormData({
+        ...formData,
+        [name]: value
+      });
+    }
+  };
+  
+  // Handle changes to employee payroll details
+  const handleEmployeeChange = (empId, field, value) => {
+    const updatedEmployees = formData.selectedEmployees.map(emp => {
+      if (emp.employee_id === empId) {
+        let updatedEmp = { ...emp, [field]: value };
+        
+        // Recalculate if hours or rate changes
+        if (field === 'hours_worked' || field === 'hourly_rate') {
+          const hours = field === 'hours_worked' ? value : emp.hours_worked;
+          const rate = field === 'hourly_rate' ? value : emp.hourly_rate;
+          const gross = hours * rate;
+          
+          updatedEmp.gross_pay = gross;
+          updatedEmp.deductions = gross * 0.15;
+          updatedEmp.net_pay = gross * 0.85;
+        }
+        
+        // Recalculate if gross pay changes
+        if (field === 'gross_pay') {
+          updatedEmp.deductions = value * 0.15;
+          updatedEmp.net_pay = value * 0.85;
+        }
+        
+        // Recalculate if deductions change
+        if (field === 'deductions') {
+          updatedEmp.net_pay = emp.gross_pay - value;
+        }
+        
+        return updatedEmp;
+      }
+      return emp;
+    });
+    
+    setFormData({
+      ...formData,
+      selectedEmployees: updatedEmployees
+    });
+  };
+  
+  // Handle form submission
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setIsSubmitting(true);
+      setError(null);
+      
+      const payrollData = {
+        date: formData.date,
+        type: formData.type,
+        total_amount: totalAmount,
+        notes: formData.notes,
+        employee_payments: formData.selectedEmployees
+      };
+      
+      const success = await onSubmit(payrollData);
+      if (success) {
+        onClose();
+      } else {
+        setError('Failed to process payroll. Please try again.');
+      }
+    } catch (err) {
+      console.error('Error processing payroll:', err);
+      setError('An error occurred. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-screen overflow-y-auto">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <h3 className="text-lg font-medium text-gray-800">Process Payroll</h3>
+          <button 
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-500"
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit}>
+          <div className="px-6 py-4 space-y-4">
+            {error && (
+              <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-red-700">{error}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
+                  Payment Date *
+                </label>
+                <input
+                  type="date"
+                  id="date"
+                  name="date"
+                  value={formData.date}
+                  onChange={handleChange}
+                  required
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                />
+              </div>
+              
+              <div>
+                <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-1">
+                  Payment Type *
+                </label>
+                <select
+                  id="type"
+                  name="type"
+                  value={formData.type}
+                  onChange={handleChange}
+                  required
+                  className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                >
+                  <option value="Monthly Salary">Monthly Salary</option>
+                  <option value="Bi-weekly Wages">Bi-weekly Wages</option>
+                </select>
+              </div>
+              
+              <div>
+                <label htmlFor="totalAmount" className="block text-sm font-medium text-gray-700 mb-1">
+                  Total Amount
+                </label>
+                <input
+                  type="text"
+                  id="totalAmount"
+                  name="totalAmount"
+                  value={formatCurrency(totalAmount)}
+                  readOnly
+                  className="block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm focus:outline-none sm:text-sm"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
+                Notes
+              </label>
+              <textarea
+                id="notes"
+                name="notes"
+                rows={2}
+                value={formData.notes}
+                onChange={handleChange}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                placeholder="Any additional notes for this payroll..."
+              ></textarea>
+            </div>
+            
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Employee Payments</h4>
+              <div className="border rounded-md overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Employee
+                      </th>
+                      <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Position
+                      </th>
+                      {formData.type === 'Bi-weekly Wages' && (
+                        <>
+                          <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Hours
+                          </th>
+                          <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Rate
+                          </th>
+                        </>
+                      )}
+                      <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Gross Pay
+                      </th>
+                      <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Deductions
+                      </th>
+                      <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Net Pay
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {formData.selectedEmployees.length > 0 ? (
+                      formData.selectedEmployees.map((emp) => (
+                        <tr key={emp.employee_id}>
+                          <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
+                            {emp.name}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
+                            {emp.position}
+                          </td>
+                          {formData.type === 'Bi-weekly Wages' && (
+                            <>
+                              <td className="px-3 py-2 whitespace-nowrap">
+                                <input
+                                  type="number"
+                                  value={emp.hours_worked}
+                                  onChange={(e) => handleEmployeeChange(
+                                    emp.employee_id, 
+                                    'hours_worked', 
+                                    parseFloat(e.target.value)
+                                  )}
+                                  min="0"
+                                  step="0.5"
+                                  className="w-16 px-2 py-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                                />
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap">
+                                <div className="flex items-center">
+                                  <span className="text-gray-500 mr-1">$</span>
+                                  <input
+                                    type="number"
+                                    value={emp.hourly_rate}
+                                    onChange={(e) => handleEmployeeChange(
+                                      emp.employee_id, 
+                                      'hourly_rate', 
+                                      parseFloat(e.target.value)
+                                    )}
+                                    min="0"
+                                    step="0.01"
+                                    className="w-16 px-2 py-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                                  />
+                                </div>
+                              </td>
+                            </>
+                          )}
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <span className="text-gray-500 mr-1">$</span>
+                              <input
+                                type="number"
+                                value={emp.gross_pay.toFixed(2)}
+                                onChange={(e) => handleEmployeeChange(
+                                  emp.employee_id, 
+                                  'gross_pay', 
+                                  parseFloat(e.target.value)
+                                )}
+                                min="0"
+                                step="0.01"
+                                className="w-24 px-2 py-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                              />
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <span className="text-gray-500 mr-1">$</span>
+                              <input
+                                type="number"
+                                value={emp.deductions.toFixed(2)}
+                                onChange={(e) => handleEmployeeChange(
+                                  emp.employee_id, 
+                                  'deductions', 
+                                  parseFloat(e.target.value)
+                                )}
+                                min="0"
+                                step="0.01"
+                                className="w-24 px-2 py-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                              />
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {formatCurrency(emp.net_pay)}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={formData.type === 'Bi-weekly Wages' ? 7 : 5} className="px-3 py-4 text-center text-sm text-gray-500">
+                          No eligible employees for {formData.type}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          
+          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              disabled={isSubmitting || formData.selectedEmployees.length === 0}
+            >
+              {isSubmitting ? 'Processing...' : 'Process Payroll'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// Add Invoice Modal Component
+const AddInvoiceModal = ({ onClose, onSubmit, customers = [], toggleAddCustomerModal }) => {
+  const [formData, setFormData] = useState({
+    customer: '', // This will store the customer ID, not the name
+    date: new Date().toISOString().split('T')[0],
+    dueDate: '',
+    items: [{ description: '', quantity: 1, unitPrice: '', amount: 0 }],
+    notes: ''
+  });
+  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  
+  // Set default due date on component mount
+  useEffect(() => {
+    // Calculate due date 15 days from now as default
+    const defaultDueDate = new Date();
+    defaultDueDate.setDate(defaultDueDate.getDate() + 15);
+    setFormData(prevData => ({
+      ...prevData,
+      dueDate: defaultDueDate.toISOString().split('T')[0]
+    }));
+  }, []);
+
+  // Add item to invoice
+  const addItem = () => {
+    setFormData({
+      ...formData,
+      items: [
+        ...formData.items,
+        { description: '', quantity: 1, unitPrice: '', amount: 0 }
+      ]
+    });
+  };
+  
+  // Remove item from invoice
+  const removeItem = (index) => {
+    setFormData({
+      ...formData,
+      items: formData.items.filter((_, i) => i !== index)
+    });
+  };
+  
+  // Handle item field changes and calculate amounts
+  const handleItemChange = (index, field, value) => {
+    const updatedItems = [...formData.items];
+    updatedItems[index] = {
+      ...updatedItems[index],
+      [field]: value
+    };
+    
+    // Recalculate amount if quantity or unit price changes
+    if (field === 'quantity' || field === 'unitPrice') {
+      const quantity = field === 'quantity' ? parseFloat(value) || 0 : parseFloat(updatedItems[index].quantity) || 0;
+      const unitPrice = field === 'unitPrice' ? parseFloat(value) || 0 : parseFloat(updatedItems[index].unitPrice) || 0;
+      updatedItems[index].amount = quantity * unitPrice;
     }
     
     setFormData({
       ...formData,
-      items: newItems
+      items: updatedItems
     });
   };
   
-  // Add a new item
-  const addItem = () => {
-    setFormData({
-      ...formData,
-      items: [...formData.items, { description: '', quantity: 1, unitPrice: '', amount: 0 }]
-    });
-  };
-  
-  // Remove an item
-  const removeItem = (index) => {
-    const newItems = [...formData.items];
-    newItems.splice(index, 1);
-    setFormData({
-      ...formData,
-      items: newItems
-    });
-  };
-  
-  // Calculate total
+  // Calculate total amount of all items
   const calculateTotal = () => {
     return formData.items.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
   };
   
+  // Handle form field changes
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
+  };
+  
+  // Rest of the component remains the same
+  
   // Handle form submission
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Form data submitted:', formData);
-    // Here you would make an API call to create the invoice
-    onClose();
+    try {
+      setIsSubmitting(true);
+      setError(null);
+      
+      // Format items correctly
+      const formattedItems = formData.items.map(item => ({
+        description: item.description,
+        quantity: parseFloat(item.quantity),
+        unitPrice: parseFloat(item.unitPrice),
+        amount: parseFloat(item.amount)
+      }));
+      
+      // Calculate total amount
+      const totalAmount = formattedItems.reduce((sum, item) => sum + item.amount, 0);
+      
+      // Prepare the invoice data with proper customer ID
+      const invoiceData = {
+        customerId: formData.customer, // This is the customer ID
+        date: formData.date,
+        dueDate: formData.dueDate,
+        amount: totalAmount,
+        notes: formData.notes
+      };
+      
+      const success = await onSubmit(invoiceData, formattedItems);
+      if (success) {
+        onClose();
+      } else {
+        setError('Failed to create invoice. Please try again.');
+      }
+    } catch (err) {
+      console.error('Error creating invoice:', err);
+      setError(`An error occurred: ${err.message || 'Please try again.'}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   
   return (
@@ -2051,10 +4464,11 @@ const AddInvoiceModal = ({ onClose }) => {
         <form onSubmit={handleSubmit}>
           <div className="px-6 py-4 space-y-6">
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-              <div>
-                <label htmlFor="customer" className="block text-sm font-medium text-gray-700 mb-1">
-                  Customer *
-                </label>
+            <div>
+              <label htmlFor="customer" className="block text-sm font-medium text-gray-700 mb-1">
+                Customer *
+              </label>
+              <div className="flex">
                 <select
                   id="customer"
                   name="customer"
@@ -2064,11 +4478,21 @@ const AddInvoiceModal = ({ onClose }) => {
                   className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                 >
                   <option value="">Select a customer</option>
-                  <option value="Dairy Processors Inc.">Dairy Processors Inc.</option>
-                  <option value="Fresh Foods Market">Fresh Foods Market</option>
-                  <option value="Organic Farms Co-op">Organic Farms Co-op</option>
+                  {customers.map(customer => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.name}
+                    </option>
+                  ))}
                 </select>
+                <button
+                  type="button" 
+                  onClick={toggleAddCustomerModal} 
+                  className="ml-2 px-3 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  <Plus size={16} />
+                </button>
               </div>
+            </div>
               
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -2238,6 +4662,517 @@ const AddInvoiceModal = ({ onClose }) => {
               className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
             >
               Create Invoice
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// View Invoice Modal component
+const ViewInvoiceModal = ({ invoice, isLoading, onClose, onStatusChange, onDelete }) => {
+  if (!invoice) return null;
+  
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-screen overflow-y-auto">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <h3 className="text-lg font-medium text-gray-800">
+            Invoice Details - {invoice.invoice_number}
+          </h3>
+          <button 
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-500"
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        {isLoading ? (
+          <div className="px-6 py-12 flex justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-500"></div>
+          </div>
+        ) : (
+          <div className="px-6 py-4 space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between">
+              <div>
+                <h4 className="text-lg font-medium text-gray-900">Customer Information</h4>
+                <p className="text-sm text-gray-600 mt-2">{invoice.customers?.name}</p>
+                <p className="text-sm text-gray-600">{invoice.customers?.email}</p>
+                <p className="text-sm text-gray-600">{invoice.customers?.phone}</p>
+                <p className="text-sm text-gray-600">{invoice.customers?.address}</p>
+              </div>
+              
+              <div className="mt-4 sm:mt-0">
+                <h4 className="text-lg font-medium text-gray-900">Invoice Details</h4>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-2">
+                  <div className="text-sm text-gray-600">Invoice Number:</div>
+                  <div className="text-sm font-medium text-gray-900">{invoice.invoice_number}</div>
+                  
+                  <div className="text-sm text-gray-600">Date:</div>
+                  <div className="text-sm font-medium text-gray-900">{formatDate(invoice.date)}</div>
+                  
+                  <div className="text-sm text-gray-600">Due Date:</div>
+                  <div className="text-sm font-medium text-gray-900">{formatDate(invoice.due_date)}</div>
+                  
+                  <div className="text-sm text-gray-600">Status:</div>
+                  <div>
+                    <select
+                      value={invoice.status}
+                      onChange={(e) => onStatusChange(invoice.id, e.target.value)}
+                      className={`px-2 py-1 text-xs inline-flex rounded-full leading-5 font-semibold ${statusColors[invoice.status]} border-0 bg-transparent focus:ring-0 cursor-pointer`}
+                    >
+                      <option value="Pending">Pending</option>
+                      <option value="Paid">Paid</option>
+                      <option value="Overdue">Overdue</option>
+                      <option value="Cancelled">Cancelled</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div>
+              <h4 className="text-lg font-medium text-gray-900 mb-3">Invoice Items</h4>
+              <div className="border rounded-md overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Description
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Quantity
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Unit Price
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Amount
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {invoice.items && invoice.items.map((item) => (
+                      <tr key={item.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {item.description}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {item.quantity}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatCurrency(item.unit_price)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {formatCurrency(item.amount)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-gray-50">
+                    <tr>
+                      <td colSpan="3" className="px-6 py-4 text-sm font-medium text-gray-900 text-right">
+                        Total:
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {formatCurrency(invoice.amount)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+            
+            {invoice.notes && (
+              <div>
+                <h4 className="text-lg font-medium text-gray-900 mb-1">Notes</h4>
+                <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-md">
+                  {invoice.notes}
+                </p>
+              </div>
+            )}
+            
+            <div className="flex justify-between border-t border-gray-200 pt-4">
+              <div>
+                <button
+                  onClick={() => onDelete(invoice.id)}
+                  className="px-4 py-2 border border-red-300 text-red-700 rounded-md hover:bg-red-50"
+                >
+                  Delete Invoice
+                </button>
+              </div>
+              <div className="space-x-3">
+                {invoice.status === 'Pending' && (
+                  <button
+                    onClick={() => onStatusChange(invoice.id, 'Paid')}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                  >
+                    Mark as Paid
+                  </button>
+                )}
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2 border border-transparent bg-green-600 text-white rounded-md hover:bg-green-700"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const ViewCustomerModal = ({ customer, onClose }) => {
+  if (!customer) return null;
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <h3 className="text-lg font-medium text-gray-800">Customer Details</h3>
+          <button 
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-500"
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <div className="px-6 py-4 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h4 className="text-sm font-medium text-gray-500">General Information</h4>
+              <div className="mt-3 space-y-2">
+                <div>
+                  <p className="text-xs text-gray-500">Name</p>
+                  <p className="text-sm font-medium">{customer.name}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Type</p>
+                  <p className="text-sm">{customer.type}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Status</p>
+                  <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColors[customer.status]}`}>
+                    {customer.status}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Payment Terms</p>
+                  <p className="text-sm">{customer.payment_terms}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div>
+              <h4 className="text-sm font-medium text-gray-500">Contact Information</h4>
+              <div className="mt-3 space-y-2">
+                <div>
+                  <p className="text-xs text-gray-500">Contact Person</p>
+                  <p className="text-sm">{customer.contact_person || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Email</p>
+                  <p className="text-sm">{customer.email}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Phone</p>
+                  <p className="text-sm">{customer.phone}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Address</p>
+                  <p className="text-sm">{customer.address || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div>
+            <h4 className="text-sm font-medium text-gray-500">Business Details</h4>
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-gray-500">Total Purchases</p>
+                <p className="text-sm font-medium">{formatCurrency(customer.total_purchases || 0)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Last Order</p>
+                <p className="text-sm">{customer.last_order ? formatDate(customer.last_order) : 'No orders'}</p>
+              </div>
+            </div>
+          </div>
+          
+          {customer.notes && (
+            <div>
+              <h4 className="text-sm font-medium text-gray-500">Notes</h4>
+              <p className="mt-2 text-sm bg-gray-50 p-3 rounded">{customer.notes}</p>
+            </div>
+          )}
+        </div>
+        
+        <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const EditCustomerModal = ({ customer, onClose, onSubmit }) => {
+  const [formData, setFormData] = useState({
+    name: customer?.name || '',
+    type: customer?.type || 'Wholesaler',
+    contact_person: customer?.contact_person || '',
+    email: customer?.email || '',
+    phone: customer?.phone || '',
+    address: customer?.address || '',
+    payment_terms: customer?.payment_terms || 'Net 30',
+    status: customer?.status || 'Active',
+    notes: customer?.notes || ''
+  });
+  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  
+  // Handle form field changes
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
+  };
+  
+  // Handle form submission
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setIsSubmitting(true);
+      setError(null);
+      
+      const success = await onSubmit(customer.id, formData);
+      if (success) {
+        onClose();
+      } else {
+        setError('Failed to update customer. Please try again.');
+      }
+    } catch (err) {
+      console.error('Error updating customer:', err);
+      setError('An error occurred. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <h3 className="text-lg font-medium text-gray-800">Edit Customer</h3>
+          <button 
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-500"
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit}>
+          <div className="px-6 py-4 space-y-4">
+            {error && (
+              <div className="bg-red-50 border-l-4 border-red-400 p-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-red-700">{error}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            <div>
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                Customer Name *
+              </label>
+              <input
+                type="text"
+                id="name"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                required
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-1">
+                Customer Type *
+              </label>
+              <select
+                id="type"
+                name="type"
+                value={formData.type}
+                onChange={handleChange}
+                required
+                className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              >
+                <option value="Wholesaler">Wholesaler</option>
+                <option value="Retailer">Retailer</option>
+                <option value="Distributor">Distributor</option>
+                <option value="Processor">Processor</option>
+                <option value="Direct Consumer">Direct Consumer</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            
+            <div>
+              <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
+                Status *
+              </label>
+              <select
+                id="status"
+                name="status"
+                value={formData.status}
+                onChange={handleChange}
+                required
+                className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              >
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+            
+            <div>
+              <label htmlFor="contact_person" className="block text-sm font-medium text-gray-700 mb-1">
+                Contact Person
+              </label>
+              <input
+                type="text"
+                id="contact_person"
+                name="contact_person"
+                value={formData.contact_person}
+                onChange={handleChange}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              />
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                  Email *
+                </label>
+                <input
+                  type="email"
+                  id="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  required
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                />
+              </div>
+              
+              <div>
+                <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
+                  Phone Number *
+                </label>
+                <input
+                  type="tel"
+                  id="phone"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  required
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
+                Address
+              </label>
+              <textarea
+                id="address"
+                name="address"
+                rows={2}
+                value={formData.address}
+                onChange={handleChange}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              ></textarea>
+            </div>
+            
+            <div>
+              <label htmlFor="payment_terms" className="block text-sm font-medium text-gray-700 mb-1">
+                Payment Terms *
+              </label>
+              <select
+                id="payment_terms"
+                name="payment_terms"
+                value={formData.payment_terms}
+                onChange={handleChange}
+                required
+                className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              >
+                <option value="Net 15">Net 15 (Due in 15 days)</option>
+                <option value="Net 30">Net 30 (Due in 30 days)</option>
+                <option value="Net 45">Net 45 (Due in 45 days)</option>
+                <option value="Net 60">Net 60 (Due in 60 days)</option>
+                <option value="Due on Receipt">Due on Receipt</option>
+              </select>
+            </div>
+            
+            <div>
+              <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
+                Notes
+              </label>
+              <textarea
+                id="notes"
+                name="notes"
+                rows={3}
+                value={formData.notes}
+                onChange={handleChange}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                placeholder="Additional information about this customer..."
+              ></textarea>
+            </div>
+          </div>
+          
+          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            >
+              {isSubmitting ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         </form>

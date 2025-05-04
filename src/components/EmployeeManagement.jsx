@@ -11,7 +11,13 @@ import {
   getEmployeeShifts,
   getEmployeePerformance,
   getScheduledReviews,
-  schedulePerformanceReview,assignShifts
+  schedulePerformanceReview,
+  assignShifts,
+  getPerformanceReviews,
+  updatePerformanceReview,
+  createPerformanceReview,
+  deletePerformanceReview,
+  getEmployeePerformanceReviews
 } from './services/employeeService';
 import { supabase } from '../lib/supabase';
 import emp from './emp.jpg';
@@ -129,16 +135,13 @@ const EmployeeManagement = () => {
           
           setIsLoading(false);
         } else if (activeTab === 'performance') {
-          setIsLoading(true);
-          
-          // Fetch performance data
-          const performance = await getEmployeePerformance();
-          const reviews = await getScheduledReviews();
-          
-          setPerformanceData(performance);
-          setScheduledReviews(reviews);
-          
-          setIsLoading(false);
+          // Load performance data
+          const [reviews, scheduled] = await Promise.all([
+            getPerformanceReviews(),
+            getPerformanceReviews() // You can filter this in the backend for scheduled reviews
+          ]);
+          setPerformanceData(reviews);
+          setScheduledReviews(scheduled);
         }
       } catch (err) {
         console.error('Error loading tab data:', err);
@@ -151,6 +154,31 @@ const EmployeeManagement = () => {
       loadTabData();
     }
   }, [activeTab]);
+
+  const refreshPerformanceData = async () => {
+    setIsLoading(true);
+    try {
+      // Fetch performance reviews and scheduled reviews
+      const [perfData, reviewsData] = await Promise.all([
+        getPerformanceReviews(),
+        getScheduledReviews()
+      ]);
+      
+      // Update state with new data
+      setPerformanceData(perfData || []);
+      setScheduledReviews(reviewsData || []);
+      
+      // Also refresh employee data to get updated performance ratings
+      await loadEmployees();
+      
+      setError(null);
+    } catch (err) {
+      console.error("Error refreshing performance data:", err);
+      setError("Failed to load performance data. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   // Load all employees
   const loadEmployees = async () => {
@@ -644,6 +672,7 @@ const EmployeeManagement = () => {
               scheduledReviews={scheduledReviews}
               employees={employees}
               isLoading={isLoading} 
+              onRefreshData={refreshPerformanceData}
             />
           )}
         </div>
@@ -979,10 +1008,93 @@ const ReviewItem = ({ date, reviewer, rating, summary }) => {
 };
 
 const OverviewTab = ({ employee }) => {
-  // The skills and certifications are now arrays from Supabase
-  const skills = employee.skills || [];
-  const certifications = employee.certifications || [];
+  const [recentActivity, setRecentActivity] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [performanceMetrics, setPerformanceMetrics] = useState({
+    rating: employee.performance_rating || 0
+  });
+  const [attendanceMetrics, setAttendanceMetrics] = useState({
+    attendanceRate: employee.attendance_rate || 0
+  });
+  const skills = employee.skills 
+    ? (Array.isArray(employee.skills) ? employee.skills : [employee.skills]) 
+    : [];
   
+  const certifications = employee.certifications 
+    ? (Array.isArray(employee.certifications) ? employee.certifications : [employee.certifications]) 
+    : [];
+  
+  // Load recent activity and calculate metrics
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Get performance reviews for this employee - existing code
+        const performanceReviews = await getEmployeePerformanceReviews(employee.id);
+        
+        // Calculate actual performance rating - existing code
+        if (performanceReviews && performanceReviews.length > 0) {
+          // ...existing performance calculation...
+        }
+        
+        // Calculate attendance rate from attendance history
+        if (employee.attendanceHistory && Array.isArray(employee.attendanceHistory)) {
+          const presentDays = employee.attendanceHistory.filter(record => 
+            record && (record.status === 'Present' || record.status === 'Late')).length;
+          
+          const totalDays = employee.attendanceHistory.length;
+          
+          if (totalDays > 0) {
+            const attendanceRate = ((presentDays / totalDays) * 100).toFixed(1);
+            setAttendanceMetrics({ attendanceRate });
+          }
+        }
+        
+        // Format activities - existing code
+        const attendanceRecords = employee.attendanceHistory || [];
+        
+        // Format attendance activities
+        const attendanceActivities = (attendanceRecords || [])
+          .slice(0, 3)
+          .map(record => ({
+            id: `attendance-${record.id || Math.random()}`,
+            type: 'attendance',
+            description: `${record.status} on ${formatDate(record.date)}${record.notes ? `: ${record.notes}` : ''}`,
+            date: record.date,
+            timestamp: new Date(record.date).getTime()
+          }));
+        
+        // Format performance review activities
+        const reviewActivities = (performanceReviews || [])
+          .slice(0, 3)
+          .map(review => ({
+            id: `review-${review.id}`,
+            type: 'performance',
+            description: `${review.review_type} review ${review.status.toLowerCase()}${review.status === 'Completed' ? ` with rating ${review.rating}/5` : ''}`,
+            date: review.status === 'Completed' ? review.completion_date : review.scheduled_date,
+            timestamp: new Date(review.status === 'Completed' ? review.completion_date : review.scheduled_date).getTime()
+          }));
+        
+        // Combine and sort activities by date (newest first)
+        const combinedActivities = [...attendanceActivities, ...reviewActivities]
+          .sort((a, b) => b.timestamp - a.timestamp)
+          .slice(0, 5);
+        
+        setRecentActivity(combinedActivities);
+      } catch (err) {
+        console.error('Error fetching employee data:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    if (employee?.id) {
+      fetchData();
+    }
+  }, [employee?.id]);
+  
+  // In the return statement, update the performance rating display:
   return (
     <div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -991,11 +1103,20 @@ const OverviewTab = ({ employee }) => {
             <div>
               <p className="text-sm font-medium text-gray-500">Performance Rating</p>
               <p className="text-2xl font-semibold text-gray-800 mt-1">
-                {employee.performance_rating ? `${employee.performance_rating}/5.0` : 'Not rated'}
+                {performanceMetrics.rating > 0 ? `${performanceMetrics.rating}/5.0` : 'Not rated'}
               </p>
             </div>
             <div className="p-2 rounded-full bg-green-50 text-green-600">
               <Award size={20} />
+            </div>
+          </div>
+          <div className="mt-4 flex items-center">
+            <div className="flex mr-2">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <svg key={star} className={`w-5 h-5 ${star <= Math.floor(performanceMetrics.rating) ? 'text-yellow-400' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                </svg>
+              ))}
             </div>
           </div>
         </div>
@@ -1004,7 +1125,7 @@ const OverviewTab = ({ employee }) => {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-sm font-medium text-gray-500">Attendance Rate</p>
-              <p className="text-2xl font-semibold text-gray-800 mt-1">{employee.attendance_rate || 100}%</p>
+              <p className="text-2xl font-semibold text-gray-800 mt-1">{attendanceMetrics.attendanceRate}%</p>
             </div>
             <div className="p-2 rounded-full bg-blue-50 text-blue-600">
               <Calendar size={20} />
@@ -1016,7 +1137,7 @@ const OverviewTab = ({ employee }) => {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-sm font-medium text-gray-500">Schedule</p>
-              <p className="text-2xl font-semibold text-gray-800 mt-1">{employee.schedule}</p>
+              <p className="text-2xl font-semibold text-gray-800 mt-1">{employee.schedule || 'Full-time'}</p>
             </div>
             <div className="p-2 rounded-full bg-purple-50 text-purple-600">
               <Clock size={20} />
@@ -1025,32 +1146,114 @@ const OverviewTab = ({ employee }) => {
         </div>
       </div>
       
-      <div className="bg-white shadow rounded-lg overflow-hidden mb-6">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-800">Skills & Certifications</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div className="bg-white shadow rounded-lg overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h3 className="text-lg font-medium text-gray-800">Skills & Certifications</h3>
+          </div>
+          <div className="p-6">
+            <h4 className="text-sm font-medium text-gray-700 mb-3">Skills</h4>
+            <div className="flex flex-wrap gap-2 mb-6">
+              {skills.length > 0 ? skills.map((skill, index) => (
+                <span key={index} className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                  {skill}
+                </span>
+              )) : (
+                <span className="text-sm text-gray-500">No skills listed</span>
+              )}
+            </div>
+            
+            <h4 className="text-sm font-medium text-gray-700 mb-3">Certifications</h4>
+            <div className="space-y-2">
+              {certifications.length > 0 ? certifications.map((cert, index) => (
+                <div key={index} className="flex items-center">
+                  <FileText size={16} className="text-gray-400 mr-2" />
+                  <span className="text-gray-700">{cert}</span>
+                </div>
+              )) : (
+                <span className="text-sm text-gray-500">No certifications listed</span>
+              )}
+            </div>
+          </div>
         </div>
-        <div className="p-6">
-          <h4 className="text-sm font-medium text-gray-700 mb-3">Skills</h4>
-          <div className="flex flex-wrap gap-2 mb-6">
-            {skills.length > 0 ? skills.map((skill, index) => (
-              <span key={index} className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                {skill}
-              </span>
-            )) : (
-              <span className="text-sm text-gray-500">No skills listed</span>
-            )}
+        
+        <div className="bg-white shadow rounded-lg overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h3 className="text-lg font-medium text-gray-800">Recent Activity</h3>
           </div>
           
-          <h4 className="text-sm font-medium text-gray-700 mb-3">Certifications</h4>
-          <div className="space-y-2">
-            {certifications.length > 0 ? certifications.map((cert, index) => (
-              <div key={index} className="flex items-center">
-                <FileText size={16} className="text-gray-400 mr-2" />
-                <span className="text-gray-700">{cert}</span>
+          <div className="divide-y divide-gray-200">
+            {isLoading ? (
+              <div className="flex justify-center items-center h-32">
+                <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-green-500"></div>
               </div>
-            )) : (
-              <span className="text-sm text-gray-500">No certifications listed</span>
+            ) : recentActivity.length > 0 ? (
+              recentActivity.map(activity => (
+                <ActivityItem
+                  key={activity.id}
+                  type={activity.type}
+                  description={activity.description}
+                  date={formatDate(activity.date)}
+                />
+              ))
+            ) : (
+              <div className="px-6 py-4 text-center text-gray-500">
+                No recent activity found
+              </div>
             )}
+          </div>
+        </div>
+      </div>
+      
+      <div className="bg-white shadow rounded-lg overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-800">Employee Information</h3>
+        </div>
+        <div className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-3">Personal Details</h4>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs text-gray-500">Full Name</p>
+                  <p className="text-sm text-gray-800">{employee.name}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Email Address</p>
+                  <p className="text-sm text-gray-800">{employee.email}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Phone Number</p>
+                  <p className="text-sm text-gray-800">{employee.phone}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Address</p>
+                  <p className="text-sm text-gray-800">{employee.address || 'Not provided'}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-3">Employment Details</h4>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs text-gray-500">Employee ID</p>
+                  <p className="text-sm text-gray-800">{employee.id || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Department</p>
+                  <p className="text-sm text-gray-800">{employee.department}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Date Joined</p>
+                  <p className="text-sm text-gray-800">{formatDate(employee.date_joined)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Employment Type</p>
+                  <p className="text-sm text-gray-800">{employee.schedule || 'Full-time'}</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1058,9 +1261,106 @@ const OverviewTab = ({ employee }) => {
   );
 };
 
-// Add the missing AttendanceDetailsTab component
+// AttendanceDetailsTab Component - Updated to use real DB data
 const AttendanceDetailsTab = ({ employee }) => {
-  const attendanceHistory = employee.attendanceHistory || [];
+  const [attendanceHistory, setAttendanceHistory] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  useEffect(() => {
+    // Fetch employee's attendance history
+    const fetchAttendanceHistory = async () => {
+      try {
+        setIsLoading(true);
+        // If you have a function to get attendance for a specific employee
+        // If not, this could be filtered from employee.attendanceHistory
+        if (employee.attendanceHistory) {
+          setAttendanceHistory(employee.attendanceHistory || []);
+        } else {
+          // Use the monthly attendance summary and filter for this employee
+          const today = new Date();
+          const month = today.getMonth() + 1;
+          const year = today.getFullYear();
+          
+          const summary = await getMonthlyAttendanceSummary(month, year);
+          const employeeAttendance = summary.filter(record => record.employee_id === employee.id);
+          setAttendanceHistory(employeeAttendance || []);
+        }
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching attendance data:', err);
+        setError('Failed to load attendance data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    if (employee?.id) {
+      fetchAttendanceHistory();
+    }
+  }, [employee?.id]);
+  
+  // Calculate attendance metrics
+  const calculateAttendanceMetrics = () => {
+    if (!attendanceHistory || !Array.isArray(attendanceHistory) || attendanceHistory.length === 0) {
+      return {
+        attendanceRate: employee.attendance_rate || '100',
+        totalHours: 0,
+        lastAbsence: 'None recorded',
+        presentDays: 0,
+        absentDays: 0
+      };
+    }
+    
+    const presentDays = attendanceHistory.filter(record => 
+      record && (record.status === 'Present' || record.status === 'Late')).length;
+    const absentDays = attendanceHistory.filter(record => 
+      record && record.status === 'Absent').length;
+    const totalDays = attendanceHistory.length;
+    
+    // Calculate attendance rate with safeguards
+    const attendanceRate = totalDays > 0 
+      ? ((presentDays / totalDays) * 100).toFixed(1)
+      : employee.attendance_rate || '100';
+    
+    // Calculate total hours with better error handling
+    const totalHours = attendanceHistory.reduce((sum, record) => {
+      const hours = parseFloat(record.hours_worked || 0);
+      return sum + (isNaN(hours) ? 0 : hours);
+    }, 0);
+    
+    // Find last absence with proper sorting
+    const absences = attendanceHistory.filter(record => record && record.status === 'Absent');
+    const lastAbsence = absences.length > 0 
+      ? [...absences].sort((a, b) => new Date(b.date) - new Date(a.date))[0].date 
+      : 'None recorded';
+    
+    return {
+      attendanceRate,
+      totalHours,
+      lastAbsence,
+      presentDays,
+      absentDays
+    };
+  };
+  
+  const metrics = calculateAttendanceMetrics();
+  
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-green-500"></div>
+      </div>
+    );
+  }
+  
+  if (error) {
+    return (
+      <div className="bg-red-50 p-4 rounded-md">
+        <p className="text-red-700">{error}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -1070,19 +1370,31 @@ const AttendanceDetailsTab = ({ employee }) => {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
           <div className="p-4 bg-green-50 rounded-lg">
             <div className="text-sm font-medium text-gray-500">Attendance Rate</div>
-            <div className="mt-1 text-2xl font-semibold text-gray-800">{employee.attendance_rate || 100}%</div>
+            <div className="mt-1 text-2xl font-semibold text-gray-800">{metrics.attendanceRate}%</div>
           </div>
           <div className="p-4 bg-blue-50 rounded-lg">
-            <div className="text-sm font-medium text-gray-500">Hours This Month</div>
+            <div className="text-sm font-medium text-gray-500">Hours Worked</div>
             <div className="mt-1 text-2xl font-semibold text-gray-800">
-              {attendanceHistory.reduce((sum, record) => sum + (record.hours_worked || 0), 0)} hrs
+              {metrics.totalHours} hrs
             </div>
           </div>
           <div className="p-4 bg-purple-50 rounded-lg">
             <div className="text-sm font-medium text-gray-500">Last Absence</div>
             <div className="mt-1 text-lg font-semibold text-gray-800">
-              {attendanceHistory.find(record => record.status === 'Absent')?.date || 'None recorded'}
+              {metrics.lastAbsence !== 'None recorded' ? formatDate(metrics.lastAbsence) : 'None recorded'}
             </div>
+          </div>
+        </div>
+        
+        {/* Additional stats */}
+        <div className="mt-6 grid grid-cols-2 gap-4">
+          <div className="flex items-center">
+            <div className="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
+            <span className="text-sm text-gray-600">Present days: {metrics.presentDays}</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
+            <span className="text-sm text-gray-600">Absent days: {metrics.absentDays}</span>
           </div>
         </div>
       </div>
@@ -1099,33 +1411,76 @@ const AttendanceDetailsTab = ({ employee }) => {
               <tr>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clock In</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clock Out</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hours Worked</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {attendanceHistory.length > 0 ? (
-                attendanceHistory.map((record, index) => (
-                  <tr key={index}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDate(record.date)}</td>
+                attendanceHistory
+                  .sort((a, b) => new Date(b.date) - new Date(a.date))
+                  .map((record, index) => (
+                  <tr key={record.id || index}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatDate(record.date)}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${attendanceStatusColors[record.status] || 'bg-gray-100 text-gray-800'}`}>
+                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        attendanceStatusColors[record.status] || 'bg-gray-100 text-gray-800'}`}>
                         {record.status}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {record.clock_in || '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {record.clock_out || '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {record.hours_worked || 0} hrs
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">{record.notes || '-'}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {record.notes || '-'}
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan="4" className="px-6 py-4 text-center text-sm text-gray-500">No attendance records found</td>
+                  <td colSpan="6" className="px-6 py-4 text-center text-sm text-gray-500">
+                    No attendance records found
+                  </td>
                 </tr>
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+      
+      {/* Attendance Trends */}
+      <div className="bg-white shadow-sm rounded-lg p-6">
+        <h3 className="text-lg font-medium text-gray-800 mb-4">Attendance Trends</h3>
+        <div className="text-center text-gray-500 py-4">
+          {attendanceHistory.length > 0 ? (
+            <div>
+              <p className="mb-4">Monthly attendance visualization would go here</p>
+              <div className="flex justify-center space-x-8">
+                <div className="text-center">
+                  <p className="text-2xl font-semibold text-gray-800">{metrics.attendanceRate}%</p>
+                  <p className="text-sm text-gray-500">Average Attendance</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-semibold text-gray-800">
+                    {(metrics.totalHours / Math.max(1, metrics.presentDays)).toFixed(1)}
+                  </p>
+                  <p className="text-sm text-gray-500">Avg Hours/Day</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p>Not enough data to display attendance trends</p>
+          )}
         </div>
       </div>
     </div>
@@ -1134,6 +1489,82 @@ const AttendanceDetailsTab = ({ employee }) => {
 
 // Add the missing PerformanceDetailsTab component
 const PerformanceDetailsTab = ({ employee }) => {
+  const [performanceReviews, setPerformanceReviews] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  useEffect(() => {
+    // Fetch employee's performance reviews
+    const fetchEmployeePerformance = async () => {
+      try {
+        setIsLoading(true);
+        const reviews = await getEmployeePerformanceReviews(employee.id);
+        setPerformanceReviews(reviews || []);
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching performance data:', err);
+        setError('Failed to load performance data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    if (employee?.id) {
+      fetchEmployeePerformance();
+    }
+  }, [employee?.id]);
+  
+  // Calculate average rating from reviews
+  const calculateAverageRating = () => {
+    const completedReviews = performanceReviews.filter(review => 
+      review.status === 'Completed' && review.rating
+    );
+    
+    if (completedReviews.length === 0) {
+      return employee.performance_rating || 0;
+    }
+    
+    const sum = completedReviews.reduce((total, review) => 
+      total + parseFloat(review.rating || 0), 0);
+    return (sum / completedReviews.length).toFixed(1);
+  };
+  
+  const avgRating = calculateAverageRating();
+  
+  // Get latest completed review
+  const getLatestReview = () => {
+    return performanceReviews
+      .filter(review => review.status === 'Completed')
+      .sort((a, b) => new Date(b.completion_date || b.scheduled_date) - 
+                       new Date(a.completion_date || a.scheduled_date))[0];
+  };
+  
+  // Get performance level description based on rating
+  const getPerformanceLevel = (rating) => {
+    if (rating >= 4.5) return 'Outstanding performer';
+    if (rating >= 4.0) return 'Exceeds expectations';
+    if (rating >= 3.0) return 'Meets expectations';
+    if (rating >= 2.0) return 'Needs improvement';
+    if (rating > 0) return 'Unsatisfactory';
+    return 'Not yet rated';
+  };
+  
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-green-500"></div>
+      </div>
+    );
+  }
+  
+  if (error) {
+    return (
+      <div className="bg-red-50 p-4 rounded-md">
+        <p className="text-red-700">{error}</p>
+      </div>
+    );
+  }
+  
   return (
     <div className="space-y-6">
       {/* Performance Summary Card */}
@@ -1143,7 +1574,7 @@ const PerformanceDetailsTab = ({ employee }) => {
           <div className="mr-6">
             <div className="text-sm font-medium text-gray-500">Overall Rating</div>
             <div className="mt-1 text-2xl font-semibold text-gray-800">
-              {employee.performance_rating ? `${employee.performance_rating}/5.0` : 'Not rated'}
+              {avgRating > 0 ? `${avgRating}/5.0` : 'Not rated'}
             </div>
           </div>
           
@@ -1151,60 +1582,41 @@ const PerformanceDetailsTab = ({ employee }) => {
             <div className="flex items-center">
               <div className="flex mr-2">
                 {[1, 2, 3, 4, 5].map((star) => (
-                  <svg key={star} className={`w-5 h-5 ${star <= (employee.performance_rating || 0) ? 'text-yellow-400' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 20 20">
+                  <svg key={star} className={`w-5 h-5 ${star <= Math.floor(avgRating) ? 'text-yellow-400' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 20 20">
                     <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                   </svg>
                 ))}
               </div>
             </div>
             <div className="mt-4 text-sm text-gray-500">
-              {employee.performance_rating >= 4.5 ? 'Outstanding performer' :
-               employee.performance_rating >= 4.0 ? 'Exceeds expectations' :
-               employee.performance_rating >= 3.0 ? 'Meets expectations' :
-               employee.performance_rating >= 2.0 ? 'Needs improvement' :
-               employee.performance_rating > 0 ? 'Unsatisfactory' : 'Not yet rated'
-              }
+              {getPerformanceLevel(parseFloat(avgRating))}
             </div>
           </div>
         </div>
         
-        {/* Skill Ratings */}
-        <h4 className="text-sm font-medium text-gray-700 mb-3">Skill Ratings</h4>
+        {/* Average metrics from all reviews */}
+        <h4 className="text-sm font-medium text-gray-700 mb-3">Performance Metrics</h4>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div>
             <div className="flex justify-between mb-1">
-              <span className="text-sm text-gray-600">Job Knowledge</span>
-              <span className="text-sm font-medium text-gray-900">4.2/5.0</span>
+              <span className="text-sm text-gray-600">Latest Review</span>
+              <span className="text-sm font-medium text-gray-900">
+                {getLatestReview()?.completion_date ? formatDate(getLatestReview().completion_date) : 'None'}
+              </span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2.5">
-              <div className="bg-green-600 h-2.5 rounded-full" style={{ width: '84%' }}></div>
+              <div 
+                className="bg-green-600 h-2.5 rounded-full" 
+                style={{ width: `${getLatestReview()?.rating ? (getLatestReview().rating / 5) * 100 : 0}%` }}
+              ></div>
             </div>
           </div>
           <div>
             <div className="flex justify-between mb-1">
-              <span className="text-sm text-gray-600">Work Quality</span>
-              <span className="text-sm font-medium text-gray-900">4.0/5.0</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2.5">
-              <div className="bg-green-600 h-2.5 rounded-full" style={{ width: '80%' }}></div>
-            </div>
-          </div>
-          <div>
-            <div className="flex justify-between mb-1">
-              <span className="text-sm text-gray-600">Teamwork</span>
-              <span className="text-sm font-medium text-gray-900">4.5/5.0</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2.5">
-              <div className="bg-green-600 h-2.5 rounded-full" style={{ width: '90%' }}></div>
-            </div>
-          </div>
-          <div>
-            <div className="flex justify-between mb-1">
-              <span className="text-sm text-gray-600">Reliability</span>
-              <span className="text-sm font-medium text-gray-900">4.8/5.0</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2.5">
-              <div className="bg-green-600 h-2.5 rounded-full" style={{ width: '96%' }}></div>
+              <span className="text-sm text-gray-600">Reviews Completed</span>
+              <span className="text-sm font-medium text-gray-900">
+                {performanceReviews.filter(r => r.status === 'Completed').length}
+              </span>
             </div>
           </div>
         </div>
@@ -1216,30 +1628,60 @@ const PerformanceDetailsTab = ({ employee }) => {
           <h3 className="text-lg font-medium text-gray-800">Performance Reviews</h3>
         </div>
         
-        {/* Sample reviews - in a real app, these would come from the database */}
         <div className="divide-y divide-gray-200">
-          <ReviewItem 
-            date="2023-01-15" 
-            reviewer="John Smith" 
-            rating={4.7} 
-            summary="Alex has been consistently exceeding expectations in their role. Excellent teamwork and problem-solving skills."
-          />
-          <ReviewItem 
-            date="2022-07-10" 
-            reviewer="Sarah Johnson" 
-            rating={4.5} 
-            summary="Great performance in all areas. Consistently delivers high-quality work and maintains positive relationships with colleagues."
-          />
-          <ReviewItem 
-            date="2022-01-05" 
-            reviewer="Michael Brown" 
-            rating={4.2} 
-            summary="Solid performer who has shown significant improvement in technical skills over the past period. Continue developing leadership capabilities."
-          />
+          {performanceReviews.length > 0 ? (
+            performanceReviews.map(review => (
+              <div key={review.id} className="px-6 py-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="flex items-center">
+                      <span className="text-sm font-medium text-gray-800 mr-2">
+                        {review.review_type} Review
+                      </span>
+                      <span className={`ml-2 px-2 py-1 text-xs leading-none rounded-full 
+                        ${review.status === 'Completed' ? 'bg-green-100 text-green-800' : 
+                          review.status === 'Scheduled' ? 'bg-blue-100 text-blue-800' : 
+                          review.status === 'In Progress' ? 'bg-amber-100 text-amber-800' : 
+                          'bg-gray-100 text-gray-800'}`}>
+                        {review.status}
+                      </span>
+                      {review.status === 'Completed' && (
+                        <div className="flex ml-3">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <svg key={star} className={`w-4 h-4 ${star <= Math.floor(review.rating || 0) ? 'text-yellow-400' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                            </svg>
+                          ))}
+                          <span className="ml-1 text-xs text-gray-500">{review.rating || 'N/A'}</span>
+                        </div>
+                      )}
+                    </div>
+                    {review.summary && (
+                      <p className="text-sm text-gray-600 mt-2">{review.summary}</p>
+                    )}
+                    <div className="mt-1 text-xs text-gray-500">
+                      Reviewer: {review.reviewer ? review.reviewer.name : 'Unassigned'}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500">
+                      {review.status === 'Completed' 
+                        ? `Completed: ${formatDate(review.completion_date)}` 
+                        : `Scheduled: ${formatDate(review.scheduled_date)}`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="px-6 py-4 text-center text-gray-500">
+              No performance reviews found for this employee
+            </div>
+          )}
         </div>
       </div>
       
-      {/* Goals & Development */}
+      {/* Goals & Development - This could be updated later with actual goals data */}
       <div className="bg-white shadow-sm rounded-lg overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
           <h3 className="text-lg font-medium text-gray-800">Goals & Development</h3>
@@ -1247,19 +1689,16 @@ const PerformanceDetailsTab = ({ employee }) => {
         <div className="p-6 space-y-4">
           <div>
             <h4 className="text-sm font-medium text-gray-700 mb-2">Current Goals</h4>
-            <ul className="list-disc pl-5 space-y-2 text-sm text-gray-600">
-              <li>Complete advanced training in animal husbandry by Q3</li>
-              <li>Improve milk production efficiency by 5% through process optimization</li>
-              <li>Lead the implementation of new health monitoring procedures</li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="text-sm font-medium text-gray-700 mb-2">Development Areas</h4>
-            <ul className="list-disc pl-5 space-y-2 text-sm text-gray-600">
-              <li>Technical knowledge of new milking equipment</li>
-              <li>Leadership skills for team management</li>
-              <li>Cross-training in feed management systems</li>
-            </ul>
+            <p className="text-sm text-gray-500 italic">
+              {performanceReviews.length > 0 
+                ? 'Goals are based on latest performance review'
+                : 'No goals have been set yet'}
+            </p>
+            {getLatestReview()?.summary && (
+              <div className="mt-2 p-3 bg-gray-50 rounded-md">
+                <p className="text-sm text-gray-600">{getLatestReview().summary}</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1396,6 +1835,202 @@ const PayrollTab = ({ employee }) => {
 const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], isLoading = false }) => {
   const [view, setView] = useState('day');
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [attendanceForms, setAttendanceForms] = useState({});
+  const [savingAttendance, setSavingAttendance] = useState(false);
+  const [attendanceMessage, setAttendanceMessage] = useState({ type: '', text: '' });
+  
+  // Initialize attendance forms when employees or date changes
+  useEffect(() => {
+    if (Array.isArray(employees) && employees.length > 0) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      
+      // Create initial form state for each employee
+      const initialForms = {};
+      employees.forEach(employee => {
+        // Find if attendance is already recorded for today
+        const todayAttendance = Array.isArray(attendanceData) && 
+          attendanceData.find(record => record.employee_id === employee.id && record.date === todayStr);
+        
+        initialForms[employee.id] = {
+          status: todayAttendance?.status || 'Present',
+          clockIn: todayAttendance?.clock_in || '08:00',
+          clockOut: todayAttendance?.clock_out || '17:00',
+          notes: todayAttendance?.notes || '',
+          isRecorded: !!todayAttendance,
+          recordId: todayAttendance?.id || null
+        };
+      });
+      
+      setAttendanceForms(initialForms);
+    }
+  }, [employees, attendanceData]);
+  
+  // Handle form field changes
+  const handleAttendanceChange = (employeeId, field, value) => {
+    setAttendanceForms(prevForms => ({
+      ...prevForms,
+      [employeeId]: {
+        ...prevForms[employeeId],
+        [field]: value
+      }
+    }));
+    
+    // If changing status, update clock times for special cases
+    if (field === 'status' && value !== 'Present' && value !== 'Late') {
+      setAttendanceForms(prevForms => ({
+        ...prevForms,
+        [employeeId]: {
+          ...prevForms[employeeId],
+          clockIn: '',
+          clockOut: '',
+        }
+      }));
+    }
+  };
+  
+  // Calculate hours worked based on clock in/out
+  const calculateHoursWorked = (clockIn, clockOut) => {
+    if (!clockIn || !clockOut) return 0;
+    
+    try {
+      const [inHours, inMinutes] = clockIn.split(':').map(Number);
+      const [outHours, outMinutes] = clockOut.split(':').map(Number);
+      
+      let hours = outHours - inHours;
+      let minutes = outMinutes - inMinutes;
+      
+      if (minutes < 0) {
+        hours -= 1;
+        minutes += 60;
+      }
+      
+      return parseFloat((hours + (minutes / 60)).toFixed(1));
+    } catch (error) {
+      console.error('Error calculating hours worked:', error);
+      return 0;
+    }
+  };
+  
+  // Handle saving attendance for a single employee
+  const handleSaveAttendance = async (employeeId) => {
+    try {
+      setSavingAttendance(true);
+      setAttendanceMessage({ type: '', text: '' });
+      
+      const form = attendanceForms[employeeId];
+      if (!form) {
+        throw new Error("Form data not found for employee");
+      }
+      
+      const today = new Date().toISOString().split('T')[0];
+      const hoursWorked = (form.status === 'Present' || form.status === 'Late') ? 
+        calculateHoursWorked(form.clockIn, form.clockOut) : 0;
+      
+      const attendanceRecord = {
+        employeeId: employeeId,
+        date: today,
+        status: form.status,
+        hours_worked: hoursWorked,
+        notes: form.notes
+      };
+      
+      if (form.recordId) {
+        attendanceRecord.id = form.recordId;
+      }
+      
+      // Call the recordAttendance function
+      const result = await recordAttendance(attendanceRecord);
+      
+      // Update the form state to show as recorded
+      setAttendanceForms(prevForms => ({
+        ...prevForms,
+        [employeeId]: {
+          ...prevForms[employeeId],
+          isRecorded: true,
+          recordId: result.id
+        }
+      }));
+      
+      setAttendanceMessage({ 
+        type: 'success', 
+        text: `Attendance ${form.isRecorded ? 'updated' : 'recorded'} for ${employees.find(e => e.id === employeeId)?.name}`
+      });
+      
+      // Clear message after 3 seconds
+      setTimeout(() => setAttendanceMessage({ type: '', text: '' }), 3000);
+      
+    } catch (error) {
+      console.error('Error saving attendance:', error);
+      // Get form here to avoid reference error
+      const form = attendanceForms[employeeId];
+      setAttendanceMessage({ 
+        type: 'error', 
+        text: `Failed to ${form?.isRecorded ? 'update' : 'record'} attendance. Please try again.`
+      });
+    } finally {
+      setSavingAttendance(false);
+    }
+  };
+  
+  // Handle batch save of all attendance records
+  const handleBatchSaveAttendance = async () => {
+    try {
+      setSavingAttendance(true);
+      setAttendanceMessage({ type: '', text: '' });
+      
+      const today = new Date().toISOString().split('T')[0];
+      const savePromises = [];
+      
+      // Prepare all attendance records that have been changed
+      for (const [employeeId, form] of Object.entries(attendanceForms)) {
+        const hoursWorked = (form.status === 'Present' || form.status === 'Late') ? 
+          calculateHoursWorked(form.clockIn, form.clockOut) : 0;
+        
+        const attendanceRecord = {
+          employeeId: employeeId,
+          date: today,
+          status: form.status,
+          hours_worked: hoursWorked,
+          notes: form.notes,
+          id: form.recordId // Include ID for updates if it exists
+        };
+        
+        savePromises.push(recordAttendance(attendanceRecord));
+      }
+      
+      // Wait for all save operations to complete
+      const results = await Promise.all(savePromises);
+      
+      // Update all forms as recorded
+      const updatedForms = { ...attendanceForms };
+      results.forEach((result, index) => {
+        const employeeId = Object.keys(attendanceForms)[index];
+        if (employeeId) {
+          updatedForms[employeeId].isRecorded = true;
+          updatedForms[employeeId].recordId = result.id;
+        }
+      });
+      
+      setAttendanceForms(updatedForms);
+      
+      setAttendanceMessage({ 
+        type: 'success', 
+        text: 'All attendance records have been saved successfully'
+      });
+      
+      // Clear message after 3 seconds
+      setTimeout(() => setAttendanceMessage({ type: '', text: '' }), 3000);
+      
+    } catch (error) {
+      console.error('Error saving batch attendance:', error);
+      setAttendanceMessage({ 
+        type: 'error', 
+        text: 'Failed to save attendance records. Please try again.'
+      });
+    } finally {
+      setSavingAttendance(false);
+    }
+  };
   
   // Process attendance data for display
   const processAttendanceData = () => {
@@ -1482,9 +2117,11 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
       return acc;
     }, { total: 0, present: 0, absent: 0, late: 0 });
     
-    const attendanceRate = statusCounts.total 
-      ? ((statusCounts.present + statusCounts.late) / statusCounts.total * 100).toFixed(1) 
-      : 0;
+    // Calculate attendance rate with proper error handling
+    const presentAndLate = (statusCounts.present || 0) + (statusCounts.late || 0);
+    const attendanceRate = statusCounts.total > 0
+      ? ((presentAndLate / statusCounts.total) * 100).toFixed(1)
+      : "0.0";
     
     // Group monthly attendance by employee
     const monthlySummary = [];
@@ -1531,12 +2168,12 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
       weekly: weeklyAttendance,
       monthly: {
         summary: monthlySummary,
-        statistics: statistics || {
+        statistics: {
           total: statusCounts.total,
-          present: statusCounts.present,
-          absent: statusCounts.absent,
-          late: statusCounts.late,
-          attendanceRate
+          present: statusCounts.present || 0,
+          absent: statusCounts.absent || 0,
+          late: statusCounts.late || 0,
+          attendanceRate: parseFloat(attendanceRate)
         }
       }
     };
@@ -2030,13 +2667,32 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
         )}
       </div>
       
-      <div className="bg-white rounded-lg shadow-sm p-6">
+      <div className="bg-white rounded-lg shadow-sm p-6 mt-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-medium text-gray-800">Record Attendance</h3>
-          <div>
+          <div className="flex items-center space-x-4">
             <span className="text-sm text-gray-500">Today: {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+            
+            <button 
+              onClick={handleBatchSaveAttendance}
+              disabled={savingAttendance}
+              className={`px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
+                savingAttendance ? 'bg-green-400' : 'bg-green-600 hover:bg-green-700'
+              } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500`}
+            >
+              {savingAttendance ? 'Saving...' : 'Save All Records'}
+            </button>
           </div>
         </div>
+        
+        {/* Success/Error message */}
+        {attendanceMessage.text && (
+          <div className={`mb-4 p-3 rounded-md ${
+            attendanceMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+          }`}>
+            {attendanceMessage.text}
+          </div>
+        )}
         
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -2065,11 +2721,13 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
             <tbody className="bg-white divide-y divide-gray-200">
               {Array.isArray(employees) && employees.length > 0 ? (
                 employees.map(employee => {
-                  // Find if attendance is already recorded for today
-                  const todayStr = new Date().toISOString().split('T')[0];
-                  const isRecorded = Array.isArray(attendanceData) && attendanceData.some(
-                    record => record.employee_id === employee.id && record.date === todayStr
-                  );
+                  const form = attendanceForms[employee.id] || {
+                    status: 'Present',
+                    clockIn: '08:00',
+                    clockOut: '17:00',
+                    notes: '',
+                    isRecorded: false
+                  };
                   
                   return (
                     <tr key={employee.id}>
@@ -2089,61 +2747,58 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {isRecorded ? (
-                          <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                            Recorded
-                          </span>
-                        ) : (
-                          <select className="block w-full pl-3 pr-10 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500">
-                            <option value="present">Present</option>
-                            <option value="absent">Absent</option>
-                            <option value="late">Late</option>
-                            <option value="vacation">Vacation</option>
-                            <option value="sick">Sick Leave</option>
-                          </select>
-                        )}
+                        <select
+                          value={form.status}
+                          onChange={(e) => handleAttendanceChange(employee.id, 'status', e.target.value)}
+                          className="block w-full pl-3 pr-10 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500"
+                        >
+                          <option value="Present">Present</option>
+                          <option value="Absent">Absent</option>
+                          <option value="Late">Late</option>
+                          <option value="Vacation">Vacation</option>
+                          <option value="Sick">Sick Leave</option>
+                          <option value="Holiday">Holiday</option>
+                        </select>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <input 
                           type="time"
-                          defaultValue="08:00"
-                          disabled={isRecorded}
+                          value={form.clockIn}
+                          onChange={(e) => handleAttendanceChange(employee.id, 'clockIn', e.target.value)}
+                          disabled={form.status !== 'Present' && form.status !== 'Late'}
                           className={`block w-full pl-3 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 ${
-                            isRecorded ? 'bg-gray-100' : ''
+                            form.status !== 'Present' && form.status !== 'Late' ? 'bg-gray-100' : ''
                           }`}
                         />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <input 
                           type="time"
-                          defaultValue="17:00"
-                          disabled={isRecorded}
+                          value={form.clockOut}
+                          onChange={(e) => handleAttendanceChange(employee.id, 'clockOut', e.target.value)}
+                          disabled={form.status !== 'Present' && form.status !== 'Late'}
                           className={`block w-full pl-3 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 ${
-                            isRecorded ? 'bg-gray-100' : ''
+                            form.status !== 'Present' && form.status !== 'Late' ? 'bg-gray-100' : ''
                           }`}
                         />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <input 
                           type="text"
+                          value={form.notes}
+                          onChange={(e) => handleAttendanceChange(employee.id, 'notes', e.target.value)}
                           placeholder="Optional notes..."
-                          disabled={isRecorded}
-                          className={`block w-full pl-3 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 ${
-                            isRecorded ? 'bg-gray-100' : ''
-                          }`}
+                          className="block w-full pl-3 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500"
                         />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        {isRecorded ? (
-                          <button className="text-blue-600 hover:text-blue-900">Update</button>
-                        ) : (
-                          <button 
-                            onClick={() => handleRecordAttendance(employee.id)}
-                            className="text-green-600 hover:text-green-900"
-                          >
-                            Save
-                          </button>
-                        )}
+                        <button 
+                          onClick={() => handleSaveAttendance(employee.id)}
+                          disabled={savingAttendance}
+                          className={`text-${form.isRecorded ? 'blue' : 'green'}-600 hover:text-${form.isRecorded ? 'blue' : 'green'}-900`}
+                        >
+                          {form.isRecorded ? 'Update' : 'Save'}
+                        </button>
                       </td>
                     </tr>
                   );
@@ -2170,6 +2825,17 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
     const [isLoading, setIsLoading] = useState(false);
     const [localShiftsData, setLocalShiftsData] = useState(shiftsData);
     
+    // Modal states for templates
+    const [showTemplateModal, setShowTemplateModal] = useState(false);
+    const [templateToEdit, setTemplateToEdit] = useState(null);
+    
+    // Shift templates state
+    const [shiftTemplates, setShiftTemplates] = useState([
+      { id: 'morning', name: 'Morning Shift', start_time: '06:00', end_time: '14:00' },
+      { id: 'day', name: 'Day Shift', start_time: '08:00', end_time: '17:00' },
+      { id: 'evening', name: 'Evening Shift', start_time: '14:00', end_time: '22:00' }
+    ]);
+    
     // Quick Assign state
     const [assignData, setAssignData] = useState({
       employeeId: '',
@@ -2192,38 +2858,44 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
     // Days of the week
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     const dayAbbreviations = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-    // Load shifts data when date changes
-  useEffect(() => {
-    loadShiftsForDate(currentDate);
-  }, [currentDate, view]);
   
-  // Load shifts data for the selected date
-  const loadShiftsForDate = async (date) => {
-    try {
-      setIsLoading(true);
-      
-      // Calculate week start based on the selected date
-      const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, ...
-      const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust to get Monday
-      const weekStart = new Date(new Date(date).setDate(diff));
-      
-      // For month view, get the first day of the month
-      const monthStart = view === 'month' 
-        ? new Date(date.getFullYear(), date.getMonth(), 1)
-        : null;
-      
-      // Fetch shifts data for the selected period
-      const shifts = await getEmployeeShifts(view === 'month' ? monthStart : weekStart);
-      setLocalShiftsData(shifts);
-      
-    } catch (err) {
-      console.error('Error loading shifts for selected date:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    // Load shifts data when date changes
+    useEffect(() => {
+      loadShiftsForDate(currentDate);
+    }, [currentDate, view]);
     
+    // Update local shifts when props change
+    useEffect(() => {
+      setLocalShiftsData(shiftsData);
+    }, [shiftsData]);
+    
+    // Load shifts data for the selected date
+    const loadShiftsForDate = async (date) => {
+      try {
+        setIsLoading(true);
+        
+        // Calculate week start based on the selected date
+        const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, ...
+        const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust to get Monday
+        const weekStart = new Date(new Date(date).setDate(diff));
+        
+        // For month view, get the first day of the month
+        const monthStart = view === 'month' 
+          ? new Date(date.getFullYear(), date.getMonth(), 1)
+          : null;
+        
+        // Fetch shifts data for the selected period
+        if (typeof onRefreshData === 'function') {
+          await onRefreshData(view === 'month' ? monthStart : weekStart);
+        }
+        
+      } catch (err) {
+        console.error('Error loading shifts for selected date:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+      
     // Handle form field changes for Quick Assign
     const handleAssignChange = (e) => {
       const { name, value, type, checked } = e.target;
@@ -2247,6 +2919,33 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
       }
     };
     
+    // Add or edit shift template
+    const handleTemplateSubmit = (template) => {
+      if (template.id) {
+        // Edit existing template
+        setShiftTemplates(prev => 
+          prev.map(t => t.id === template.id ? template : t)
+        );
+      } else {
+        // Add new template
+        const newId = Math.random().toString(36).substring(2, 9);
+        setShiftTemplates(prev => [...prev, { ...template, id: newId }]);
+      }
+      setShowTemplateModal(false);
+      setTemplateToEdit(null);
+    };
+    
+    // Delete shift template
+    const handleDeleteTemplate = (templateId) => {
+      setShiftTemplates(prev => prev.filter(t => t.id !== templateId));
+    };
+    
+    // Edit shift template
+    const handleEditTemplate = (template) => {
+      setTemplateToEdit(template);
+      setShowTemplateModal(true);
+    };
+      
     // Handle shift assignment submission
     const handleAssignShift = async (e) => {
       e.preventDefault();
@@ -2279,19 +2978,21 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
         setAssignLoading(true);
         setAssignMessage({ type: '', text: '' });
         
-        // Map shift template to start/end times
-        const shiftTimes = {
-          'morning': { start_time: '06:00', end_time: '14:00', shift_type: 'Morning' },
-          'day': { start_time: '08:00', end_time: '17:00', shift_type: 'Day' },
-          'evening': { start_time: '14:00', end_time: '22:00', shift_type: 'Evening' }
-        };
+        // Find the selected template
+        const selectedTemplate = shiftTemplates.find(template => template.id === assignData.shiftTemplate);
         
-        const selectedShift = shiftTimes[assignData.shiftTemplate];
+        if (!selectedTemplate) {
+          throw new Error('Selected shift template not found');
+        }
         
         // Call the updated assignShifts function
         await assignShifts(
           assignData.employeeId,
-          selectedShift, 
+          {
+            start_time: selectedTemplate.start_time,
+            end_time: selectedTemplate.end_time,
+            shift_type: selectedTemplate.name.split(' ')[0] // Use first word of the template name as type
+          }, 
           {
             startDate: assignData.startDate,
             endDate: assignData.endDate,
@@ -2324,7 +3025,7 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
         // Refresh shift data after a short delay
         setTimeout(() => {
           // Call the refresh function if provided
-          if (onRefreshData) onRefreshData();
+          if (onRefreshData) onRefreshData(currentDate);
         }, 1500);
         
       } catch (error) {
@@ -2337,7 +3038,7 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
         setAssignLoading(false);
       }
     };
-  
+    
     // Helper function to format shifts for display
     const formatShiftsForDisplay = () => {
       if (!localShiftsData || !Array.isArray(localShiftsData) || localShiftsData.length === 0) {
@@ -2370,6 +3071,7 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
         shiftRecord.shifts.forEach(shift => {
           employeeShifts[employeeId].shifts.push({
             day: shift.day,
+            date: shift.date,
             startTime: formatTime(shift.start_time),
             endTime: formatTime(shift.end_time),
             colorClass: getShiftColorClass(shift.shift_type)
@@ -2411,40 +3113,101 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
       }
     };
     
+    // Get calendar dates for month view
+    const getMonthCalendarDates = () => {
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      
+      // First day of month
+      const firstDay = new Date(year, month, 1);
+      // Last day of month
+      const lastDay = new Date(year, month + 1, 0);
+      
+      // Get day of week for first day (0 = Sunday, 1 = Monday, etc.)
+      let firstDayOfWeek = firstDay.getDay();
+      // Adjust for Monday as first day of week
+      firstDayOfWeek = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
+      
+      // Create array of date objects for the calendar
+      const calendarDates = [];
+      
+      // Add days from previous month to fill the first row
+      const daysFromPrevMonth = firstDayOfWeek;
+      for (let i = daysFromPrevMonth - 1; i >= 0; i--) {
+        const day = new Date(year, month, -i);
+        calendarDates.push({
+          date: day,
+          isCurrentMonth: false,
+          isToday: isSameDay(day, new Date())
+        });
+      }
+      
+      // Add days from current month
+      for (let i = 1; i <= lastDay.getDate(); i++) {
+        const day = new Date(year, month, i);
+        calendarDates.push({
+          date: day,
+          isCurrentMonth: true,
+          isToday: isSameDay(day, new Date())
+        });
+      }
+      
+      // Add days from next month to complete the grid (6 rows of 7 days)
+      const totalDaysNeeded = 42; // 6 rows of 7 days
+      const remainingDays = totalDaysNeeded - calendarDates.length;
+      for (let i = 1; i <= remainingDays; i++) {
+        const day = new Date(year, month + 1, i);
+        calendarDates.push({
+          date: day,
+          isCurrentMonth: false,
+          isToday: isSameDay(day, new Date())
+        });
+      }
+      
+      return calendarDates;
+    };
+    
+    // Helper to check if two dates are the same day
+    const isSameDay = (date1, date2) => {
+      return date1.getDate() === date2.getDate() &&
+        date1.getMonth() === date2.getMonth() &&
+        date1.getFullYear() === date2.getFullYear();
+    };
+    
     // Get all shifts for display
     const formattedShifts = formatShiftsForDisplay();
     
     // Navigate to previous week/month
-  const navigatePrevious = () => {
-    const newDate = new Date(currentDate);
-    if (view === 'week') {
-      newDate.setDate(newDate.getDate() - 7);
-    } else {
-      newDate.setMonth(newDate.getMonth() - 1);
-    }
-    setCurrentDate(newDate);
-  };
-  
-  // Navigate to next week/month
-  const navigateNext = () => {
-    const newDate = new Date(currentDate);
-    if (view === 'week') {
-      newDate.setDate(newDate.getDate() + 7);
-    } else {
-      newDate.setMonth(newDate.getMonth() + 1);
-    }
-    setCurrentDate(newDate);
-  };
-  
-  // Handler for when view changes (week/month)
-  const handleViewChange = (newView) => {
-    setView(newView);
-    // Reset to current date when switching views to prevent confusion
-    if (newView !== view) {
-      setCurrentDate(new Date());
-    }
-  };
+    const navigatePrevious = () => {
+      const newDate = new Date(currentDate);
+      if (view === 'week') {
+        newDate.setDate(newDate.getDate() - 7);
+      } else {
+        newDate.setMonth(newDate.getMonth() - 1);
+      }
+      setCurrentDate(newDate);
+    };
     
+    // Navigate to next week/month
+    const navigateNext = () => {
+      const newDate = new Date(currentDate);
+      if (view === 'week') {
+        newDate.setDate(newDate.getDate() + 7);
+      } else {
+        newDate.setMonth(newDate.getMonth() + 1);
+      }
+      setCurrentDate(newDate);
+    };
+    
+    // Handler for when view changes (week/month)
+    const handleViewChange = (newView) => {
+      setView(newView);
+      // Reset to current date when switching views to prevent confusion
+      if (newView !== view) {
+        setCurrentDate(new Date());
+      }
+    };
+      
     // Format date range for display
     const getDateRangeDisplay = () => {
       if (view === 'week') {
@@ -2470,6 +3233,16 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
       }
     };
     
+    // Get shifts for a specific employee on a specific date
+    const getEmployeeShiftsForDate = (employeeId, dateStr) => {
+      // Find the employee in formatted shifts
+      const employee = formattedShifts.find(emp => emp.employeeId === employeeId);
+      if (!employee) return [];
+      
+      // Find shifts for this date
+      return employee.shifts.filter(shift => shift.date === dateStr);
+    };
+    
     // If no shifts or employees, show a placeholder message
     if ((!formattedShifts || formattedShifts.length === 0) && (!employees || employees.length === 0)) {
       return (
@@ -2481,56 +3254,56 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
     
     return (
       <div>
-      <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6">
-          <div className="flex items-center mb-4 sm:mb-0">
-            <button
-              onClick={() => handleViewChange('week')}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md ${
-                view === 'week' 
-                  ? 'bg-green-600 text-white' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Week
-            </button>
-            <button
-              onClick={() => handleViewChange('month')}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md ml-2 ${
-                view === 'month' 
-                  ? 'bg-green-600 text-white' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Month
-            </button>
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6">
+            <div className="flex items-center mb-4 sm:mb-0">
+              <button
+                onClick={() => handleViewChange('week')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md ${
+                  view === 'week' 
+                    ? 'bg-green-600 text-white' 
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Week
+              </button>
+              <button
+                onClick={() => handleViewChange('month')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md ml-2 ${
+                  view === 'month' 
+                    ? 'bg-green-600 text-white' 
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Month
+              </button>
+            </div>
+            
+            <div className="flex items-center">
+              <button 
+                className="p-1 rounded-full hover:bg-gray-100"
+                onClick={navigatePrevious}
+              >
+                <ChevronLeft size={18} className="text-gray-500" />
+              </button>
+              <span className="mx-4 text-sm font-medium">
+                {getDateRangeDisplay()}
+              </span>
+              <button 
+                className="p-1 rounded-full hover:bg-gray-100"
+                onClick={navigateNext}
+              >
+                <ChevronRight size={18} className="text-gray-500" />
+              </button>
+              <button 
+                className="ml-4 px-3 py-1 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                onClick={() => setCurrentDate(new Date())}
+              >
+                Today
+              </button>
+            </div>
           </div>
-          
-          <div className="flex items-center">
-            <button 
-              className="p-1 rounded-full hover:bg-gray-100"
-              onClick={navigatePrevious}
-            >
-              <ChevronLeft size={18} className="text-gray-500" />
-            </button>
-            <span className="mx-4 text-sm font-medium">
-              {getDateRangeDisplay()}
-            </span>
-            <button 
-              className="p-1 rounded-full hover:bg-gray-100"
-              onClick={navigateNext}
-            >
-              <ChevronRight size={18} className="text-gray-500" />
-            </button>
-            <button 
-              className="ml-4 px-3 py-1 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
-              onClick={() => setCurrentDate(new Date())}
-            >
-              Today
-            </button>
-          </div>
-        </div>
-          
+            
           {isLoading ? (
             <div className="flex justify-center py-12">
               <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-green-500"></div>
@@ -2543,7 +3316,7 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
                     <th className="sticky left-0 bg-white border-b border-gray-200 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Employee
                     </th>
-                    {days.slice(0, 5).map(day => (
+                    {days.map(day => (
                       <th key={day} className="border-b border-gray-200 px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                         {day}
                       </th>
@@ -2571,7 +3344,7 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
                             </div>
                           </div>
                         </td>
-                        {days.slice(0, 5).map(day => {
+                        {days.map(day => {
                           const shift = employee.shifts.find(s => s.day === day);
                           return (
                             <td key={day} className="border-b border-gray-200 px-6 py-4">
@@ -2593,7 +3366,7 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="6" className="px-6 py-8 text-center text-gray-500 border-b border-gray-200">
+                      <td colSpan={days.length + 1} className="px-6 py-8 text-center text-gray-500 border-b border-gray-200">
                         No shift data available for this period
                       </td>
                     </tr>
@@ -2602,193 +3375,568 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
               </table>
             </div>
           ) : (
-            <div className="text-center p-10">
-              <p className="text-gray-500">Month view would display a calendar with all shifts for the month</p>
+            // Month view
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="grid grid-cols-7 gap-px bg-gray-200">
+                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+                  <div key={day} className="bg-gray-50 py-2 text-center text-xs font-medium text-gray-500 uppercase">
+                    {day}
+                  </div>
+                ))}
+              </div>
+              
+              <div className="grid grid-cols-7 gap-px bg-gray-200">
+                {getMonthCalendarDates().map((dateInfo, index) => {
+                  const dateStr = dateInfo.date.toISOString().split('T')[0];
+                  
+                  return (
+                    <div 
+                      key={index} 
+                      className={`min-h-[120px] p-2 ${
+                        dateInfo.isCurrentMonth ? 'bg-white' : 'bg-gray-50 text-gray-400'
+                      } ${dateInfo.isToday ? 'bg-yellow-50' : ''}`}
+                    >
+                      <div className="flex justify-between items-center mb-1">
+                        <span className={`text-xs font-medium ${dateInfo.isToday ? 'text-blue-600' : ''}`}>
+                          {dateInfo.date.getDate()}
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-1 overflow-y-auto" style={{ maxHeight: '100px' }}>
+                        {employees.map(employee => {
+                          const empShifts = formattedShifts
+                            .find(emp => emp.employeeId === employee.id)?.shifts
+                            .filter(shift => shift.date === dateStr) || [];
+                          
+                          return empShifts.length > 0 ? (
+                            <div 
+                              key={employee.id} 
+                              className={`px-1 py-0.5 text-xs rounded truncate ${
+                                empShifts[0].colorClass
+                              }`}
+                              title={`${employee.name}: ${empShifts[0].startTime} - ${empShifts[0].endTime}`}
+                            >
+                              {employee.name.split(' ')[0]}: {empShifts[0].startTime}
+                            </div>
+                          ) : null;
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white rounded-lg shadow-sm p-6">
-            <h3 className="text-lg font-medium text-gray-800 mb-4">Shift Templates</h3>
-            <div className="space-y-4">
-              <div className="border border-gray-200 rounded-lg p-4">
-                <div className="flex justify-between items-center mb-2">
-                  <h4 className="text-sm font-medium text-gray-800">Morning Shift</h4>
-                  <div className="flex space-x-2">
-                    <button className="text-sm text-blue-600 hover:text-blue-800">Edit</button>
-                    <button className="text-sm text-red-600 hover:text-red-800">Delete</button>
-                  </div>
-                </div>
-                <p className="text-sm text-gray-600">6:00 AM - 2:00 PM</p>
-                <div className="mt-2 flex items-center text-xs text-gray-500">
-                  <span>Assigned to {formattedShifts.filter(e => e.shifts.some(s => s.startTime.includes('6:00'))).length} employees</span>
-                </div>
-              </div>
-              
-              <div className="border border-gray-200 rounded-lg p-4">
-                <div className="flex justify-between items-center mb-2">
-                  <h4 className="text-sm font-medium text-gray-800">Day Shift</h4>
-                  <div className="flex space-x-2">
-                    <button className="text-sm text-blue-600 hover:text-blue-800">Edit</button>
-                    <button className="text-sm text-red-600 hover:text-red-800">Delete</button>
-                  </div>
-                </div>
-                <p className="text-sm text-gray-600">8:00 AM - 5:00 PM</p>
-                <div className="mt-2 flex items-center text-xs text-gray-500">
-                  <span>Assigned to {formattedShifts.filter(e => e.shifts.some(s => s.startTime.includes('8:00'))).length} employees</span>
-                </div>
-              </div>
-              
-              <div className="border border-gray-200 rounded-lg p-4">
-                <div className="flex justify-between items-center mb-2">
-                  <h4 className="text-sm font-medium text-gray-800">Evening Shift</h4>
-                  <div className="flex space-x-2">
-                    <button className="text-sm text-blue-600 hover:text-blue-800">Edit</button>
-                    <button className="text-sm text-red-600 hover:text-red-800">Delete</button>
-                  </div>
-                </div>
-                <p className="text-sm text-gray-600">2:00 PM - 10:00 PM</p>
-                <div className="mt-2 flex items-center text-xs text-gray-500">
-                  <span>Assigned to {formattedShifts.filter(e => e.shifts.some(s => s.startTime.includes('2:00 PM'))).length} employees</span>
-                </div>
-              </div>
-              
-              <button className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
-                Add Shift Template
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-800">Shift Templates</h3>
+              <button 
+                onClick={() => { setTemplateToEdit(null); setShowTemplateModal(true); }}
+                className="px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700"
+              >
+                Add Template
               </button>
+            </div>
+            <div className="space-y-4">
+              {shiftTemplates.map(template => (
+                <div key={template.id} className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <h4 className="text-sm font-medium text-gray-800">{template.name}</h4>
+                    <div className="flex space-x-2">
+                      <button 
+                        onClick={() => handleEditTemplate(template)}
+                        className="text-sm text-blue-600 hover:text-blue-800"
+                      >
+                        Edit
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteTemplate(template.id)}
+                        className="text-sm text-red-600 hover:text-red-800"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    {formatTime(template.start_time)} - {formatTime(template.end_time)}
+                  </p>
+                  <div className="mt-2 flex items-center text-xs text-gray-500">
+                    <span>Assigned to {formattedShifts.filter(e => 
+                      e.shifts.some(s => 
+                        s.startTime === formatTime(template.start_time) && 
+                        s.endTime === formatTime(template.end_time)
+                      )
+                    ).length} employees</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
           
           <div className="bg-white rounded-lg shadow-sm p-6">
-          <h3 className="text-lg font-medium text-gray-800 mb-4">Quick Assign</h3>
-          
-          {/* Show success/error message */}
-          {assignMessage.text && (
-            <div className={`mb-4 p-3 rounded-md ${
-              assignMessage.type === 'success' 
-                ? 'bg-green-50 text-green-700 border border-green-200' 
-                : 'bg-red-50 text-red-700 border border-red-200'
-            }`}>
-              {assignMessage.text}
-            </div>
-          )}
-          
-          <form onSubmit={handleAssignShift} className="space-y-4">
-            <div>
-              <label htmlFor="employeeId" className="block text-sm font-medium text-gray-700 mb-1">
-                Employee
-              </label>
-              <select
-                id="employeeId"
-                name="employeeId"
-                value={assignData.employeeId}
-                onChange={handleAssignChange}
-                className="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md"
-              >
-                <option value="">Select an employee</option>
-                {employees.map(employee => (
-                  <option key={employee.id} value={employee.id}>{employee.name}</option>
-                ))}
-              </select>
-            </div>
+            <h3 className="text-lg font-medium text-gray-800 mb-4">Quick Assign</h3>
             
-            <div>
-              <label htmlFor="shiftTemplate" className="block text-sm font-medium text-gray-700 mb-1">
-                Shift Template
-              </label>
-              <select
-                id="shiftTemplate"
-                name="shiftTemplate"
-                value={assignData.shiftTemplate}
-                onChange={handleAssignChange}
-                className="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md"
-              >
-                <option value="">Select a shift</option>
-                <option value="morning">Morning Shift (6:00 AM - 2:00 PM)</option>
-                <option value="day">Day Shift (8:00 AM - 5:00 PM)</option>
-                <option value="evening">Evening Shift (2:00 PM - 10:00 PM)</option>
-              </select>
-            </div>
+            {/* Show success/error message */}
+            {assignMessage.text && (
+              <div className={`mb-4 p-3 rounded-md ${
+                assignMessage.type === 'success' 
+                  ? 'bg-green-50 text-green-700 border border-green-200' 
+                  : 'bg-red-50 text-red-700 border border-red-200'
+              }`}>
+                {assignMessage.text}
+              </div>
+            )}
             
-            <div>
-              <label htmlFor="date-range" className="block text-sm font-medium text-gray-700 mb-1">
-                Date Range
-              </label>
+            <form onSubmit={handleAssignShift} className="space-y-4">
+              <div>
+                <label htmlFor="employeeId" className="block text-sm font-medium text-gray-700 mb-1">
+                  Employee
+                </label>
+                <select
+                  id="employeeId"
+                  name="employeeId"
+                  value={assignData.employeeId}
+                  onChange={handleAssignChange}
+                  className="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md"
+                >
+                  <option value="">Select an employee</option>
+                  {employees.map(employee => (
+                    <option key={employee.id} value={employee.id}>{employee.name}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label htmlFor="shiftTemplate" className="block text-sm font-medium text-gray-700 mb-1">
+                  Shift Template
+                </label>
+                <select
+                  id="shiftTemplate"
+                  name="shiftTemplate"
+                  value={assignData.shiftTemplate}
+                  onChange={handleAssignChange}
+                  className="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md"
+                >
+                  <option value="">Select a shift</option>
+                  {shiftTemplates.map(template => (
+                    <option key={template.id} value={template.id}>
+                      {template.name} ({formatTime(template.start_time)} - {formatTime(template.end_time)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label htmlFor="date-range" className="block text-sm font-medium text-gray-700 mb-1">
+                  Date Range
+                </label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="startDate" className="sr-only">Start Date</label>
+                    <input
+                      type="date"
+                      id="startDate"
+                      name="startDate"
+                      value={assignData.startDate}
+                      onChange={handleAssignChange}
+                      className="block w-full pl-3 pr-3 py-2 text-base border border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="endDate" className="sr-only">End Date</label>
+                    <input
+                      type="date"
+                      id="endDate"
+                      name="endDate"
+                      value={assignData.endDate}
+                      onChange={handleAssignChange}
+                      className="block w-full pl-3 pr-3 py-2 text-base border border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md"
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <label htmlFor="days" className="block text-sm font-medium text-gray-700 mb-1">
+                  Working Days
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {dayAbbreviations.map(day => (
+                    <label key={day} className="inline-flex items-center">
+                      <input 
+                        type="checkbox" 
+                        name={`day-${day}`}
+                        checked={assignData.workingDays[day]} 
+                        onChange={handleAssignChange}
+                        className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded" 
+                      />
+                      <span className="ml-2 text-sm text-gray-700">{day}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              
+              <button 
+                type="submit"
+                disabled={assignLoading}
+                className={`w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
+                  assignLoading 
+                    ? 'bg-green-400 cursor-not-allowed' 
+                    : 'bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500'
+                }`}
+              >
+                {assignLoading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Assigning...
+                  </>
+                ) : 'Assign Shift'}
+              </button>
+            </form>
+          </div>
+        </div>
+        
+        {/* Shift Template Modal */}
+        {showTemplateModal && (
+          <ShiftTemplateModal 
+            template={templateToEdit} 
+            onClose={() => {setShowTemplateModal(false); setTemplateToEdit(null);}}
+            onSubmit={handleTemplateSubmit}
+          />
+        )}
+      </div>
+    );
+  };
+
+
+  const ShiftTemplateModal = ({ template = null, onClose, onSubmit }) => {
+    const [formData, setFormData] = useState({
+      id: template?.id || '',
+      name: template?.name || '',
+      start_time: template?.start_time || '08:00',
+      end_time: template?.end_time || '17:00',
+    });
+    
+    const handleChange = (e) => {
+      const { name, value } = e.target;
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    };
+    
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      onSubmit(formData);
+    };
+    
+    return (
+      <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+            <h3 className="text-lg font-medium text-gray-800">
+              {template ? 'Edit Shift Template' : 'Add Shift Template'}
+            </h3>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          
+          <form onSubmit={handleSubmit}>
+            <div className="px-6 py-4 space-y-4">
+              <div>
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                  Template Name
+                </label>
+                <input
+                  type="text"
+                  id="name"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  required
+                  placeholder="e.g. Morning Shift"
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                />
+              </div>
+              
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="startDate" className="sr-only">Start Date</label>
-                  <input
-                    type="date"
-                    id="startDate"
-                    name="startDate"
-                    value={assignData.startDate}
-                    onChange={handleAssignChange}
-                    className="block w-full pl-3 pr-3 py-2 text-base border border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="endDate" className="sr-only">End Date</label>
-                  <input
-                    type="date"
-                    id="endDate"
-                    name="endDate"
-                    value={assignData.endDate}
-                    onChange={handleAssignChange}
-                    className="block w-full pl-3 pr-3 py-2 text-base border border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md"
-                  />
-                </div>
-              </div>
-            </div>
-            
-            <div>
-              <label htmlFor="days" className="block text-sm font-medium text-gray-700 mb-1">
-                Working Days
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {dayAbbreviations.map(day => (
-                  <label key={day} className="inline-flex items-center">
-                    <input 
-                      type="checkbox" 
-                      name={`day-${day}`}
-                      checked={assignData.workingDays[day]} 
-                      onChange={handleAssignChange}
-                      className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded" 
-                    />
-                    <span className="ml-2 text-sm text-gray-700">{day}</span>
+                  <label htmlFor="start_time" className="block text-sm font-medium text-gray-700 mb-1">
+                    Start Time
                   </label>
-                ))}
+                  <input
+                    type="time"
+                    id="start_time"
+                    name="start_time"
+                    value={formData.start_time}
+                    onChange={handleChange}
+                    required
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="end_time" className="block text-sm font-medium text-gray-700 mb-1">
+                    End Time
+                  </label>
+                  <input
+                    type="time"
+                    id="end_time"
+                    name="end_time"
+                    value={formData.end_time}
+                    onChange={handleChange}
+                    required
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  />
+                </div>
               </div>
             </div>
             
-            <button 
-              type="submit"
-              disabled={assignLoading}
-              className={`w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
-                assignLoading 
-                  ? 'bg-green-400 cursor-not-allowed' 
-                  : 'bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500'
-              }`}
-            >
-              {assignLoading ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Assigning...
-                </>
-              ) : 'Assign Shift'}
-            </button>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              >
+                {template ? 'Update Template' : 'Create Template'}
+              </button>
+            </div>
           </form>
         </div>
       </div>
-    </div>
-  );
-};
+    );
+  };
 
 // Performance Tab Component
-const PerformanceTab = ({ performanceData = [], scheduledReviews = [], employees = [] }) => {
+const PerformanceTab = ({ 
+  performanceData = [], 
+  scheduledReviews = [], 
+  employees = [], 
+  isLoading = false,
+  onRefreshData
+}) => {
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [currentReview, setCurrentReview] = useState(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [reviewToDelete, setReviewToDelete] = useState(null);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [message, setMessage] = useState({ type: '', text: '' });
+  
+  // Status colors for reviews
+  const reviewStatusColors = {
+    'Scheduled': 'bg-blue-100 text-blue-800',
+    'In Progress': 'bg-amber-100 text-amber-800',
+    'Completed': 'bg-green-100 text-green-800',
+    'Cancelled': 'bg-red-100 text-red-800'
+  };
+  
+  // Calculate average performance rating from actual performance data
+  const calculateAvgRating = () => {
+    // Filter only completed reviews with valid ratings
+    const completedReviews = performanceData.filter(
+      review => review && review.status === 'Completed' && review.rating
+    );
+    
+    if (completedReviews.length === 0) return 0;
+    
+    // Calculate average rating - ensure proper numeric conversion
+    const totalRating = completedReviews.reduce((sum, review) => {
+      const rating = parseFloat(review.rating || 0);
+      return sum + (isNaN(rating) ? 0 : rating);
+    }, 0);
+    
+    return parseFloat((totalRating / completedReviews.length).toFixed(1));
+  };
+  
+  // Get upcoming reviews from scheduled reviews data
+  const getUpcomingReviews = () => {
+    return scheduledReviews
+      .filter(review => review.status === 'Scheduled' || review.status === 'In Progress')
+      .sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date));
+  };
+  
+  // Find top performer based on completed reviews
+  const findTopPerformer = () => {
+    // Group reviews by employee and calculate average rating per employee
+    const employeeRatings = {};
+    
+    performanceData
+      .filter(review => review && review.status === 'Completed' && review.rating && review.employee_id)
+      .forEach(review => {
+        if (!employeeRatings[review.employee_id]) {
+          employeeRatings[review.employee_id] = {
+            totalRating: 0,
+            count: 0,
+            avgRating: 0
+          };
+        }
+        
+        employeeRatings[review.employee_id].totalRating += parseFloat(review.rating);
+        employeeRatings[review.employee_id].count++;
+        employeeRatings[review.employee_id].avgRating = 
+          employeeRatings[review.employee_id].totalRating / employeeRatings[review.employee_id].count;
+      });
+    
+    // Find employee with highest rating
+    let topEmployeeId = null;
+    let topRating = 0;
+    
+    Object.entries(employeeRatings).forEach(([employeeId, data]) => {
+      if (data.avgRating > topRating) {
+        topRating = data.avgRating;
+        topEmployeeId = employeeId;
+      }
+    });
+    
+    // Find full employee data
+    if (topEmployeeId) {
+      const topEmployee = employees.find(emp => emp.id === topEmployeeId);
+      if (topEmployee) {
+        return {
+          ...topEmployee,
+          performance_rating: topRating.toFixed(1)
+        };
+      }
+    }
+    
+    return null;
+  };
+  
+  // Calculate metrics
+  const avgRating = calculateAvgRating();
+  const upcomingReviews = getUpcomingReviews();
+  const topPerformer = findTopPerformer();
+
+  // Handle opening the modal to create a new review
+  const handleNewReview = () => {
+    setCurrentReview(null);
+    setReviewModalOpen(true);
+  };
+  
+  // Handle opening the modal to edit an existing review
+  const handleEditReview = (review) => {
+    setCurrentReview(review);
+    setReviewModalOpen(true);
+  };
+  
+  // Open delete confirmation dialog
+  const handleOpenDeleteConfirm = (review) => {
+    setReviewToDelete(review);
+    setConfirmDeleteOpen(true);
+  };
+  
+  // Cancel delete action
+  const handleCancelDelete = () => {
+    setReviewToDelete(null);
+    setConfirmDeleteOpen(false);
+  };
+  
+  // Handle submitting review form (create or update)
+  const handleSubmitReview = async (formData, reviewId) => {
+    setReviewsLoading(true);
+    try {
+      // Create a clean copy of the data
+      const cleanData = { ...formData };
+      
+      // Handle date fields
+      if (!cleanData.completion_date) {
+        delete cleanData.completion_date; // Remove empty completion date
+      }
+      
+      if (!cleanData.scheduled_date) {
+        cleanData.scheduled_date = new Date().toISOString().split('T')[0]; // Default to today if empty
+      }
+      
+      // Handle rating field
+      if (cleanData.status === 'Completed') {
+        // Ensure rating is a number for completed reviews
+        if (!cleanData.rating || cleanData.rating === '') {
+          cleanData.rating = 3.0; // Default rating for completed reviews
+        } else {
+          // Ensure rating is a number
+          cleanData.rating = parseFloat(cleanData.rating);
+        }
+      } else {
+        // Remove rating for non-completed reviews
+        delete cleanData.rating;
+      }
+      
+      if (reviewId) {
+        // Update existing review
+        await updatePerformanceReview(reviewId, cleanData);
+        setMessage({ type: 'success', text: 'Performance review updated successfully' });
+      } else {
+        // Create new review
+        await createPerformanceReview(cleanData);
+        setMessage({ type: 'success', text: 'Performance review scheduled successfully' });
+      }
+      
+      // Close modal and reset current review
+      setReviewModalOpen(false);
+      setCurrentReview(null);
+      
+      // Trigger refresh of performance data
+      if (typeof onRefreshData === 'function') {
+        await onRefreshData(); // Wait for data to be refreshed
+      }
+      
+      // Clear message after 3 seconds
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      console.error('Error saving performance review:', error);
+      setMessage({ 
+        type: 'error', 
+        text: `Failed to save performance review: ${error.message || 'Unknown error'}`
+      });
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
+  
+  // Handle deleting a review
+  const handleDeleteReview = async () => {
+    if (!reviewToDelete) return;
+    
+    setReviewsLoading(true);
+    try {
+      await deletePerformanceReview(reviewToDelete.id);
+      
+      // Close modal and refresh data
+      setConfirmDeleteOpen(false);
+      setReviewToDelete(null);
+      
+      setMessage({ type: 'success', text: 'Performance review deleted successfully' });
+      
+      // Trigger refresh of performance data
+      if (typeof onRefreshData === 'function') {
+        onRefreshData();
+      }
+      
+      // Clear message after 3 seconds
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      console.error('Error deleting performance review:', error);
+      setMessage({ type: 'error', text: 'Failed to delete performance review. Please try again.' });
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
+  
   // Add null checks for arrays and objects
   if (!employees || !Array.isArray(employees) || employees.length === 0) {
     return (
@@ -2798,24 +3946,26 @@ const PerformanceTab = ({ performanceData = [], scheduledReviews = [], employees
     );
   }
 
-  // Calculate average performance rating
-  const avgRating = employees.reduce((sum, emp) => {
-    return sum + (emp.performance_rating || 0);
-  }, 0) / (employees.filter(emp => emp.performance_rating).length || 1);
-
-  // Find top performer
-  const topPerformer = [...employees].sort((a, b) => 
-    (b.performance_rating || 0) - (a.performance_rating || 0)
-  )[0];
-
   return (
     <div>
+      {/* Success/error message */}
+      {message.text && (
+        <div className={`mb-4 p-3 rounded-md ${
+          message.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 
+          'bg-red-50 text-red-700 border border-red-200'
+        }`}>
+          {message.text}
+        </div>
+      )}
+      
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-sm font-medium text-gray-500">Average Performance</p>
-              <p className="text-2xl font-semibold text-gray-800 mt-1">{avgRating.toFixed(1)}/5.0</p>
+              <p className="text-2xl font-semibold text-gray-800 mt-1">
+                {typeof avgRating === 'number' ? `${avgRating.toFixed(1)}` : '0'}/5.0
+              </p>
             </div>
             <div className="p-2 rounded-full bg-green-50 text-green-600">
               <Award size={20} />
@@ -2824,41 +3974,41 @@ const PerformanceTab = ({ performanceData = [], scheduledReviews = [], employees
           <div className="mt-4 flex items-center">
             <div className="flex mr-2">
               {[1, 2, 3, 4, 5].map((star) => (
-                <svg key={star} className={`w-5 h-5 ${star <= Math.round(avgRating) ? 'text-yellow-400' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 20 20">
+                <svg key={star} className={`w-5 h-5 ${star <= Math.round(avgRating || 0) ? 'text-yellow-400' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 20 20">
                   <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                 </svg>
               ))}
             </div>
             <span className="text-xs text-gray-500">Team average</span>
           </div>
-        </div>
+      </div>
         
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-sm font-medium text-gray-500">Upcoming Reviews</p>
-              <p className="text-2xl font-semibold text-gray-800 mt-1">{scheduledReviews.length}</p>
+              <p className="text-2xl font-semibold text-gray-800 mt-1">{upcomingReviews.length}</p>
             </div>
             <div className="p-2 rounded-full bg-amber-50 text-amber-600">
               <Calendar size={20} />
             </div>
           </div>
           <div className="mt-4 space-y-1">
-            {scheduledReviews.slice(0, 2).map((review, index) => (
+            {upcomingReviews.slice(0, 2).map((review, index) => (
               <div key={index} className="flex justify-between text-xs">
                 <span className="text-gray-700">{review.employees?.name || 'Unknown'}</span>
                 <span className="text-gray-500">
                   {(() => {
-                    const reviewDate = new Date(review.review_date);
+                    const reviewDate = new Date(review.scheduled_date);
                     const today = new Date();
                     const diffTime = reviewDate - today;
                     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                    return `Due in ${diffDays} days`;
+                    return diffDays <= 0 ? 'Due today' : `Due in ${diffDays} days`;
                   })()}
                 </span>
               </div>
             ))}
-            {scheduledReviews.length === 0 && (
+            {upcomingReviews.length === 0 && (
               <span className="text-xs text-gray-500">No upcoming reviews</span>
             )}
           </div>
@@ -2898,13 +4048,13 @@ const PerformanceTab = ({ performanceData = [], scheduledReviews = [], employees
                   Overall Rating
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Job Knowledge
+                  Review Type
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Work Quality
+                  Status
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Teamwork
+                  Reviewer
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Last Review
@@ -2912,17 +4062,13 @@ const PerformanceTab = ({ performanceData = [], scheduledReviews = [], employees
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {employees
-                .filter(employee => employee && employee.id) // Filter out empty/incomplete records
-                .sort((a, b) => (b.performance_rating || 0) - (a.performance_rating || 0))
-                .map(employee => {
-                  // Find employee's performance data - get the latest review
-                  const employeeReview = performanceData
-                    .filter(p => p.employee_id === employee.id)
-                    .sort((a, b) => new Date(b.review_date) - new Date(a.review_date))[0] || {};
+              {performanceData
+                .filter(review => review && review.employees && review.employee_id)
+                .map(review => {
+                  const employee = employees.find(e => e.id === review.employee_id) || review.employees;
                   
                   return (
-                    <tr key={employee.id}>
+                    <tr key={review.id}>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <div className="flex-shrink-0 h-10 w-10">
@@ -2933,72 +4079,57 @@ const PerformanceTab = ({ performanceData = [], scheduledReviews = [], employees
                             />
                           </div>
                           <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">{employee.name}</div>
+                            <div className="text-sm font-medium text-gray-900">{review.employees?.name || employee?.name || 'Unknown'}</div>
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {employee.job_title}
+                        {review.employees?.job_title || employee?.job_title || 'Unknown'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <span className="text-sm font-medium text-gray-900 mr-2">
-                            {employee.performance_rating || "N/A"}
+                            {review.rating || "N/A"}
                           </span>
                           <div className="flex">
                             {[1, 2, 3, 4, 5].map((star) => (
-                              <svg key={star} className={`w-4 h-4 ${star <= Math.floor(employee.performance_rating || 0) ? 'text-yellow-400' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 20 20">
+                              <svg key={star} className={`w-4 h-4 ${star <= Math.floor(review.rating || 0) ? 'text-yellow-400' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 20 20">
                                 <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                               </svg>
                             ))}
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <span className="text-sm text-gray-900 mr-2">
-                            {employeeReview.job_knowledge_rating || "N/A"}
-                          </span>
-                          <div className="w-24 bg-gray-200 rounded-full h-2">
-                            <div 
-                              className="bg-green-600 h-2 rounded-full" 
-                              style={{ width: `${(employeeReview.job_knowledge_rating || 0) * 20}%` }}
-                            ></div>
-                          </div>
-                        </div>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {review.review_type || "N/A"}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <span className="text-sm text-gray-900 mr-2">
-                            {employeeReview.work_quality_rating || "N/A"}
-                          </span>
-                          <div className="w-24 bg-gray-200 rounded-full h-2">
-                            <div 
-                              className="bg-green-600 h-2 rounded-full" 
-                              style={{ width: `${(employeeReview.work_quality_rating || 0) * 20}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <span className="text-sm text-gray-900 mr-2">
-                            {employeeReview.teamwork_rating || "N/A"}
-                          </span>
-                          <div className="w-24 bg-gray-200 rounded-full h-2">
-                            <div 
-                              className="bg-green-600 h-2 rounded-full" 
-                              style={{ width: `${(employeeReview.teamwork_rating || 0) * 20}%` }}
-                            ></div>
-                          </div>
-                        </div>
+                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          review.status === 'Completed' ? 'bg-green-100 text-green-800' :
+                          review.status === 'In Progress' ? 'bg-amber-100 text-amber-800' :
+                          review.status === 'Scheduled' ? 'bg-blue-100 text-blue-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {review.status || "N/A"}
+                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {employeeReview.review_date ? formatDate(employeeReview.review_date) : 'No review yet'}
+                        {review.reviewer?.name || "N/A"}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {review.completion_date ? formatDate(review.completion_date) : 
+                        review.scheduled_date ? formatDate(review.scheduled_date) : 'No review yet'}
                       </td>
                     </tr>
                   );
                 })}
+              {performanceData.length === 0 && (
+                <tr>
+                  <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
+                    No performance data available
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -3007,7 +4138,11 @@ const PerformanceTab = ({ performanceData = [], scheduledReviews = [], employees
       <div className="bg-white rounded-lg shadow-sm p-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-medium text-gray-800">Schedule Performance Review</h3>
-          <button className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">
+          <button 
+            onClick={handleNewReview}
+            className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
+            disabled={isLoading || reviewsLoading}
+          >
             New Review
           </button>
         </div>
@@ -3037,7 +4172,15 @@ const PerformanceTab = ({ performanceData = [], scheduledReviews = [], employees
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {scheduledReviews.length > 0 ? (
+              {isLoading ? (
+                <tr>
+                  <td colSpan="6" className="px-6 py-4 text-center">
+                    <div className="flex justify-center">
+                      <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-green-500"></div>
+                    </div>
+                  </td>
+                </tr>
+              ) : scheduledReviews.length > 0 ? (
                 scheduledReviews.map(review => (
                   <tr key={review.id}>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -3060,27 +4203,43 @@ const PerformanceTab = ({ performanceData = [], scheduledReviews = [], employees
                       {review.review_type}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(review.review_date)}
+                      {formatDate(review.scheduled_date)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {review.reviewer?.name || 'Unassigned'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        review.status === 'Completed' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-yellow-100 text-yellow-800'
+                        reviewStatusColors[review.status] || 'bg-gray-100 text-gray-800'
                       }`}>
                         {review.status}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       {review.status === 'Completed' ? (
-                        <a href="#" className="text-blue-600 hover:text-blue-900">View</a>
+                        <button 
+                          onClick={() => handleEditReview(review)}
+                          className="text-blue-600 hover:text-blue-900"
+                          disabled={reviewsLoading}
+                        >
+                          View
+                        </button>
                       ) : (
                         <>
-                          <a href="#" className="text-green-600 hover:text-green-900 mr-4">Edit</a>
-                          <a href="#" className="text-red-600 hover:text-red-900">Cancel</a>
+                          <button 
+                            onClick={() => handleEditReview(review)}
+                            className="text-green-600 hover:text-green-900 mr-4"
+                            disabled={reviewsLoading}
+                          >
+                            Edit
+                          </button>
+                          <button 
+                            onClick={() => handleOpenDeleteConfirm(review)}
+                            className="text-red-600 hover:text-red-900"
+                            disabled={reviewsLoading}
+                          >
+                            Cancel
+                          </button>
                         </>
                       )}
                     </td>
@@ -3097,6 +4256,44 @@ const PerformanceTab = ({ performanceData = [], scheduledReviews = [], employees
           </table>
         </div>
       </div>
+      
+      {/* Performance Review Modal */}
+      <PerformanceReviewModal 
+        isOpen={reviewModalOpen}
+        onClose={() => setReviewModalOpen(false)}
+        review={currentReview}
+        employees={employees}
+        onSubmit={handleSubmitReview}
+        isLoading={reviewsLoading}
+      />
+      
+      {/* Delete Confirmation Dialog */}
+      {confirmDeleteOpen && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Cancel Performance Review</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Are you sure you want to cancel this performance review? This action cannot be undone.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={handleCancelDelete}
+                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                disabled={reviewsLoading}
+              >
+                No, Keep Review
+              </button>
+              <button
+                onClick={handleDeleteReview}
+                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
+                disabled={reviewsLoading}
+              >
+                {reviewsLoading ? 'Cancelling...' : 'Yes, Cancel Review'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -3987,6 +5184,322 @@ const RecordAttendanceModal = ({ employee, onClose, onSave }) => {
               className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
             >
               Save Attendance
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const PerformanceReviewModal = ({ 
+  isOpen, 
+  onClose, 
+  review = null, 
+  employees = [], 
+  onSubmit, 
+  isLoading = false 
+}) => {
+  const isEditing = Boolean(review?.id);
+  const today = new Date().toISOString().split('T')[0];
+  
+  // Initialize form data based on whether we're editing or creating
+  const [formData, setFormData] = useState(() => {
+    if (review) {
+      // When editing, populate form with review data
+      return {
+        employee_id: review.employee_id || '',
+        reviewer_id: review.reviewer_id || '',
+        scheduled_date: review.scheduled_date || today,
+        completion_date: review.completion_date || '',
+        review_type: review.review_type || 'Annual',
+        status: review.status || 'Scheduled',
+        rating: review.rating || '',
+        summary: review.summary || ''
+      };
+    } else {
+      // Default values for new review
+      return {
+        employee_id: '',
+        reviewer_id: '',
+        scheduled_date: today,
+        completion_date: '',
+        review_type: 'Annual',
+        status: 'Scheduled',
+        rating: '',
+        summary: ''
+      };
+    }
+  });
+
+  // Reset form data when review changes (e.g., when switching between different reviews to edit)
+  useEffect(() => {
+    if (isOpen) {
+      if (review) {
+        setFormData({
+          employee_id: review.employee_id || '',
+          reviewer_id: review.reviewer_id || '',
+          scheduled_date: review.scheduled_date || today,
+          completion_date: review.completion_date || '',
+          review_type: review.review_type || 'Annual',
+          status: review.status || 'Scheduled',
+          rating: review.rating || '',
+          summary: review.summary || ''
+        });
+      } else {
+        setFormData({
+          employee_id: '',
+          reviewer_id: '',
+          scheduled_date: today,
+          completion_date: '',
+          review_type: 'Annual',
+          status: 'Scheduled',
+          rating: '',
+          summary: ''
+        });
+      }
+    }
+  }, [review, isOpen, today]);
+  
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prevState => ({
+      ...prevState,
+      [name]: value
+    }));
+    
+    // If status is changed to "Completed", automatically set completion date to today
+    if (name === 'status' && value === 'Completed' && !formData.completion_date) {
+      setFormData(prevState => ({
+        ...prevState,
+        completion_date: today
+      }));
+    }
+  };
+  
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    // Create a clean copy of form data for submission
+    const cleanData = { ...formData };
+    
+    // Handle empty fields
+    if (cleanData.reviewer_id === '') {
+      delete cleanData.reviewer_id;
+    }
+    
+    if (cleanData.completion_date === '') {
+      delete cleanData.completion_date;
+    }
+    
+    // Handle rating based on status
+    if (cleanData.status === 'Completed') {
+      if (!cleanData.rating || cleanData.rating === '') {
+        cleanData.rating = 3.0;
+      } else {
+        cleanData.rating = parseFloat(cleanData.rating);
+      }
+    } else {
+      delete cleanData.rating;
+    }
+    
+    onSubmit(cleanData, isEditing ? review.id : null);
+  };
+  
+  if (!isOpen) return null;
+  
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <h3 className="text-lg font-medium text-gray-800">
+            {isEditing ? 'Edit Performance Review' : 'Schedule Performance Review'}
+          </h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit}>
+          <div className="px-6 py-4 space-y-4">
+            <div>
+              <label htmlFor="employee_id" className="block text-sm font-medium text-gray-700 mb-1">
+                Employee *
+              </label>
+              <select
+                id="employee_id"
+                name="employee_id"
+                value={formData.employee_id || ''}
+                onChange={handleChange}
+                disabled={isEditing}
+                required
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              >
+                <option value="">Select Employee</option>
+                {employees.map(employee => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div>
+              <label htmlFor="reviewer_id" className="block text-sm font-medium text-gray-700 mb-1">
+                Reviewer
+              </label>
+              <select
+                id="reviewer_id"
+                name="reviewer_id"
+                value={formData.reviewer_id || ''}
+                onChange={handleChange}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              >
+                <option value="">Select Reviewer</option>
+                {employees.map(employee => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="review_type" className="block text-sm font-medium text-gray-700 mb-1">
+                  Review Type *
+                </label>
+                <select
+                  id="review_type"
+                  name="review_type"
+                  value={formData.review_type}
+                  onChange={handleChange}
+                  required
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                >
+                  <option value="Annual">Annual</option>
+                  <option value="Semi-Annual">Semi-Annual</option>
+                  <option value="Quarterly">Quarterly</option>
+                  <option value="Probationary">Probationary</option>
+                  <option value="Special">Special</option>
+                </select>
+              </div>
+              
+              <div>
+                <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
+                  Status *
+                </label>
+                <select
+                  id="status"
+                  name="status"
+                  value={formData.status}
+                  onChange={handleChange}
+                  required
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                >
+                  <option value="Scheduled">Scheduled</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="scheduled_date" className="block text-sm font-medium text-gray-700 mb-1">
+                  Scheduled Date *
+                </label>
+                <input
+                  type="date"
+                  id="scheduled_date"
+                  name="scheduled_date"
+                  value={formData.scheduled_date}
+                  onChange={handleChange}
+                  required
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                />
+              </div>
+              
+              {(formData.status === 'Completed' || review?.completion_date) && (
+                <div>
+                  <label htmlFor="completion_date" className="block text-sm font-medium text-gray-700 mb-1">
+                    Completion Date
+                  </label>
+                  <input
+                    type="date"
+                    id="completion_date"
+                    name="completion_date"
+                    value={formData.completion_date || ''}
+                    onChange={handleChange}
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  />
+                </div>
+              )}
+            </div>
+            
+            {formData.status === 'Completed' && (
+              <div>
+                <label htmlFor="rating" className="block text-sm font-medium text-gray-700 mb-1">
+                  Rating (1-5)
+                </label>
+                <input
+                  type="number"
+                  id="rating"
+                  name="rating"
+                  value={formData.rating || ''}
+                  onChange={handleChange}
+                  min="1"
+                  max="5"
+                  step="0.1"
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                />
+              </div>
+            )}
+            
+            <div>
+              <label htmlFor="summary" className="block text-sm font-medium text-gray-700 mb-1">
+                Summary
+              </label>
+              <textarea
+                id="summary"
+                name="summary"
+                rows={4}
+                value={formData.summary}
+                onChange={handleChange}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                placeholder="Review notes, feedback, and goals..."
+              ></textarea>
+            </div>
+          </div>
+          
+          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              disabled={isLoading}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Saving...
+                </>
+              ) : (
+                isEditing ? 'Update Review' : 'Schedule Review'
+              )}
             </button>
           </div>
         </form>

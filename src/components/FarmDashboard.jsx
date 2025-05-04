@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Bell, 
   Menu, 
@@ -21,68 +21,15 @@ import {
   Plus
 } from 'lucide-react';
 import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend, 
-  ResponsiveContainer 
+  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, PieChart, Pie, Cell 
 } from 'recharts';
-
-// Mock data
-const mockKpiData = {
-  totalCows: 247,
-  milkProduction: 1863,
-  healthAlerts: 5,
-  activeTasks: 12,
-  revenue: 28650
-};
-
-const mockMilkProductionData = {
-  '7days': [
-    { day: 'Mon', production: 420 },
-    { day: 'Tue', production: 430 },
-    { day: 'Wed', production: 425 },
-    { day: 'Thu', production: 428 },
-    { day: 'Fri', production: 435 },
-    { day: 'Sat', production: 440 },
-    { day: 'Sun', production: 445 },
-  ],
-  'month': [
-    { day: '1', production: 420 },
-    { day: '5', production: 430 },
-    { day: '10', production: 450 },
-    { day: '15', production: 440 },
-    { day: '20', production: 435 },
-    { day: '25', production: 455 },
-    { day: '30', production: 465 },
-  ],
-  '3months': [
-    { month: 'Jan', production: 13500 },
-    { month: 'Feb', production: 14200 },
-    { month: 'Mar', production: 15500 },
-    { month: 'Apr', production: 16100 },
-  ]
-};
-
-const mockCowHealthData = [
-  { name: 'Healthy', value: 210, color: '#4CAF50' },
-  { name: 'Monitored', value: 32, color: '#FFA000' },
-  { name: 'Treatment', value: 5, color: '#F44336' },
-];
-
-const mockRecentActivities = [
-  { id: 1, type: 'health', text: 'Cow #A128 received vaccination', time: '15 min ago', details: 'Annual vaccination for BVD administered by Dr. Smith. Next vaccination scheduled for April 2024.' },
-  { id: 2, type: 'milk', text: 'Morning collection complete: 427L', time: '2 hours ago', details: 'Quality parameters: Fat 3.8%, Protein 3.2%, Lactose 4.7%. Collected by John Doe.' },
-  { id: 3, type: 'employee', text: 'John started his shift', time: '3 hours ago', details: 'Morning shift from 6:00 AM to 2:00 PM. Assigned to Barn 2 and milking parlor.' },
-  { id: 4, type: 'cow', text: 'New cow registered: #B094', time: '5 hours ago', details: 'Jersey breed, 3 years old. Purchased from Smith Family Farm. Health check completed.' },
-  { id: 5, type: 'health', text: 'Cow #C215 treatment for mastitis', time: '6 hours ago', details: 'Moderate case in right rear quarter. Treatment with antibiotics initiated. Follow-up scheduled in 7 days.' },
-  { id: 6, type: 'milk', text: 'Evening collection complete: 385L', time: '14 hours ago', details: 'Quality parameters: Fat 3.7%, Protein 3.3%, Lactose 4.6%. Collected by Jane Smith.' },
-  { id: 7, type: 'employee', text: 'Sarah completed training', time: '1 day ago', details: 'Completed milk quality testing training. Certification valid for 2 years.' },
-  { id: 8, type: 'cow', text: 'Cow #D073 health check', time: '1 day ago', details: 'Regular checkup completed. All vitals normal. Vaccination due in 5 days.' }
-];
+// Import the necessary services
+import { fetchCows } from './services/cowService';
+import { fetchMilkCollections, fetchMonthlyTotals } from './services/milkService';
+import { fetchHealthEvents } from './services/healthService';
+import { fetchEmployees, getMonthlyAttendanceSummary } from './services/employeeService';
+import { getFinancialDashboardData } from './services/financialService';
 
 // Main farm dashboard component
 const FarmDashboard = () => {
@@ -96,11 +43,241 @@ const FarmDashboard = () => {
   const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
   const [activityFilter, setActivityFilter] = useState('all');
   const [milkDataPeriod, setMilkDataPeriod] = useState('7days');
+  const [dashboardData, setDashboardData] = useState({
+    kpiData: {
+      totalCows: 0,
+      milkProduction: 0,
+      healthAlerts: 0,
+      activeTasks: 0,
+      revenue: 0
+    },
+    milkProductionData: {
+      '7days': [],
+      'month': [],
+      '3months': []
+    },
+    cowHealthData: [],
+    recentActivities: []
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const notificationsRef = useRef(null);
   const profileMenuRef = useRef(null);
   
-  // Handle click outside to close dropdowns
+  // Fetch dashboard data when component mounts
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+  
+  // Fetch dashboard data based on date range
+  const fetchDashboardData = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // Get cows data
+      const cowsData = await fetchCows();
+      
+      // Get milk collections for the last 7 days by default
+      const today = new Date();
+      const sevenDaysAgo = new Date(today);
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      
+      const milkData = await fetchMilkCollections(sevenDaysAgo.toISOString(), today.toISOString());
+      
+      // Get monthly milk totals
+      const monthlyMilkData = await fetchMonthlyTotals();
+      
+      // Get health alerts
+      const healthEvents = await fetchHealthEvents();
+      const activeHealthAlerts = healthEvents.filter(event => 
+        event.status === 'In progress' || event.status === 'Monitoring'
+      ).length;
+      
+      // Get financial data
+      const financialData = await getFinancialDashboardData();
+      
+      // Process milk data into the format needed for charts
+      const processedMilkData = processMilkData(milkData, monthlyMilkData);
+      
+      // Process health data
+      const healthData = processHealthData(cowsData);
+      
+      // Calculate total milk production for KPI
+      const totalMilk = milkData.reduce((sum, record) => sum + parseFloat(record.totalQuantity || 0), 0);
+      
+      // Process recent activities
+      const recentActivities = processRecentActivities(healthEvents, milkData, cowsData);
+      
+      // Set dashboard data
+      setDashboardData({
+        kpiData: {
+          totalCows: cowsData.length,
+          milkProduction: totalMilk,
+          healthAlerts: activeHealthAlerts,
+          activeTasks: healthEvents.filter(event => event.followUp && new Date(event.followUp) >= new Date()).length,
+          revenue: financialData?.financialStats?.revenue?.current || 0
+        },
+        milkProductionData: processedMilkData,
+        cowHealthData: healthData,
+        recentActivities: recentActivities
+      });
+      
+      setIsLoading(false);
+    } catch (err) {
+      console.error("Error fetching dashboard data:", err);
+      setError("Failed to load dashboard data. Please try again.");
+      setIsLoading(false);
+    }
+  };
+  
+  // Process milk data for charts
+  const processMilkData = (milkData, monthlyData) => {
+    // Process 7 days data
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dailyMap = {};
+    
+    // Initialize all days with 0
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const dayName = days[date.getDay()];
+      dailyMap[dayName] = 0;
+    }
+    
+    // Sum milk quantities by day
+    milkData.forEach(record => {
+      const date = new Date(record.date);
+      const dayName = days[date.getDay()];
+      dailyMap[dayName] += parseFloat(record.totalQuantity || 0);
+    });
+    
+    const sevenDaysData = Object.keys(dailyMap).map(day => ({
+      day,
+      production: dailyMap[day]
+    }));
+    
+    // Process monthly data
+    const monthlyProductionData = monthlyData.slice(0, 12).map(item => ({
+      day: item.month.toString(),
+      production: item.quantity
+    }));
+    
+    // Process quarterly data (group by quarter)
+    const quarterlyData = [];
+    if (monthlyData.length >= 3) {
+      for (let i = 0; i < 4; i++) {
+        if (i * 3 < monthlyData.length) {
+          const quarterMonths = monthlyData.slice(i * 3, (i + 1) * 3);
+          const sum = quarterMonths.reduce((total, m) => total + m.quantity, 0);
+          quarterlyData.push({
+            month: `Q${i+1}`,
+            production: sum
+          });
+        }
+      }
+    }
+    
+    return {
+      '7days': sevenDaysData,
+      'month': monthlyProductionData,
+      '3months': quarterlyData
+    };
+  };
+  
+  // Process health data for pie chart
+  const processHealthData = (cowsData) => {
+    const healthCounts = {
+      'Healthy': 0,
+      'Monitored': 0,
+      'Treatment': 0
+    };
+    
+    cowsData.forEach(cow => {
+      if (cow.healthStatus === 'Healthy') {
+        healthCounts.Healthy++;
+      } else if (cow.healthStatus === 'Monitored') {
+        healthCounts.Monitored++;
+      } else if (cow.healthStatus === 'Under treatment') {
+        healthCounts.Treatment++;
+      }
+    });
+    
+    return [
+      { name: 'Healthy', value: healthCounts.Healthy, color: '#4CAF50' },
+      { name: 'Monitored', value: healthCounts.Monitored, color: '#FFA000' },
+      { name: 'Treatment', value: healthCounts.Treatment, color: '#F44336' },
+    ];
+  };
+  
+  // Process recent activities
+  const processRecentActivities = (healthEvents, milkData, cowsData) => {
+    const activities = [];
+    
+    // Add health events
+    healthEvents.slice(0, 5).forEach(event => {
+      activities.push({
+        id: `health_${event.id}`,
+        type: 'health',
+        text: `${event.cowName} ${event.eventType}`,
+        time: getRelativeTime(event.eventDate),
+        details: event.description
+      });
+    });
+    
+    // Add milk collection events
+    milkData.slice(0, 5).forEach((record, index) => {
+      activities.push({
+        id: `milk_${record.id || index}`,
+        type: 'milk',
+        text: `${record.shift} collection complete: ${record.totalQuantity}L`,
+        time: getRelativeTime(record.date),
+        details: `Quality parameters: Fat ${(record.qualityParameters?.fat || 3.8).toFixed(1)}%, Protein ${(record.qualityParameters?.protein || 3.2).toFixed(1)}%, Lactose ${(record.qualityParameters?.lactose || 4.7).toFixed(1)}%. Collected by ${record.collectedBy || 'Farm Staff'}.`
+      });
+    });
+    
+    // Sort by date (most recent first) and limit to 8
+    return activities
+      .sort((a, b) => {
+        const timeA = parseTimeString(a.time);
+        const timeB = parseTimeString(b.time);
+        return timeA - timeB;
+      })
+      .slice(0, 8);
+  };
+  
+  // Helper function to convert relative time string to numeric value for sorting
+  const parseTimeString = (timeString) => {
+    if (timeString.includes('min')) {
+      return parseInt(timeString) * 60;
+    } else if (timeString.includes('hour')) {
+      return parseInt(timeString) * 3600;
+    } else if (timeString.includes('day')) {
+      return parseInt(timeString) * 86400;
+    }
+    return 0;
+  };
+  
+  // Helper function to get relative time
+  const getRelativeTime = (dateString) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = Math.abs(now - date);
+    const diffMinutes = Math.floor(diffTime / (1000 * 60));
+    const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffMinutes < 60) {
+      return `${diffMinutes} min ago`;
+    } else if (diffHours < 24) {
+      return `${diffHours} hours ago`;
+    } else {
+      return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    }
+  };
+
+  // Handle click outside to close dropdowns (unchanged)
   useEffect(() => {
     function handleClickOutside(event) {
       if (notificationsRef.current && !notificationsRef.current.contains(event.target)) {
@@ -117,12 +294,12 @@ const FarmDashboard = () => {
     };
   }, []);
 
-  // Toggle sidebar
+  // Toggle sidebar (unchanged)
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
   };
   
-  // Date navigation
+  // Date navigation (unchanged)
   const navigateDate = (direction) => {
     const newDate = new Date(currentDate);
     
@@ -137,14 +314,18 @@ const FarmDashboard = () => {
     }
     
     setCurrentDate(newDate);
+    
+    // Refetch data with new date range
+    fetchDashboardData();
   };
   
-  // Reset to today
+  // Reset to today (unchanged)
   const resetToToday = () => {
     setCurrentDate(new Date());
+    fetchDashboardData();
   };
   
-  // Format date range display
+  // Format date range display (unchanged)
   const formatDateRangeDisplay = () => {
     const options = { month: 'short', day: 'numeric', year: 'numeric' };
     
@@ -167,11 +348,40 @@ const FarmDashboard = () => {
     return currentDate.toLocaleDateString('en-US', options);
   };
 
-  // Filter activities for the modal
+  // Filter activities for the modal (unchanged)
   const getFilteredActivities = () => {
-    if (activityFilter === 'all') return mockRecentActivities;
-    return mockRecentActivities.filter(activity => activity.type === activityFilter);
+    if (activityFilter === 'all') return dashboardData.recentActivities;
+    return dashboardData.recentActivities.filter(activity => activity.type === activityFilter);
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500 mx-auto"></div>
+          <p className="mt-4 text-gray-700">Loading dashboard data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-100">
+        <div className="text-center p-6 bg-white rounded-lg shadow-md">
+          <div className="text-red-500 text-5xl mb-4">⚠️</div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Error Loading Data</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button 
+            onClick={fetchDashboardData}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-gray-100">
@@ -340,35 +550,35 @@ const FarmDashboard = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-6">
             <KpiCard
               title="Total Cows"
-              value={mockKpiData.totalCows}
+              value={dashboardData.kpiData.totalCows}
               icon={<Clipboard className="text-green-600" />}
               trend="+12% from last month"
               positive={true}
             />
             <KpiCard
               title="Milk Production"
-              value={`${mockKpiData.milkProduction}L`}
+              value={`${dashboardData.kpiData.milkProduction}L`}
               icon={<Droplet className="text-blue-600" />}
               trend="+5% from yesterday"
               positive={true}
             />
             <KpiCard
               title="Health Alerts"
-              value={mockKpiData.healthAlerts}
+              value={dashboardData.kpiData.healthAlerts}
               icon={<Thermometer className="text-red-500" />}
               trend="2 new alerts today"
               positive={false}
             />
             <KpiCard
               title="Active Tasks"
-              value={mockKpiData.activeTasks}
+              value={dashboardData.kpiData.activeTasks}
               icon={<Clipboard className="text-amber-500" />}
               trend="3 tasks due today"
               positive={true}
             />
             <KpiCard
               title="Revenue (MTD)"
-              value={`₹${mockKpiData.revenue}`}
+              value={`₹${dashboardData.kpiData.revenue}`}
               icon={<DollarSign className="text-green-700" />}
               trend="+8% from last month"
               positive={true}
@@ -394,7 +604,7 @@ const FarmDashboard = () => {
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart
-                    data={mockMilkProductionData[milkDataPeriod]}
+                    data={dashboardData.milkProductionData[milkDataPeriod]}
                     margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f1f1" />
@@ -423,8 +633,29 @@ const FarmDashboard = () => {
             {/* Cow Health Distribution */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-lg font-semibold text-gray-800 mb-4">Cow Health Status</h2>
-              <div className="h-80 bg-gray-100 rounded-lg flex items-center justify-center">
-                <p className="text-gray-500">Cow health chart would go here</p>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={dashboardData.cowHealthData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {dashboardData.cowHealthData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      formatter={(value) => [`${value} cows`, '']}
+                      contentStyle={{ background: '#fff', border: '1px solid #f1f1f1', borderRadius: '4px' }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
               </div>
             </div>
           </div>
@@ -443,7 +674,7 @@ const FarmDashboard = () => {
                 </button>
               </div>
               <div className="space-y-4">
-                {mockRecentActivities.slice(0, 4).map((activity) => (
+                {dashboardData.recentActivities.slice(0, 4).map((activity) => (
                   <ActivityItem key={activity.id} activity={activity} />
                 ))}
               </div>
@@ -495,10 +726,10 @@ const FarmDashboard = () => {
         </main>
       </div>
       
-      {/* All Activities Modal */}
-      {isActivitiesModalOpen && (
+            {/* All Activities Modal */}
+            {isActivitiesModalOpen && (
         <ActivitiesModal 
-          activities={mockRecentActivities} 
+          activities={dashboardData.recentActivities} 
           onClose={() => setIsActivitiesModalOpen(false)}
           filter={activityFilter}
           setFilter={setActivityFilter}

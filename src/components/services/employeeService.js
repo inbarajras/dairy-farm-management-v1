@@ -184,52 +184,96 @@ export const updateEmployee = async (employeeId, employeeData) => {
 
 // Record attendance for an employee
 export const recordAttendance = async (attendanceData) => {
-  try {
-    const record = {
-      employee_id: attendanceData.employeeId,
-      date: attendanceData.date,
-      status: attendanceData.status,
-      hours_worked: attendanceData.hoursWorked,
-      notes: attendanceData.notes || null
-    };
-    
-    const { data, error } = await supabase
-      .from('employee_attendance')
-      .insert(record)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    return data;
-  } catch (error) {
-    console.error('Error recording attendance:', error);
-    throw error;
-  }
-};
-
-// Get monthly attendance summary
-export const getMonthlyAttendanceSummary = async (month, year) => {
-  try {
-    const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0];
-    const endDate = new Date(year, month, 0).toISOString().split('T')[0];
-    
-    const { data, error } = await supabase
-      .from('employee_attendance')
-      .select(`
-        *,
-        employees:employee_id (id, name, job_title, image_url)
-      `)
-      .gte('date', startDate)
-      .lte('date', endDate)
-      .order('date', { ascending: false });
-    
-    if (error) throw error;
-    return data;
-  } catch (error) {
-    console.error('Error fetching monthly attendance summary:', error);
-    throw error;
-  }
-};
+    try {
+      const { employeeId, date, status, hours_worked, notes, id } = attendanceData;
+      
+      // Check if attendance already exists for this employee and date
+      const { data: existingRecord, error: checkError } = await supabase
+        .from('employee_attendance')
+        .select('id')
+        .eq('employee_id', employeeId)
+        .eq('date', date)
+        .maybeSingle();
+      
+      if (checkError) {
+        console.error('Error checking for existing attendance record:', checkError);
+        throw checkError;
+      }
+      
+      let result;
+      
+      // If record exists and no ID was provided, or if ID was provided but doesn't match existing, use existing ID
+      const recordId = id || (existingRecord?.id);
+      
+      if (recordId) {
+        // Update existing record
+        const { data, error } = await supabase
+          .from('employee_attendance')
+          .update({
+            status,
+            hours_worked,
+            notes
+          })
+          .eq('id', recordId)
+          .select()
+          .single();
+        
+        if (error) throw error;
+        result = data;
+      } else {
+        // Insert new record
+        const { data, error } = await supabase
+          .from('employee_attendance')
+          .insert({
+            employee_id: employeeId,
+            date,
+            status,
+            hours_worked,
+            notes
+          })
+          .select()
+          .single();
+        
+        if (error) throw error;
+        result = data;
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Error recording attendance:', error);
+      throw error;
+    }
+  };
+  
+  // Get monthly attendance summary - Updated to match the schema
+  export const getMonthlyAttendanceSummary = async (month, year) => {
+    try {
+      const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0];
+      const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+      
+      const { data, error } = await supabase
+        .from('employee_attendance')
+        .select(`
+          id,
+          employee_id,
+          date,
+          status,
+          hours_worked,
+          notes,
+          created_at,
+          employees:employee_id (id, name, job_title, image_url)
+        `)
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .order('date', { ascending: false });
+      
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching monthly attendance summary:', error);
+      throw error;
+    }
+  };
 
 // Get attendance statistics
 export const getAttendanceStatistics = async (month, year) => {
@@ -291,7 +335,12 @@ export const getEmployeeShifts = async (weekStart) => {
     try {
       const formattedWeekStart = weekStart.toISOString().split('T')[0];
       
-      // Fetch shifts for the week
+      // Calculate the next week start to check for shifts spanning the week boundary
+      const nextWeekStart = new Date(weekStart);
+      nextWeekStart.setDate(nextWeekStart.getDate() + 7);
+      const formattedNextWeekStart = nextWeekStart.toISOString().split('T')[0];
+      
+      // Fetch shifts for the week - include the next week for potential shifts spanning the boundary
       const { data, error } = await supabase
         .from('employee_shifts')
         .select(`
@@ -299,28 +348,34 @@ export const getEmployeeShifts = async (weekStart) => {
           employee_id,
           week_start,
           shifts,
+          created_at,
+          updated_at,
           employees:employee_id (id, name, job_title, image_url)
         `)
-        .eq('week_start', formattedWeekStart);
+        .or(`week_start.eq.${formattedWeekStart},week_start.eq.${formattedNextWeekStart}`);
       
       if (error) throw error;
       
-      // If no data is found, check if the table even exists
-      if ((!data || data.length === 0) && !error) {
-        // Try to select just to check if table exists
-        const { error: tableCheckError } = await supabase
-          .from('employee_shifts')
-          .select('id')
-          .limit(1);
-        
-        // If table doesn't exist or has structural issues, return empty array
-        if (tableCheckError && tableCheckError.message.includes('does not exist')) {
-          console.warn('employee_shifts table does not exist yet');
-          return [];
-        }
-      }
+      // Process shifts to include only those with dates relevant to the current view
+      const relevantData = data || [];
       
-      return data || [];
+      // First day of the week
+      const weekStartDate = new Date(weekStart);
+      // Last day of the week (6 days after the start)
+      const weekEndDate = new Date(weekStart);
+      weekEndDate.setDate(weekEndDate.getDate() + 6);
+      
+      // Filter shifts to include only those in the current week
+      relevantData.forEach(record => {
+        if (record.shifts && Array.isArray(record.shifts)) {
+          record.shifts = record.shifts.filter(shift => {
+            const shiftDate = new Date(shift.date);
+            return shiftDate >= weekStartDate && shiftDate <= weekEndDate;
+          });
+        }
+      });
+      
+      return relevantData;
     } catch (error) {
       console.error('Error fetching employee shifts:', error);
       return [];
@@ -412,7 +467,7 @@ export const getEmployeePerformance = async () => {
           date: day.toISOString().split('T')[0],
           start_time: shiftData.start_time,
           end_time: shiftData.end_time,
-          shift_type: shiftData.shift_type
+          shift_type: shiftData.shift_type || 'Regular'
         }));
         
         // Check if record already exists for this week
@@ -466,75 +521,225 @@ export const getEmployeePerformance = async () => {
     }
   };
 
-  function getUniqueWeekStarts(startDateStr, endDateStr) {
-    const startDate = new Date(startDateStr);
-    const endDate = new Date(endDateStr);
-    const weekStarts = [];
-    
-    // Get the Monday of the start date's week
-    const firstDay = new Date(startDate);
-    const dayOfWeek = firstDay.getDay() || 7; // Convert Sunday (0) to 7
-    firstDay.setDate(firstDay.getDate() - (dayOfWeek - 1)); // Get to Monday
-    firstDay.setHours(0, 0, 0, 0); // Normalize time
-    
-    // Add each Monday until we reach or pass the end date
-    let currentMonday = new Date(firstDay);
-    while (currentMonday <= endDate) {
-      weekStarts.push(new Date(currentMonday));
-      currentMonday.setDate(currentMonday.getDate() + 7);
-    }
-    
-    return weekStarts;
-  }
-  
-  // Get days in a week that fall within a date range and are selected working days
-  function getDaysInWeek(weekStart, rangeStart, rangeEnd, workingDays) {
+  const getUniqueWeekStarts = (startDate, endDate) => {
     const result = [];
-    const startDate = new Date(rangeStart);
-    const endDate = new Date(rangeEnd);
+    const start = new Date(startDate);
+    const end = new Date(endDate);
     
-    // Check each day of the week
-    let currentDay = new Date(weekStart);
-    for (let i = 0; i < 7; i++) {
-      // Check if current day is within range and is a selected working day
-      if (currentDay >= startDate && 
-          currentDay <= endDate && 
-          isWorkingDay(currentDay, workingDays)) {
-        result.push(new Date(currentDay));
-      }
-      currentDay.setDate(currentDay.getDate() + 1);
+    let current = new Date(start);
+    
+    // Find the Monday of the first week
+    const dayOfWeek = current.getDay(); // 0 = Sunday, 1 = Monday, ...
+    const diff = current.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust to get Monday
+    current = new Date(current.setDate(diff));
+    
+    // Add week starts until we reach beyond the end date
+    while (current <= end) {
+      result.push(new Date(current));
+      // Move to next Monday
+      current.setDate(current.getDate() + 7);
     }
     
     return result;
-  }
+  };
   
-  // Check if a date is a selected working day
-  function isWorkingDay(date, workingDays) {
-    const dayAbbreviations = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const dayAbbr = dayAbbreviations[date.getDay()];
-    return workingDays[dayAbbr] === true;
-  }
+  // Get days in a week that fall within a date range and are selected working days
+  const getDaysInWeek = (weekStart, rangeStart, rangeEnd, workingDays) => {
+    const result = [];
+    const start = new Date(rangeStart);
+    const end = new Date(rangeEnd);
+    
+    // Clone weekStart to avoid modifying the original
+    const current = new Date(weekStart);
+    
+    // Check each day of the week
+    for (let i = 0; i < 7; i++) {
+      const dayOfWeek = current.getDay(); // 0 = Sunday, 1 = Monday, ...
+      const dayName = getDayName(dayOfWeek);
+      
+      // Check if this day is within the date range and is a working day
+      if (
+        current >= start && 
+        current <= end && 
+        workingDays[getDayAbbreviation(dayOfWeek)]
+      ) {
+        result.push(new Date(current));
+      }
+      
+      // Move to next day
+      current.setDate(current.getDate() + 1);
+    }
+    
+    return result;
+  };
   
-  // Convert day number to name
-  function getDayName(dayNumber) {
+  // Helper to get day name from day number
+  const getDayName = (dayNumber) => {
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     return days[dayNumber];
-  }
+  };
   
-  // Merge shifts arrays, avoiding duplicates by date
-  function mergeShifts(existingShifts, newShifts) {
-    const shiftsMap = {};
+  // Helper to get day abbreviation from day number
+  const getDayAbbreviation = (dayNumber) => {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return days[dayNumber];
+  };
+  
+  // Helper function to merge shifts and avoid duplicates
+  const mergeShifts = (existingShifts, newShifts) => {
+    const combined = [...existingShifts];
     
-    // Add existing shifts to map
-    existingShifts.forEach(shift => {
-      shiftsMap[shift.date] = shift;
+    newShifts.forEach(newShift => {
+      // Check if this shift already exists for the same date
+      const existingIndex = combined.findIndex(shift => shift.date === newShift.date);
+      
+      if (existingIndex >= 0) {
+        // Update existing shift
+        combined[existingIndex] = {
+          ...combined[existingIndex],
+          start_time: newShift.start_time,
+          end_time: newShift.end_time,
+          shift_type: newShift.shift_type
+        };
+      } else {
+        // Add new shift
+        combined.push(newShift);
+      }
     });
     
-    // Add or replace with new shifts
-    newShifts.forEach(shift => {
-      shiftsMap[shift.date] = shift;
-    });
-    
-    // Convert back to array
-    return Object.values(shiftsMap);
-  }
+    return combined;
+  };
+
+  // Get all performance reviews
+export const getPerformanceReviews = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('performance_reviews')
+        .select(`
+          *,
+          employees:employee_id(id, name, job_title),
+          reviewer:reviewer_id(id, name)
+        `)
+        .order('scheduled_date', { ascending: false });
+        
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error fetching performance reviews:', error);
+      throw error;
+    }
+  };
+  
+  // Get reviews for a specific employee
+  export const getEmployeePerformanceReviews = async (employeeId) => {
+    try {
+      const { data, error } = await supabase
+        .from('performance_reviews')
+        .select(`
+          *,
+          reviewer:reviewer_id(id, name)
+        `)
+        .eq('employee_id', employeeId)
+        .order('scheduled_date', { ascending: false });
+        
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error(`Error fetching performance reviews for employee ${employeeId}:`, error);
+      throw error;
+    }
+  };
+  
+  // Create a new performance review
+  export const createPerformanceReview = async (reviewData) => {
+    try {
+      // Create a clean copy of the data to avoid modifying the original
+      const cleanData = { ...reviewData };
+      
+      // Handle reviewer_id - remove if empty string
+      if (cleanData.reviewer_id === '') {
+        delete cleanData.reviewer_id;
+      }
+      
+      // Handle empty dates
+      if (cleanData.completion_date === '') {
+        delete cleanData.completion_date;
+      }
+      
+      // Convert rating to a number if it exists
+      if (cleanData.rating) {
+        cleanData.rating = parseFloat(cleanData.rating);
+      }
+      
+      const { data, error } = await supabase
+        .from('performance_reviews')
+        .insert([cleanData])
+        .select();
+        
+      if (error) throw error;
+      return data[0];
+    } catch (error) {
+      console.error('Error creating performance review:', error);
+      throw error;
+    }
+  };
+  
+  // Update an existing performance review
+  export const updatePerformanceReview = async (reviewId, reviewData) => {
+    try {
+      // Create a clean copy of the data to avoid modifying the original
+      const cleanData = { ...reviewData };
+      
+      // Add updated_at timestamp
+      cleanData.updated_at = new Date().toISOString();
+      
+      // Handle reviewer_id - remove if empty string
+      if (cleanData.reviewer_id === '') {
+        delete cleanData.reviewer_id;
+      }
+      
+      // Handle empty dates
+      if (cleanData.completion_date === '') {
+        delete cleanData.completion_date;
+      }
+      
+      // Convert rating to a number if it exists
+      if (cleanData.rating) {
+        cleanData.rating = parseFloat(cleanData.rating);
+      }
+      
+      // For completed reviews with no rating, set a default
+      if (cleanData.status === 'Completed' && !cleanData.rating) {
+        cleanData.rating = 3.0;
+      }
+      
+      // Update the review in the database
+      const { data, error } = await supabase
+        .from('performance_reviews')
+        .update(cleanData)
+        .eq('id', reviewId)
+        .select();
+        
+      if (error) throw error;
+      return data[0];
+    } catch (error) {
+      console.error(`Error updating performance review ${reviewId}:`, error);
+      throw error;
+    }
+  };
+  
+  // Delete a performance review
+  export const deletePerformanceReview = async (reviewId) => {
+    try {
+      const { error } = await supabase
+        .from('performance_reviews')
+        .delete()
+        .eq('id', reviewId);
+        
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error(`Error deleting performance review ${reviewId}:`, error);
+      throw error;
+    }
+  };
