@@ -230,11 +230,11 @@ const FarmDashboard = () => {
     };
     
     cowsData.forEach(cow => {
-      if (cow.healthStatus === 'Healthy') {
+      if (cow.healthStatus === 'Completed') {
         healthCounts.Healthy++;
       } else if (cow.healthStatus === 'Monitored') {
         healthCounts.Monitored++;
-      } else if (cow.healthStatus === 'Under treatment') {
+      } else if (cow.healthStatus === 'In progress') {
         healthCounts.Treatment++;
       }
     });
