@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   User,
   Mail, 
@@ -13,32 +13,51 @@ import {
   Upload,
   Camera,
   Save,
-  Trash2
+  Trash2,
+  Edit
 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
-const UserProfile = () => {
+const UserProfile = ({ userData: initialUserData }) => {
   const [activeTab, setActiveTab] = useState('profile');
   const [isEditing, setIsEditing] = useState(false);
-  const [userAvatar, setUserAvatar] = useState('/api/placeholder/150/150');
+  const [userAvatar, setUserAvatar] = useState(initialUserData?.profileImage || '/api/placeholder/150/150');
   
-  // Mock user data
+  // Set user data from props or use defaults
   const [userData, setUserData] = useState({
-    firstName: 'John',
-    lastName: 'Doe',
-    email: 'john.doe@example.com',
-    phone: '(555) 123-4567',
-    address: '123 Farm Lane, Rural County',
-    jobTitle: 'Farm Manager',
-    department: 'Management',
-    dateJoined: '2018-03-15',
-    workSchedule: 'Full-time',
-    bio: 'Experienced farm manager with over 10 years of experience in dairy operations and livestock management.',
-    skills: ['Management', 'Cattle handling', 'Equipment operation', 'Team leadership'],
-    certifications: [
-      { name: 'Farm Management Certification', expiry: '2025-10-15' },
-      { name: 'Agricultural Safety', expiry: '2024-06-30' }
-    ]
+    firstName: initialUserData?.firstName || '',
+    lastName: initialUserData?.lastName || '',
+    email: initialUserData?.email || '',
+    phone: initialUserData?.phone || '',
+    address: initialUserData?.address || '',
+    jobTitle: initialUserData?.jobTitle || '',
+    department: initialUserData?.department || '',
+    dateJoined: initialUserData?.dateJoined || new Date().toISOString(),
+    workSchedule: initialUserData?.workSchedule || 'Full-time',
+    bio: initialUserData?.bio || '',
+    skills: initialUserData?.skills || [],
+    certifications: initialUserData?.certifications || []
   });
+
+  useEffect(() => {
+    if (initialUserData) {
+      setUserData({
+        firstName: initialUserData.firstName || '',
+        lastName: initialUserData.lastName || '',
+        email: initialUserData.email || '',
+        phone: initialUserData.phone || '',
+        address: initialUserData.address || '',
+        jobTitle: initialUserData.jobTitle || '',
+        department: initialUserData.department || '',
+        dateJoined: initialUserData.dateJoined || new Date().toISOString(),
+        workSchedule: initialUserData.workSchedule || 'Full-time',
+        bio: initialUserData.bio || '',
+        skills: initialUserData.skills || [],
+        certifications: initialUserData.certifications || []
+      });
+      setUserAvatar(initialUserData.profileImage || '/api/placeholder/150/150');
+    }
+  }, [initialUserData]);
 
   // Handle form field changes
   const handleChange = (e) => {
@@ -50,13 +69,47 @@ const UserProfile = () => {
   };
 
   // Handle profile image upload
-  const handleImageUpload = (e) => {
+  const handleImageUpload = async (e) => {
     if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
       const fileReader = new FileReader();
+      
+      // Show preview immediately
       fileReader.onload = (e) => {
         setUserAvatar(e.target.result);
       };
-      fileReader.readAsDataURL(e.target.files[0]);
+      fileReader.readAsDataURL(file);
+      
+      try {
+        // Upload to Supabase Storage
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${initialUserData.id}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `profile-images/${fileName}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('user-content')
+          .upload(filePath, file);
+          
+        if (uploadError) throw uploadError;
+        
+        // Get public URL
+        const { data } = supabase.storage
+          .from('user-content')
+          .getPublicUrl(filePath);
+          
+        if (data && data.publicUrl) {
+          // Update profile with new image URL
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ profile_image: data.publicUrl })
+            .eq('id', initialUserData.id);
+            
+          if (updateError) throw updateError;
+        }
+      } catch (error) {
+        console.error('Error uploading image:', error);
+        alert('Failed to upload image. Please try again.');
+      }
     }
   };
 
@@ -102,16 +155,44 @@ const UserProfile = () => {
     setIsEditing(!isEditing);
   };
 
-  // Handle form submission
-  const handleSubmit = (e) => {
+  // Handle form submission to update user profile
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Save user data here (API call in a real app)
-    setIsEditing(false);
-    alert('Profile updated successfully!');
+    
+    try {
+      // Update profile in Supabase
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          first_name: userData.firstName,
+          last_name: userData.lastName,
+          display_name: `${userData.firstName} ${userData.lastName}`,
+          phone: userData.phone,
+          address: userData.address,
+          job_title: userData.jobTitle,
+          department: userData.department,
+          bio: userData.bio,
+          skills: userData.skills,
+          certifications: userData.certifications,
+          work_schedule: userData.workSchedule,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', initialUserData.id);
+        
+      if (error) throw error;
+      
+      setIsEditing(false);
+      alert('Profile updated successfully!');
+      
+    } catch (err) {
+      console.error('Error updating profile:', err);
+      alert('Failed to update profile. Please try again.');
+    }
   };
 
   // Format date to display
   const formatDate = (dateString) => {
+    if (!dateString) return '';
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric', 
       month: 'long', 
@@ -122,7 +203,7 @@ const UserProfile = () => {
   return (
     <div className="h-full bg-gray-100">
       <div className="px-6 py-6">
-        <div className="flex justify-between items-center mb-6">
+        {/* <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-semibold text-gray-800">User Profile</h1>
           {!isEditing ? (
             <button 
@@ -141,6 +222,50 @@ const UserProfile = () => {
               Save Changes
             </button>
           )}
+        </div> */}
+
+        {/* Profile Tab Navigation */}
+        <div className="mb-6 flex space-x-2">
+          <button 
+            onClick={() => setActiveTab('profile')} 
+            className={`px-4 py-2 rounded-md text-sm font-medium ${
+              activeTab === 'profile' 
+                ? 'bg-green-600 text-white' 
+                : 'bg-white text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            Profile
+          </button>
+          {/* <button 
+            onClick={() => setActiveTab('security')} 
+            className={`px-4 py-2 rounded-md text-sm font-medium ${
+              activeTab === 'security' 
+                ? 'bg-green-600 text-white' 
+                : 'bg-white text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            Security
+          </button>
+          <button 
+            onClick={() => setActiveTab('preferences')} 
+            className={`px-4 py-2 rounded-md text-sm font-medium ${
+              activeTab === 'preferences' 
+                ? 'bg-green-600 text-white' 
+                : 'bg-white text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            Preferences
+          </button>
+          <button 
+            onClick={() => setActiveTab('activity')} 
+            className={`px-4 py-2 rounded-md text-sm font-medium ${
+              activeTab === 'activity' 
+                ? 'bg-green-600 text-white' 
+                : 'bg-white text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            Activity
+          </button> */}
         </div>
 
         {/* Profile Tab */}

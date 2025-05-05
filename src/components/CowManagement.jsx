@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Calendar, Clock, Mail, Phone, MapPin, Users, Award, FileText, Briefcase, User,Download,DollarSign } from 'lucide-react';
+import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Calendar, Clock, Mail, Phone, MapPin, Users, Award, FileText, Briefcase, User,Download,DollarSign,Droplet,Thermometer } from 'lucide-react';
 import { fetchCows, addCow, updateCow, deleteCow, recordHealthEvent, recordMilkProduction, recordBreedingEvent,
   fetchRecentActivity,fetchBreedingEvents,fetchHealthHistory,fetchReproductiveStatus
  } from './services/cowService';
 import cowSample from './cow.jpg';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area } from 'recharts';
 
 // Status badge colors
 const statusColors = {
@@ -365,29 +366,35 @@ const CowManagement = () => {
 
   if (loading && cows.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+      <div className="flex h-screen items-center justify-center bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500 mx-auto"></div>
+          <p className="mt-4 text-gray-700">Loading cow data...</p>
+        </div>
       </div>
     );
   }
 
   if (error && cows.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full p-6">
-        <div className="text-red-500 text-xl mb-4">Failed to load cows</div>
-        <p className="text-gray-600 mb-4">{error}</p>
-        <button 
-          onClick={() => window.location.reload()}
-          className="px-4 py-2 bg-green-600 text-white rounded-md"
-        >
-          Try Again
-        </button>
+      <div className="flex h-screen items-center justify-center bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
+        <div className="text-center p-6 bg-white rounded-lg shadow-md">
+          <div className="text-red-500 text-5xl mb-4">⚠️</div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Error Loading Data</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-lg hover:opacity-90 transition-opacity"
+          >
+            Try Again
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="h-full bg-gradient-to-br from-green-50 to-blue-50">
+    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
       {successMessage && (
         <div className="fixed top-6 right-6 bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-md shadow-lg z-50 animate-fadeIn">
           <p>{successMessage}</p>
@@ -401,7 +408,7 @@ const CowManagement = () => {
       )}
       
       {selectedCow ? (
-       <EmployeeProfile 
+       <CowProfile 
           cow={selectedCow} 
           onClose={closeCowProfile} 
           onEdit={() => toggleEditModal(selectedCow)}
@@ -412,17 +419,16 @@ const CowManagement = () => {
       ) : (
         <div className="px-6 py-6">
           <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-semibold text-gray-800 bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Cow Management</h1>
+            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Cow Management</h1>
             <button 
               onClick={toggleAddModal}
-              className="flex items-center px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300 transform hover:scale-105 shadow-md"
+              className="flex items-center px-4 py-2 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm"
             >
               <Plus size={20} className="mr-2" />
               Add New Cow
             </button>
           </div>
 
-          {/* Search and Filters */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
             <div className="md:col-span-2">
               <div className="relative">
@@ -431,7 +437,7 @@ const CowManagement = () => {
                 </div>
                 <input
                   type="text"
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
                   placeholder="Search by name, tag number or breed..."
                   value={searchQuery}
                   onChange={handleSearch}
@@ -441,7 +447,7 @@ const CowManagement = () => {
 
             <div>
               <select
-                className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
                 value={filters.status}
                 onChange={(e) => handleFilterChange('status', e.target.value)}
               >
@@ -455,7 +461,7 @@ const CowManagement = () => {
 
             <div>
               <select
-                className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
                 value={filters.healthStatus}
                 onChange={(e) => handleFilterChange('healthStatus', e.target.value)}
               >
@@ -468,7 +474,7 @@ const CowManagement = () => {
 
             <div>
               <select
-                className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
                 value={filters.breed}
                 onChange={(e) => handleFilterChange('breed', e.target.value)}
               >
@@ -480,14 +486,13 @@ const CowManagement = () => {
             </div>
           </div>
 
-          {/* View Toggle and Count */}
           <div className="flex justify-between items-center mb-4">
             <div className="text-sm text-gray-600">
               Showing {indexOfFirstCow + 1}-{Math.min(indexOfLastCow, filteredCows.length)} of {filteredCows.length} cows
             </div>
             <div className="flex space-x-2">
               <button
-                className={`p-2 rounded-md transition-all duration-300 ${view === 'grid' ? 'bg-gradient-to-r from-green-100 to-green-200 text-green-600 shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                className={`p-2 rounded-md transition-all duration-300 ${view === 'grid' ? 'bg-gradient-to-r from-green-100 to-blue-100 text-green-600 shadow-sm' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
                 onClick={() => setView('grid')}
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -495,7 +500,7 @@ const CowManagement = () => {
                 </svg>
               </button>
               <button
-                className={`p-2 rounded-md transition-all duration-300 ${view === 'table' ? 'bg-gradient-to-r from-green-100 to-green-200 text-green-600 shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                className={`p-2 rounded-md transition-all duration-300 ${view === 'table' ? 'bg-gradient-to-r from-green-100 to-blue-100 text-green-600 shadow-sm' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
                 onClick={() => setView('table')}
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -505,7 +510,6 @@ const CowManagement = () => {
             </div>
           </div>
 
-          {/* Cow List */}
           {view === 'grid' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
               {currentCows.map(cow => (
@@ -519,9 +523,9 @@ const CowManagement = () => {
               ))}
             </div>
           ) : (
-            <div className="bg-white shadow-lg rounded-lg overflow-hidden transition-all duration-300 hover:shadow-xl">
+            <div className="bg-white shadow-lg rounded-lg overflow-hidden transition-all duration-300 hover:shadow-xl border border-gray-100">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gradient-to-r from-green-50 to-blue-50">
+                <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
                   <tr>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Tag Number
@@ -562,7 +566,7 @@ const CowManagement = () => {
                         {cow.age}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${healthStatusColors[cow.healthStatus]}`}>
+                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${healthStatusColors[cow.healthStatus] || 'bg-gray-100 text-gray-800'}`}>
                           {cow.healthStatus}
                         </span>
                       </td>
@@ -595,13 +599,13 @@ const CowManagement = () => {
             </div>
           )}
 
-          {/* Pagination */}
+          {/* Pagination Controls */}
           {totalPages > 1 && (
             <div className="flex justify-between items-center mt-6">
               <button
                 onClick={() => setCurrentPage(currentPage - 1)}
                 disabled={currentPage === 1}
-                className={`px-3 py-1 rounded-md transition-all duration-300 transform ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 hover:scale-105 shadow'}`}
+                className={`px-3 py-1 rounded-md transition-all duration-300 ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 shadow'}`}
               >
                 <ChevronLeft size={16} />
               </button>
@@ -610,7 +614,7 @@ const CowManagement = () => {
                   <button
                     key={page}
                     onClick={() => setCurrentPage(page)}
-                    className={`w-8 h-8 flex items-center justify-center rounded-md transition-all duration-300 transform hover:scale-110 ${currentPage === page ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-md' : 'bg-white text-gray-700 hover:bg-gray-50 shadow'}`}
+                    className={`w-8 h-8 flex items-center justify-center rounded-md transition-all duration-300 ${currentPage === page ? 'bg-gradient-to-r from-green-500 to-blue-600 text-white shadow-md' : 'bg-white text-gray-700 hover:bg-gray-50 shadow'}`}
                   >
                     {page}
                   </button>
@@ -619,7 +623,7 @@ const CowManagement = () => {
               <button
                 onClick={() => setCurrentPage(currentPage + 1)}
                 disabled={currentPage === totalPages}
-                className={`px-3 py-1 rounded-md transition-all duration-300 transform ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 hover:scale-105 shadow'}`}
+                className={`px-3 py-1 rounded-md transition-all duration-300 ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 shadow'}`}
               >
                 <ChevronRight size={16} />
               </button>
@@ -681,63 +685,68 @@ const CowManagement = () => {
 
 // Cow Card Component
 const CowCard = ({ cow, onClick, onEdit, onDelete }) => {
-
   // Safe method to get latest milk production
   const getLatestMilkProduction = () => {
-    if (!cow.milkProduction || !Array.isArray(cow.milkProduction) || cow.milkProduction.length === 0) {
-      return '0L/day';
+    if (cow?.milkProduction && cow.milkProduction.length > 0) {
+      const latest = cow.milkProduction[cow.milkProduction.length - 1];
+      return `${latest.amount || '0'}L/day`;
     }
-    const latestRecord = cow.milkProduction[cow.milkProduction.length - 1];
-    return `${latestRecord.amount || 0}L/day`;
+    return '0L/day';
   };
 
   // Safe method to get last health check date
   const getLastHealthCheckDate = () => {
-    if (!cow.lastHealthCheck) return 'Not recorded';
-    try {
-      return new Date(cow.lastHealthCheck).toLocaleDateString();
-    } catch (e) {
-      return 'Invalid Date';
+    if (cow?.lastHealthCheck) {
+      const date = new Date(cow.lastHealthCheck);
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     }
+    return 'No data';
   };
 
   // Ensure alerts is always an array
-  const alerts = Array.isArray(cow.alerts) ? cow.alerts : 
-                (cow.alerts ? [cow.alerts] : []);
+  const alerts = Array.isArray(cow?.alerts) ? cow.alerts : 
+                (cow?.alerts ? [cow.alerts] : []);
 
   return (
     <div 
-      className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:scale-105 cursor-pointer"
+      className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 cursor-pointer"
       onClick={onClick}
     >
+      {/* Add color bar at top based on health status */}
+      <div className={`h-2 bg-gradient-to-r ${
+        cow?.healthStatus === 'Completed' ? 'from-green-500 to-teal-500' :
+        cow?.healthStatus === 'Monitored' ? 'from-yellow-500 to-amber-400' :
+        cow?.healthStatus === 'In progress' ? 'from-red-500 to-orange-400' :
+        'from-gray-500 to-gray-400'
+      }`}></div>
+      
       <div className="p-4">
         <div className="flex justify-between items-start">
           <div className="mb-3">
-            <h3 className="text-lg font-semibold text-gray-800 bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">{cow.name}</h3>
-            <p className="text-sm text-gray-500">Tag: {cow.tagNumber}</p>
+            <h3 className="text-lg font-semibold text-gray-800 bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">{cow?.name}</h3>
+            <p className="text-sm text-gray-500">Tag: {cow?.tagNumber}</p>
           </div>
-          <span className={`px-2 py-1 text-xs font-semibold rounded-full ${healthStatusColors[cow.healthStatus]}`}>
-            {cow.healthStatus}
+          <span className={`px-2 py-1 text-xs font-semibold rounded-full ${healthStatusColors[cow?.healthStatus] || 'bg-gray-100 text-gray-800'}`}>
+            {cow?.healthStatus}
           </span>
         </div>
         
         <div className="flex items-center mb-4">
           <img 
             src={cowSample}  
+            alt={cow?.name}
             className="w-16 h-16 object-cover rounded-full bg-gray-200 border-2 border-green-100"
           />
           <div className="ml-4">
-            <p className="text-sm text-gray-600">{cow.breed}</p>
-            <p className="text-sm text-gray-600">{cow.age}</p>
+            <p className="text-sm text-gray-600">{cow?.breed}</p>
+            <p className="text-sm text-gray-600">{cow?.age}</p>
           </div>
         </div>
         
         <div className="border-t pt-3">
           <div className="flex items-center justify-between text-sm">
             <div className="flex items-center text-blue-600">
-              <svg className="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-              </svg>
+              <Droplet size={16} className="mr-1" />
               <span>{getLatestMilkProduction()}</span>
             </div>
             <div className="flex items-center text-gray-500">
@@ -776,7 +785,7 @@ const CowCard = ({ cow, onClick, onEdit, onDelete }) => {
 };
 
 // Employee Profile Component
-const EmployeeProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMilkModal, toggleRecordBreedingEventModal }) => {
+const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMilkModal, toggleRecordBreedingEventModal }) => {
   const [activeTab, setActiveTab] = useState('overview');
   const [healthHistory, setHealthHistory] = useState([]);
   const [breedingEvents, setBreedingEvents] = useState([]);
@@ -909,10 +918,10 @@ const EmployeeProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleReco
       loadRecentActivities();
     }
   }, [activeTab, cow, recentActivities.length]);
-  
+
   return (
-    <div className="bg-gradient-to-br from-white to-green-50 min-h-full">
-      {/* Header */}
+    <div className="bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30 min-h-full">
+      {/* Header bar with gradient */}
       <div className="bg-gradient-to-r from-green-600 to-blue-600 text-white">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center">
@@ -923,25 +932,23 @@ const EmployeeProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleReco
               <ChevronLeft size={24} />
             </button>
             <h1 className="text-2xl font-semibold">{cow.name}</h1>
-            {/* <span className="ml-4 px-3 py-1 bg-white text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-600 font-medium rounded-full text-sm shadow-md">
-              {cow.tagNumber}
-            </span> */}
           </div>
         </div>
       </div>
       
-      {/* Profile Content */}
       <div className="container mx-auto px-6 py-8">
         <div className="flex flex-col lg:flex-row">
-          {/* Left Column - Basic Info */}
+          {/* Left sidebar with cow details */}
           <div className="lg:w-1/3 mb-8 lg:mb-0 lg:pr-8">
-            <div className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition-all duration-300">
+            <div className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
               <div className="p-6 flex flex-col items-center">
+                <div className="h-1 w-full bg-gradient-to-r from-green-400 to-blue-500 absolute top-0 left-0"></div>
                 <img 
                   src={cowSample} 
+                  alt={cow.name}
                   className="w-32 h-32 object-cover rounded-full bg-gray-200 mb-4 border-4 border-green-100 shadow-md"
                 />
-                <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-green-700 to-blue-600">{cow.name}</h2>
+                <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-600">{cow.name}</h2>
                 <p className="text-gray-500">Tag: {cow.tagNumber}</p>
                 
                 <div className="w-full mt-6 space-y-3">
@@ -976,13 +983,13 @@ const EmployeeProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleReco
                 <div className="mt-6 w-full flex flex-col space-y-2">
                   <button 
                     onClick={onEdit}
-                    className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300 transform hover:scale-105"
+                    className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
                   >
                     Edit Details
                   </button>
                   <button 
                     onClick={onRecordHealthEvent}
-                    className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300 transform hover:scale-105"
+                    className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-cyan-600 hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   >
                     Record Health Event
                   </button>
@@ -990,7 +997,7 @@ const EmployeeProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleReco
               </div>
             </div>
             
-            {/* Alerts Section */}
+            {/* Alerts section */}
             {alerts.length > 0 && (
               <div className="mt-6 bg-amber-50 border border-amber-200 rounded-lg p-4 shadow-md hover:shadow-lg transition-all duration-300">
                 <h3 className="text-amber-800 font-medium flex items-center">
@@ -1011,297 +1018,401 @@ const EmployeeProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleReco
             )}
           </div>
           
-          {/* Right Column - Tabs & Details */}
+          {/* Main content area with tabs */}
           <div className="lg:w-2/3">
-            {/* Tabs */}
-            <div className="border-b border-gray-200">
-              <nav className="flex -mb-px space-x-8">
-                <button
-                  onClick={() => setActiveTab('overview')}
-                  className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-300 ${
-                    activeTab === 'overview'
-                      ? 'border-green-500 text-green-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  Overview
-                </button>
-                <button
-                  onClick={() => setActiveTab('milk')}
-                  className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-300 ${
-                    activeTab === 'milk'
-                      ? 'border-green-500 text-green-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  Milk Production
-                </button>
-                <button
-                  onClick={() => setActiveTab('health')}
-                  className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-300 ${
-                    activeTab === 'health'
-                      ? 'border-green-500 text-green-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  Health Records
-                </button>
-                <button
-                  onClick={() => setActiveTab('breeding')}
-                  className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-300 ${
-                    activeTab === 'breeding'
-                      ? 'border-green-500 text-green-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  Breeding
-                </button>
-              </nav>
-            </div>
-            
-            {/* Tab Content */}
-            <div className="py-6">
-              {/* Overview Tab */}
-              {activeTab === 'overview' && (
-                <div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <div className="bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transition-all duration-300 transform hover:scale-105">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="text-sm font-medium text-gray-500">Avg. Milk Production</p>
-                          <p className="text-2xl font-semibold text-gray-800 mt-1">
-                            {!isNaN(avgMilkProduction) ? avgMilkProduction.toFixed(1) : '0.0'}L
-                          </p>
-                        </div>
-                        <div className="p-2 rounded-full bg-gradient-to-r from-blue-50 to-blue-100 text-blue-600">
-                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                          </svg>
-                        </div>
-                      </div>
-                      <div className="mt-4 text-xs text-green-600 flex items-center">
-                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                        </svg>
-                        <span>+3% from last week</span>
-                      </div>
-                    </div>
-                    
-                    <div className="bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transition-all duration-300 transform hover:scale-105">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="text-sm font-medium text-gray-500">Health Check</p>
-                          <p className="text-2xl font-semibold text-gray-800 mt-1">{new Date(cow.lastHealthCheck).toLocaleDateString()}</p>
-                        </div>
-                        <div className="p-2 rounded-full bg-gradient-to-r from-red-50 to-red-100 text-red-600">
-                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                          </svg>
-                        </div>
-                      </div>
-                      <div className="mt-4 text-xs text-gray-600">
-                        {cow.vaccinationStatus}
-                      </div>
-                    </div>
-                    
-                    <div className="bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transition-all duration-300 transform hover:scale-105">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="text-sm font-medium text-gray-500">Next Action</p>
-                          <p className="text-lg font-semibold text-gray-800 mt-1">Regular checkup</p>
-                        </div>
-                        <div className="p-2 rounded-full bg-gradient-to-r from-amber-50 to-amber-100 text-amber-600">
-                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                        </div>
-                      </div>
-                      <div className="mt-4 text-xs text-gray-600">
-                        Scheduled for {formatDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition-all duration-300">
-                    <div className="px-6 py-4 border-b border-gray-200">
-                      <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-700 to-blue-700">Recent Activity</h3>
-                    </div>
-                    {loading.activity ? (
-                      <div className="flex justify-center items-center p-8">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
-                      </div>
-                    ) : recentActivities.length > 0 ? (
-                      <div className="divide-y divide-gray-200">
-                        {recentActivities.map((activity) => (
-                          <ActivityItem 
-                            key={activity.id}
-                            type={activity.type} 
-                            description={activity.description} 
-                            date={formatRelativeTime(activity.date)}
-                          />
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="p-6 text-center text-gray-500">
-                        No recent activities found.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
+            <div className="bg-white shadow-lg rounded-xl overflow-hidden border border-gray-100">
+              <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+              <div className="border-b border-gray-200">
+                <nav className="flex -mb-px space-x-8 px-6">
+                  <button
+                    onClick={() => setActiveTab('overview')}
+                    className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-300 ${
+                      activeTab === 'overview'
+                        ? 'border-green-500 text-green-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    Overview
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('milk')}
+                    className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-300 ${
+                      activeTab === 'milk'
+                        ? 'border-green-500 text-green-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    Milk Production
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('health')}
+                    className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-300 ${
+                      activeTab === 'health'
+                        ? 'border-green-500 text-green-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    Health Records
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('breeding')}
+                    className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-300 ${
+                      activeTab === 'breeding'
+                        ? 'border-green-500 text-green-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    Breeding
+                  </button>
+                </nav>
+              </div>
               
-              {/* Milk Production Tab */}
-              {activeTab === 'milk' && (
-                <div>
-                  <div className="bg-white shadow-lg rounded-lg p-6 mb-6 hover:shadow-xl transition-all duration-300">
-                    <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-700 to-blue-700 mb-4">Daily Milk Production</h3>
-                    <div className="h-64">
-                      {/* This would be a chart component in a real application */}
-                      <div className="h-full bg-gradient-to-r from-green-50 to-blue-50 rounded-lg flex items-center justify-center">
-                        <p className="text-gray-500">Milk production chart would go here</p>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition-all duration-300">
-                    <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                      <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-700 to-blue-700">Production Records</h3>
-                      <button className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105"
-                      onClick={toggleRecordMilkModal}>
-                        Record New
-                      </button>
-                    </div>
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gradient-to-r from-green-50 to-blue-50">
-                        <tr>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Date
-                          </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Amount (L)
-                          </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Quality
-                          </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Notes
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                      {hasMilkProductionData ? (
-                          cow.milkProduction.slice().reverse().map((record, index) => (
-                            <tr key={index} className="hover:bg-gray-50 transition-colors duration-200">
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {formatDate(record.date)}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                                {record.amount || 0} L
-                              </td>
-                              {/* ...other cells... */}
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
-                              No milk production records available.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-              
-              {/* Health Records Tab */}
-              {activeTab === 'health' && (
-                <div>
-                  <div className="bg-white shadow-lg rounded-lg p-6 mb-6 hover:shadow-xl transition-all duration-300">
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-700 to-blue-700">Health Status</h3>
-                      <button 
-                        onClick={onRecordHealthEvent}
-                        className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105"
-                      >
-                        Record Health Event
-                      </button>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-500 mb-2">Current Status</h4>
-                        <div className="flex items-center">
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${healthStatusColors[cow.healthStatus]}`}>
-                            {cow.healthStatus}
-                          </span>
+              <div className="py-6 px-6">
+                {/* Tab content for Overview */}
+                {activeTab === 'overview' && (
+                  <div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                      <div className="bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">Avg. Milk Production</p>
+                            <p className="text-2xl font-semibold text-gray-800 mt-1">
+                              {!isNaN(avgMilkProduction) ? avgMilkProduction.toFixed(1) : '0.0'}L
+                            </p>
+                          </div>
+                          <div className="p-2 rounded-full bg-gradient-to-r from-blue-50 to-blue-100 text-blue-600">
+                            <Droplet className="h-5 w-5" />
+                          </div>
                         </div>
-                        <p className="mt-4 text-sm text-gray-600">
-                          Last health check: {formatDate(cow.lastHealthCheck)}
-                        </p>
-                        
-                        <h4 className="text-sm font-medium text-gray-500 mt-6 mb-2">Vaccination Status</h4>
-                        <p className="text-sm text-gray-800">{cow.vaccinationStatus}</p>
+                        <div className="mt-4 text-xs text-green-600 flex items-center">
+                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                          </svg>
+                          <span>+3% from last week</span>
+                        </div>
                       </div>
                       
-                      <div className="border-l border-gray-200 pl-6">
-                        <h4 className="text-sm font-medium text-gray-500 mb-2">Vital Signs (Last Check)</h4>
-                        <div className="space-y-2">
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Temperature:</span>
-                            <span className="text-sm font-medium text-gray-800">38.5°C</span>
+                      <div className="bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">Health Check</p>
+                            <p className="text-2xl font-semibold text-gray-800 mt-1">{new Date(cow.lastHealthCheck).toLocaleDateString()}</p>
                           </div>
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Heart Rate:</span>
-                            <span className="text-sm font-medium text-gray-800">65 BPM</span>
+                          <div className="p-2 rounded-full bg-gradient-to-r from-red-50 to-red-100 text-red-600">
+                            <Thermometer className="h-5 w-5" />
                           </div>
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Respiratory Rate:</span>
-                            <span className="text-sm font-medium text-gray-800">22 breaths/min</span>
+                        </div>
+                        <div className="mt-4 text-xs text-gray-600">
+                          {cow.vaccinationStatus || 'Vaccinations up to date'}
+                        </div>
+                      </div>
+                      
+                      <div className="bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">Next Action</p>
+                            <p className="text-lg font-semibold text-gray-800 mt-1">Regular checkup</p>
                           </div>
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Weight:</span>
-                            <span className="text-sm font-medium text-gray-800">580 kg</span>
+                          <div className="p-2 rounded-full bg-gradient-to-r from-amber-50 to-amber-100 text-amber-600">
+                            <Calendar className="h-5 w-5" />
+                          </div>
+                        </div>
+                        <div className="mt-4 text-xs text-gray-600">
+                          Scheduled for {formatDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
+                      <div className="px-6 py-4 border-b border-gray-200">
+                        <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-600">Recent Activity</h3>
+                      </div>
+                      {loading.activity ? (
+                        <div className="flex justify-center items-center p-8">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+                        </div>
+                      ) : recentActivities.length > 0 ? (
+                        <div className="divide-y divide-gray-200">
+                          {recentActivities.map((activity, index) => (
+                            <ActivityItem 
+                              key={index}
+                              type={activity.type} 
+                              description={activity.description} 
+                              date={activity.date}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-6 text-center text-gray-500">
+                          No recent activities found.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Tab content for Milk Production */}
+                {activeTab === 'milk' && (
+                  <div>
+                    <div className="bg-white shadow-lg rounded-lg p-6 mb-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
+                      <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-600 mb-4">Daily Milk Production (Last 7 Days)</h3>
+                      <div className="h-64">
+                        {hasMilkProductionData ? (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart
+                              data={cow.milkProduction
+                                .filter(record => {
+                                  // Filter to show only the last 7 days of records
+                                  const recordDate = new Date(record.date);
+                                  const sevenDaysAgo = new Date();
+                                  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                                  return recordDate >= sevenDaysAgo;
+                                })
+                                .map(record => ({
+                                  date: new Date(record.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                                  amount: parseFloat(record.amount) || 0,
+                                  quality: record.quality || 'Standard'
+                                }))
+                                .sort((a, b) => new Date(a.date) - new Date(b.date)) // Ensure data is sorted by date
+                              }
+                              margin={{ top: 5, right: 30, left: 20, bottom: 15 }}
+                            >
+                              <defs>
+                                <linearGradient id="milkGradient" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.8}/>
+                                  <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.2}/>
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#f1f1f1" />
+                              <XAxis 
+                                dataKey="date" 
+                                stroke="#9CA3AF" 
+                                tick={{ fontSize: 12 }}
+                                tickLine={false}
+                              />
+                              <YAxis 
+                                stroke="#9CA3AF" 
+                                tick={{ fontSize: 12 }}
+                                tickLine={false}
+                                tickFormatter={(value) => `${value}L`}
+                                domain={['dataMin - 1', 'dataMax + 2']}
+                              />
+                              <Tooltip 
+                                contentStyle={{ 
+                                  backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                                  border: '1px solid #EEE',
+                                  borderRadius: '8px',
+                                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                                }}
+                                formatter={(value, name) => [`${value}L`, 'Production']}
+                              />
+                              <Legend />
+                              <Area
+                                type="monotone"
+                                dataKey="amount"
+                                name="Milk Production"
+                                stroke="#3B82F6"
+                                strokeWidth={3}
+                                fill="url(#milkGradient)"
+                                activeDot={{ r: 8, strokeWidth: 0, fill: '#3B82F6' }}
+                              />
+                              <Line
+                                type="monotone"
+                                dataKey="amount"
+                                name="Milk Production"
+                                stroke="#3B82F6"
+                                strokeWidth={3}
+                                dot={{ 
+                                  r: 4, 
+                                  strokeWidth: 2, 
+                                  stroke: '#3B82F6', 
+                                  fill: 'white'
+                                }}
+                                activeDot={{ 
+                                  r: 8, 
+                                  strokeWidth: 0, 
+                                  fill: '#3B82F6' 
+                                }}
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        ) : (
+                          <div className="h-full bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30 rounded-lg flex items-center justify-center">
+                            <p className="text-gray-500">No milk production data available</p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Production Statistics - Update to reflect 7-day stats */}
+                      {hasMilkProductionData && (
+                        <div className="grid grid-cols-3 gap-3 mt-4">
+                          <div className="text-center p-2 rounded-lg bg-gradient-to-b from-blue-50 to-blue-100 border border-blue-200">
+                            <p className="text-xs text-gray-500">7-Day Average</p>
+                            <p className="text-lg font-bold text-blue-600">
+                              {(cow.milkProduction.reduce((sum, record) => sum + (parseFloat(record.amount) || 0), 0) / cow.milkProduction.length).toFixed(1)}L
+                            </p>
+                          </div>
+                          <div className="text-center p-2 rounded-lg bg-gradient-to-b from-green-50 to-green-100 border border-green-200">
+                            <p className="text-xs text-gray-500">Highest</p>
+                            <p className="text-lg font-bold text-green-600">
+                              {Math.max(...cow.milkProduction.map(record => parseFloat(record.amount) || 0)).toFixed(1)}L
+                            </p>
+                          </div>
+                          <div className="text-center p-2 rounded-lg bg-gradient-to-b from-purple-50 to-purple-100 border border-purple-200">
+                            <p className="text-xs text-gray-500">Latest</p>
+                            <p className="text-lg font-bold text-purple-600">
+                              {parseFloat(cow.milkProduction[cow.milkProduction.length - 1]?.amount || 0).toFixed(1)}L
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
+                      <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                        <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-600">Production Records</h3>
+                        <button className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gradient-to-r from-blue-500 to-blue-600 hover:opacity-90 transition-opacity shadow-sm"
+                        onClick={toggleRecordMilkModal}>
+                          Record New
+                        </button>
+                      </div>
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
+                          <tr>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Date
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Amount (L)
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Quality
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Notes
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                        {hasMilkProductionData ? (
+                            cow.milkProduction.slice().reverse().map((record, index) => (
+                              <tr key={index} className="hover:bg-gray-50 transition-colors duration-200">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {formatDate(record.date)}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                                  {record.amount || 0} L
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {record.quality || 'Standard'}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                  {record.notes || '-'}
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
+                                No milk production records available.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Tab content for Health */}
+                {activeTab === 'health' && (
+                  <div>
+                    {/* Health status content would go here */}
+                    <div className="bg-white shadow-lg rounded-lg p-6 mb-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-600">Health Status</h3>
+                        <button 
+                          onClick={onRecordHealthEvent}
+                          className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gradient-to-r from-green-500 to-blue-600 hover:opacity-90 transition-opacity shadow-sm"
+                        >
+                          Record Health Event
+                        </button>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-500 mb-2">Current Status</h4>
+                          <div className="flex items-center">
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${healthStatusColors[cow.healthStatus]}`}>
+                              {cow.healthStatus}
+                            </span>
+                          </div>
+                          <p className="mt-4 text-sm text-gray-600">
+                            Last health check: {formatDate(cow.lastHealthCheck)}
+                          </p>
+                          
+                          <h4 className="text-sm font-medium text-gray-500 mt-6 mb-2">Vaccination Status</h4>
+                          <p className="text-sm text-gray-800">{cow.vaccinationStatus || 'Up to date'}</p>
+                        </div>
+                        
+                        <div className="border-l border-gray-200 pl-6">
+                          <h4 className="text-sm font-medium text-gray-500 mb-2">Vital Signs (Last Check)</h4>
+                          <div className="space-y-2">
+                            <div className="flex justify-between">
+                              <span className="text-sm text-gray-600">Temperature:</span>
+                              <span className="text-sm font-medium text-gray-800">38.5°C</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-sm text-gray-600">Heart Rate:</span>
+                              <span className="text-sm font-medium text-gray-800">65 BPM</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-sm text-gray-600">Respiratory Rate:</span>
+                              <span className="text-sm font-medium text-gray-800">22 breaths/min</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-sm text-gray-600">Weight:</span>
+                              <span className="text-sm font-medium text-gray-800">580 kg</span>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                  
-                  <div className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition-all duration-300">
-                    <div className="px-6 py-4 border-b border-gray-200">
-                      <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-700 to-blue-700">Health History</h3>
+                    
+                    <div className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
+                      <div className="px-6 py-4 border-b border-gray-200">
+                        <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-600">Health History</h3>
+                      </div>
+                      {loading.health ? (
+                        <div className="flex justify-center items-center p-8">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+                        </div>
+                      ) : healthHistory.length > 0 ? (
+                        <div className="divide-y divide-gray-200">
+                          {healthHistory.map((record, index) => (
+                            <HealthRecord 
+                              key={index}
+                              date={record.eventDate} 
+                              type={record.eventType} 
+                              description={record.description}
+                              performedBy={record.performedBy}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-6 text-center text-gray-500">
+                          No health records found for this cow.
+                        </div>
+                      )}
                     </div>
-                    {loading.health ? (
-                      <div className="flex justify-center items-center p-8">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
-                      </div>
-                    ) : healthHistory.length > 0 ? (
-                      <div className="divide-y divide-gray-200">
-                        {healthHistory.map((record) => (
-                          <HealthRecord 
-                            key={record.id}
-                            date={record.eventDate} 
-                            type={record.eventType} 
-                            description={record.description}
-                            performedBy={record.performedBy}
-                          />
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="p-6 text-center text-gray-500">
-                        No health records found for this cow.
-                      </div>
-                    )}
                   </div>
-                </div>
-              )}
-              
-              {/* Breeding Tab */}
-              {activeTab === 'breeding' && (
+                )}
+                
+                {/* Tab content for Breeding */}
+                {activeTab === 'breeding' && (
                 <div>
-                  <div className="bg-white shadow-lg rounded-lg p-6 mb-6 hover:shadow-xl transition-all duration-300">
-                    <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-700 to-blue-700 mb-4">Breeding Information</h3>
+                  <div className="bg-white shadow-lg rounded-lg p-6 mb-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
+                    <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-600 mb-4">Breeding Information</h3>
                     <p className="text-gray-500 mb-4">Breeding history and reproductive information for {cow.name}.</p>
                     {loading.reproductive ? (
                       <div className="flex justify-center items-center p-8">
@@ -1419,6 +1530,7 @@ const EmployeeProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleReco
           </div>
         </div>
       </div>
+      </div>
     </div>
   );
 };
@@ -1427,16 +1539,14 @@ const EmployeeProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleReco
 const ActivityItem = ({ type, description, date }) => {
   const getIcon = () => {
     switch (type) {
-      case 'milk':
-        return <svg className="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>;
       case 'health':
-        return <svg className="h-4 w-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>;
-      case 'feed':
-        return <svg className="h-4 w-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>;
-      case 'treatment':
-        return <svg className="h-4 w-4 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>;
+        return <Thermometer size={16} className="text-red-600" />;
+      case 'milk':
+        return <Droplet size={16} className="text-blue-600" />;
+      case 'breeding':
+        return <Calendar size={16} className="text-purple-600" />;
       default:
-        return null;
+        return <Calendar size={16} className="text-gray-600" />;
     }
   };
   

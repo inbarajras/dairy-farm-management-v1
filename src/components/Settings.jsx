@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Settings as SettingsIcon, 
-  User, 
-  Users, 
+  User,
+  Users,
   Bell, 
   Globe, 
   Shield, 
@@ -19,107 +19,18 @@ import {
   Edit2,
   Lock
 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { fetchUsers, createUser, updateUser, deleteUser, resetUserPassword,updateUserStatus } from './services/userService';
+import { fetchSystemSettings, updateSystemSettings } from './services/settingsService';
 
-// Mock data for users
-const mockUsers = [
-  {
-    id: 'U001',
-    name: 'John Doe',
-    email: 'john.doe@example.com',
-    role: 'Administrator',
-    status: 'Active',
-    lastLogin: '2023-04-25T14:30:00',
-    twoFactorEnabled: true,
-    profileImage: '/api/placeholder/120/120'
-  },
-  {
-    id: 'U002',
-    name: 'Jane Smith',
-    email: 'jane.smith@example.com',
-    role: 'Manager',
-    status: 'Active',
-    lastLogin: '2023-04-24T09:15:00',
-    twoFactorEnabled: false,
-    profileImage: '/api/placeholder/120/120'
-  },
-  {
-    id: 'U003',
-    name: 'David Johnson',
-    email: 'david.johnson@example.com',
-    role: 'Employee',
-    status: 'Active',
-    lastLogin: '2023-04-20T11:45:00',
-    twoFactorEnabled: false,
-    profileImage: '/api/placeholder/120/120'
-  },
-  {
-    id: 'U004',
-    name: 'Emily Williams',
-    email: 'emily.williams@example.com',
-    role: 'Manager',
-    status: 'Active',
-    lastLogin: '2023-04-26T08:30:00',
-    twoFactorEnabled: true,
-    profileImage: '/api/placeholder/120/120'
-  },
-  {
-    id: 'U005',
-    name: 'Michael Brown',
-    email: 'michael.brown@example.com',
-    role: 'Employee',
-    status: 'Inactive',
-    lastLogin: '2023-03-15T10:20:00',
-    twoFactorEnabled: false,
-    profileImage: '/api/placeholder/120/120'
-  }
-];
-
-// Mock data for system settings
-const mockSystemSettings = {
-  general: {
-    farmName: 'Green Meadows Dairy Farm',
-    address: '123 Rural Road, Farmville, CA 98765',
-    phone: '(555) 123-4567',
-    email: 'contact@greenmeadowsdairy.com',
-    timezone: 'America/Los_Angeles',
-    dateFormat: 'MM/DD/YYYY',
-    language: 'en-US'
-  },
-  notifications: {
-    emailNotifications: true,
-    pushNotifications: true,
-    smsNotifications: false,
-    lowInventoryAlerts: true,
-    healthAlerts: true,
-    milkProductionReports: true,
-    financialReports: true
-  },
-  backup: {
-    automaticBackups: true,
-    backupFrequency: 'daily',
-    backupTime: '02:00',
-    retentionPeriod: 30,
-    lastBackup: '2023-04-26T02:00:00',
-    backupLocation: 'cloud'
-  },
-  security: {
-    passwordExpiryDays: 90,
-    requireStrongPasswords: true,
-    loginAttempts: 5,
-    sessionTimeout: 30,
-    enableTwoFactor: true,
-    auditLogging: true
-  }
-};
-
-// Status colors
+// Status colors (keep as is)
 const statusColors = {
   'Active': 'bg-green-100 text-green-800',
   'Inactive': 'bg-red-100 text-red-800',
   'Pending': 'bg-yellow-100 text-yellow-800'
 };
 
-// Role colors
+// Role colors (keep as is)
 const roleColors = {
   'Administrator': 'bg-purple-100 text-purple-800',
   'Manager': 'bg-blue-100 text-blue-800',
@@ -129,14 +40,48 @@ const roleColors = {
 // Settings module main component
 const SettingsScreen = () => {
   const [activeTab, setActiveTab] = useState('general');
-  const [users, setUsers] = useState(mockUsers);
-  const [systemSettings, setSystemSettings] = useState(mockSystemSettings);
+  const [users, setUsers] = useState([]);
+  const [systemSettings, setSystemSettings] = useState({
+    general: {},
+    notifications: {},
+    backup: {},
+    security: {}
+  });
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
   const [isEditUserModalOpen, setIsEditUserModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+
+  // Load initial data
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        // Load system settings
+        const settings = await fetchSystemSettings();
+        setSystemSettings(settings);
+        
+        // If on users tab, load users
+        if (activeTab === 'users') {
+          const usersData = await fetchUsers();
+          setUsers(usersData);
+        }
+      } catch (err) {
+        console.error('Error loading settings data:', err);
+        setError('Failed to load settings data. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadData();
+  }, [activeTab]);
 
   // Handle tab change
   const handleTabChange = (tab) => {
@@ -158,18 +103,130 @@ const SettingsScreen = () => {
     setSelectedUser(user);
     setIsEditUserModalOpen(!isEditUserModalOpen);
   };
+  
+  // Handle user deletion
+  const handleDeleteUser = async (userId) => {
+    if (window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
+      setIsLoading(true);
+      try {
+        await deleteUser(userId);
+        setUsers(users.filter(user => user.id !== userId));
+      } catch (err) {
+        console.error('Error deleting user:', err);
+        setError('Failed to delete user. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+  
+  // Handle user creation
+  const handleAddUser = async (userData) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      await createUser({
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        email: userData.email,
+        password: userData.password,
+        role: userData.role,
+        status: userData.status,
+        twoFactorEnabled: userData.twoFactorEnabled
+      });
+      
+      // Refresh user list
+      const updatedUsers = await fetchUsers();
+      setUsers(updatedUsers);
+      setIsAddUserModalOpen(false);
+      
+      setSuccess('User created successfully');
+    } catch (err) {
+      setError(`Failed to create user: ${err.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Example usage of updateUser
+  const handleUpdateUser = async (userId, userData) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      await updateUser(userId, userData);
+      
+      // Refresh user list
+      const updatedUsers = await fetchUsers();
+      setUsers(updatedUsers);
+      setIsEditUserModalOpen(false);
+      
+      setSuccess('User updated successfully');
+    } catch (err) {
+      setError(`Failed to update user: ${err.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Example of handling user status change
+  const handleStatusChange = async (userId, status) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      await updateUserStatus(userId, status);
+      
+      // Refresh user list
+      const updatedUsers = await fetchUsers();
+      setUsers(updatedUsers);
+      
+      setSuccess(`User status updated to ${status}`);
+    } catch (err) {
+      console.error('Error updating user status:', err);
+      setError(`Failed to update user status: ${err.message || 'Unknown error'}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Handle password reset
+  const handleResetPassword = async (userId) => {
+    const newPassword = prompt('Enter new password (minimum 8 characters):');
+    
+    if (!newPassword) return;
+    
+    if (newPassword.length < 8) {
+      alert('Password must be at least 8 characters long');
+      return;
+    }
+    
+    setIsLoading(true);
+    setError(null);
+    try {
+      await resetUserPassword(userId, newPassword);
+      alert('Password has been reset successfully');
+    } catch (err) {
+      console.error('Error resetting password:', err);
+      setError('Failed to reset password: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Filter users based on search
   const filteredUsers = users.filter(user => {
     return (
-      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.role.toLowerCase().includes(searchQuery.toLowerCase())
+      user.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.role?.toLowerCase().includes(searchQuery.toLowerCase())
     );
   });
 
   // Format date
   const formatDate = (dateString) => {
+    if (!dateString) return 'Never';
     const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
     return new Date(dateString).toLocaleDateString('en-US', options);
   };
@@ -186,19 +243,28 @@ const SettingsScreen = () => {
   };
 
   // Save settings
-  const saveSettings = () => {
+  const saveSettings = async () => {
     setIsLoading(true);
+    setError(null);
     
-    // Simulate API call with timeout
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      // Update each settings category
+      for (const category of Object.keys(systemSettings)) {
+        await updateSystemSettings(category, systemSettings[category]);
+      }
+      
       setShowSaveConfirmation(true);
       
       // Hide confirmation after 3 seconds
       setTimeout(() => {
         setShowSaveConfirmation(false);
       }, 3000);
-    }, 1000);
+    } catch (err) {
+      console.error('Error saving settings:', err);
+      setError('Failed to save settings: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -252,19 +318,19 @@ const SettingsScreen = () => {
                   active={activeTab === 'general'} 
                   onClick={() => handleTabChange('general')}
                 />
-                <SettingsNavItem 
+                {/* <SettingsNavItem 
                   icon={<Bell size={20} />} 
                   label="Notifications" 
                   active={activeTab === 'notifications'} 
                   onClick={() => handleTabChange('notifications')}
-                />
+                /> */}
                 <SettingsNavItem 
                   icon={<Users size={20} />} 
                   label="User Management" 
                   active={activeTab === 'users'} 
                   onClick={() => handleTabChange('users')}
                 />
-                <SettingsNavItem 
+                {/* <SettingsNavItem 
                   icon={<Shield size={20} />} 
                   label="Security" 
                   active={activeTab === 'security'} 
@@ -287,7 +353,7 @@ const SettingsScreen = () => {
                   label="About" 
                   active={activeTab === 'about'} 
                   onClick={() => handleTabChange('about')}
-                />
+                /> */}
               </nav>
             </div>
           </div>
@@ -313,7 +379,10 @@ const SettingsScreen = () => {
                   onSearch={handleSearch} 
                   onAddUser={toggleAddUserModal} 
                   onEditUser={toggleEditUserModal}
+                  onDeleteUser={handleDeleteUser}
+                  onResetPassword={handleResetPassword}
                   formatDate={formatDate}
+                  isLoading={isLoading}
                 />
               )}
 
@@ -343,12 +412,22 @@ const SettingsScreen = () => {
 
       {/* Add User Modal */}
       {isAddUserModalOpen && (
-        <AddUserModal onClose={toggleAddUserModal} />
+        <AddUserModal 
+          onClose={toggleAddUserModal} 
+          onSubmit={handleAddUser}
+          isLoading={isLoading}
+        />
       )}
 
       {/* Edit User Modal */}
       {isEditUserModalOpen && (
-        <EditUserModal user={selectedUser} onClose={toggleEditUserModal} />
+        <EditUserModal 
+          user={selectedUser} 
+          onClose={toggleEditUserModal} 
+          onSubmit={userData => handleUpdateUser(selectedUser.id, userData)}
+          onResetPassword={() => handleResetPassword(selectedUser.id)}
+          isLoading={isLoading}
+        />
       )}
     </div>
   );
@@ -637,7 +716,17 @@ const NotificationsTab = ({ settings, onChange }) => {
 };
 
 // User Management Tab
-const UserManagementTab = ({ users, searchQuery, onSearch, onAddUser, onEditUser, formatDate }) => {
+const UserManagementTab = ({ 
+  users, 
+  searchQuery, 
+  onSearch, 
+  onAddUser, 
+  onEditUser, 
+  onDeleteUser,
+  onResetPassword,
+  formatDate,
+  isLoading 
+}) => {
   return (
     <div>
       <h2 className="text-xl font-semibold text-gray-800 mb-6">User Management</h2>
@@ -665,84 +754,105 @@ const UserManagementTab = ({ users, searchQuery, onSearch, onAddUser, onEditUser
         </button>
       </div>
       
-      <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                User
-              </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Role
-              </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
-              </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Last Login
-              </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                2FA
-              </th>
-              <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {users.map(user => (
-              <tr key={user.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 h-10 w-10">
-                      <img 
-                        src={user.profileImage} 
-                        alt={user.name} 
-                        className="h-10 w-10 rounded-full"
-                      />
-                    </div>
-                    <div className="ml-4">
-                      <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                      <div className="text-sm text-gray-500">{user.email}</div>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${roleColors[user.role]}`}>
-                    {user.role}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColors[user.status]}`}>
-                    {user.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {formatDate(user.lastLogin)}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {user.twoFactorEnabled ? (
-                    <Check size={16} className="text-green-500" />
-                  ) : (
-                    <X size={16} className="text-red-500" />
-                  )}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <button 
-                    onClick={() => onEditUser(user)} 
-                    className="text-blue-600 hover:text-blue-900 mr-4"
-                  >
-                    Edit
-                  </button>
-                  <button className="text-red-600 hover:text-red-900">
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {isLoading ? (
+        <div className="flex justify-center my-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+        </div>
+      ) : (
+        <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
+          {users.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">
+              No users found matching your search criteria.
+            </div>
+          ) : (
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    User
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Role
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Last Login
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    2FA
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {users.map(user => (
+                  <tr key={user.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 h-10 w-10">
+                          <img 
+                            src={user.profileImage} 
+                            alt={user.name} 
+                            className="h-10 w-10 rounded-full"
+                          />
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">{user.name}</div>
+                          <div className="text-sm text-gray-500">{user.email}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${roleColors[user.role] || 'bg-gray-100 text-gray-800'}`}>
+                        {user.role}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColors[user.status] || 'bg-gray-100 text-gray-800'}`}>
+                        {user.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatDate(user.lastLogin)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {user.twoFactorEnabled ? (
+                        <Check size={16} className="text-green-500" />
+                      ) : (
+                        <X size={16} className="text-red-500" />
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button 
+                        onClick={() => onEditUser(user)} 
+                        className="text-blue-600 hover:text-blue-900 mr-4"
+                      >
+                        Edit
+                      </button>
+                      <button 
+                        onClick={() => onResetPassword(user.id)} 
+                        className="text-blue-600 hover:text-blue-900 mr-4"
+                      >
+                        Reset Password
+                      </button>
+                      <button 
+                        onClick={() => onDeleteUser(user.id)} 
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -1241,7 +1351,7 @@ const AboutTab = () => {
 };
 
 // Add User Modal Component
-const AddUserModal = ({ onClose }) => {
+const AddUserModal = ({ onClose, onSubmit, isLoading }) => {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -1252,6 +1362,7 @@ const AddUserModal = ({ onClose }) => {
     confirmPassword: '',
     twoFactorEnabled: false
   });
+  const [formErrors, setFormErrors] = useState({});
   
   // Handle form field changes
   const handleChange = (e) => {
@@ -1260,14 +1371,60 @@ const AddUserModal = ({ onClose }) => {
       ...formData,
       [name]: type === 'checkbox' ? checked : value
     });
+    
+    // Clear error for this field
+    if (formErrors[name]) {
+      setFormErrors({
+        ...formErrors,
+        [name]: null
+      });
+    }
+  };
+  
+  // Validate form
+  const validateForm = () => {
+    const errors = {};
+    
+    if (!formData.firstName.trim()) {
+      errors.firstName = 'First name is required';
+    }
+    
+    if (!formData.lastName.trim()) {
+      errors.lastName = 'Last name is required';
+    }
+    
+    if (!formData.email.trim()) {
+      errors.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      errors.email = 'Email is invalid';
+    }
+    
+    if (!formData.password) {
+      errors.password = 'Password is required';
+    } else if (formData.password.length < 8) {
+      errors.password = 'Password must be at least 8 characters';
+    }
+    
+    if (formData.password !== formData.confirmPassword) {
+      errors.confirmPassword = 'Passwords do not match';
+    }
+    
+    return errors;
   };
   
   // Handle form submission
   const handleSubmit = (e) => {
     e.preventDefault();
-    console.log('Form data submitted:', formData);
-    // Here you would make an API call to create the user
-    onClose();
+    
+    // Validate form
+    const errors = validateForm();
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return;
+    }
+    
+    // Submit form
+    onSubmit(formData);
   };
   
   return (
@@ -1277,6 +1434,7 @@ const AddUserModal = ({ onClose }) => {
           <h3 className="text-lg font-medium text-gray-800">Add New User</h3>
           <button 
             onClick={onClose}
+            disabled={isLoading}
             className="text-gray-400 hover:text-gray-500"
           >
             <X size={20} />
@@ -1296,9 +1454,14 @@ const AddUserModal = ({ onClose }) => {
                   name="firstName"
                   value={formData.firstName}
                   onChange={handleChange}
-                  required
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  disabled={isLoading}
+                  className={`block w-full px-3 py-2 border ${
+                    formErrors.firstName ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-300 focus:ring-green-500 focus:border-green-500'
+                  } rounded-md shadow-sm focus:outline-none sm:text-sm`}
                 />
+                {formErrors.firstName && (
+                  <p className="mt-1 text-sm text-red-600">{formErrors.firstName}</p>
+                )}
               </div>
               
               <div>
@@ -1311,9 +1474,14 @@ const AddUserModal = ({ onClose }) => {
                   name="lastName"
                   value={formData.lastName}
                   onChange={handleChange}
-                  required
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  disabled={isLoading}
+                  className={`block w-full px-3 py-2 border ${
+                    formErrors.lastName ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-300 focus:ring-green-500 focus:border-green-500'
+                  } rounded-md shadow-sm focus:outline-none sm:text-sm`}
                 />
+                {formErrors.lastName && (
+                  <p className="mt-1 text-sm text-red-600">{formErrors.lastName}</p>
+                )}
               </div>
             </div>
             
@@ -1327,9 +1495,14 @@ const AddUserModal = ({ onClose }) => {
                 name="email"
                 value={formData.email}
                 onChange={handleChange}
-                required
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                disabled={isLoading}
+                className={`block w-full px-3 py-2 border ${
+                  formErrors.email ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-300 focus:ring-green-500 focus:border-green-500'
+                } rounded-md shadow-sm focus:outline-none sm:text-sm`}
               />
+              {formErrors.email && (
+                <p className="mt-1 text-sm text-red-600">{formErrors.email}</p>
+              )}
             </div>
             
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -1342,7 +1515,7 @@ const AddUserModal = ({ onClose }) => {
                   name="role"
                   value={formData.role}
                   onChange={handleChange}
-                  required
+                  disabled={isLoading}
                   className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                 >
                   <option value="Administrator">Administrator</option>
@@ -1360,7 +1533,7 @@ const AddUserModal = ({ onClose }) => {
                   name="status"
                   value={formData.status}
                   onChange={handleChange}
-                  required
+                  disabled={isLoading}
                   className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                 >
                   <option value="Active">Active</option>
@@ -1381,13 +1554,18 @@ const AddUserModal = ({ onClose }) => {
                   name="password"
                   value={formData.password}
                   onChange={handleChange}
-                  required
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  disabled={isLoading}
+                  className={`block w-full px-3 py-2 border ${
+                    formErrors.password ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-300 focus:ring-green-500 focus:border-green-500'
+                  } rounded-md shadow-sm focus:outline-none sm:text-sm`}
                 />
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
                   <Lock size={16} className="text-gray-400" />
                 </div>
               </div>
+              {formErrors.password && (
+                <p className="mt-1 text-sm text-red-600">{formErrors.password}</p>
+              )}
             </div>
             
             <div>
@@ -1401,13 +1579,18 @@ const AddUserModal = ({ onClose }) => {
                   name="confirmPassword"
                   value={formData.confirmPassword}
                   onChange={handleChange}
-                  required
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  disabled={isLoading}
+                  className={`block w-full px-3 py-2 border ${
+                    formErrors.confirmPassword ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-300 focus:ring-green-500 focus:border-green-500'
+                  } rounded-md shadow-sm focus:outline-none sm:text-sm`}
                 />
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
                   <Lock size={16} className="text-gray-400" />
                 </div>
               </div>
+              {formErrors.confirmPassword && (
+                <p className="mt-1 text-sm text-red-600">{formErrors.confirmPassword}</p>
+              )}
             </div>
             
             <div className="flex items-center">
@@ -1417,6 +1600,7 @@ const AddUserModal = ({ onClose }) => {
                 type="checkbox"
                 checked={formData.twoFactorEnabled}
                 onChange={handleChange}
+                disabled={isLoading}
                 className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
               />
               <label htmlFor="twoFactorEnabled" className="ml-2 block text-sm text-gray-700">
@@ -1429,15 +1613,22 @@ const AddUserModal = ({ onClose }) => {
             <button
               type="button"
               onClick={onClose}
+              disabled={isLoading}
               className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              disabled={isLoading}
+              className={`py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${isLoading ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500`}
             >
-              Add User
+              {isLoading ? (
+                <div className="flex items-center">
+                  <RefreshCw size={16} className="animate-spin mr-2" />
+                  Adding...
+                </div>
+              ) : 'Add User'}
             </button>
           </div>
         </form>
@@ -1447,15 +1638,15 @@ const AddUserModal = ({ onClose }) => {
 };
 
 // Edit User Modal Component
-const EditUserModal = ({ user, onClose }) => {
+const EditUserModal = ({ user, onClose, onSubmit, onResetPassword, isLoading }) => {
   const [formData, setFormData] = useState({
-    id: user.id,
     name: user.name,
     email: user.email,
     role: user.role,
     status: user.status,
     twoFactorEnabled: user.twoFactorEnabled
   });
+  const [formErrors, setFormErrors] = useState({});
   
   // Handle form field changes
   const handleChange = (e) => {
@@ -1464,14 +1655,46 @@ const EditUserModal = ({ user, onClose }) => {
       ...formData,
       [name]: type === 'checkbox' ? checked : value
     });
+    
+    // Clear error for this field
+    if (formErrors[name]) {
+      setFormErrors({
+        ...formErrors,
+        [name]: null
+      });
+    }
+  };
+  
+  // Validate form
+  const validateForm = () => {
+    const errors = {};
+    
+    if (!formData.name.trim()) {
+      errors.name = 'Name is required';
+    }
+    
+    if (!formData.email.trim()) {
+      errors.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      errors.email = 'Email is invalid';
+    }
+    
+    return errors;
   };
   
   // Handle form submission
   const handleSubmit = (e) => {
     e.preventDefault();
-    console.log('Form data submitted:', formData);
-    // Here you would make an API call to update the user
-    onClose();
+    
+    // Validate form
+    const errors = validateForm();
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return;
+    }
+    
+    // Submit form
+    onSubmit(formData);
   };
   
   return (
@@ -1481,6 +1704,7 @@ const EditUserModal = ({ user, onClose }) => {
           <h3 className="text-lg font-medium text-gray-800">Edit User</h3>
           <button 
             onClick={onClose}
+            disabled={isLoading}
             className="text-gray-400 hover:text-gray-500"
           >
             <X size={20} />
@@ -1511,9 +1735,14 @@ const EditUserModal = ({ user, onClose }) => {
                 name="name"
                 value={formData.name}
                 onChange={handleChange}
-                required
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                disabled={isLoading}
+                className={`block w-full px-3 py-2 border ${
+                  formErrors.name ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-300 focus:ring-green-500 focus:border-green-500'
+                } rounded-md shadow-sm focus:outline-none sm:text-sm`}
               />
+              {formErrors.name && (
+                <p className="mt-1 text-sm text-red-600">{formErrors.name}</p>
+              )}
             </div>
             
             <div>
@@ -1526,9 +1755,14 @@ const EditUserModal = ({ user, onClose }) => {
                 name="email"
                 value={formData.email}
                 onChange={handleChange}
-                required
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                disabled={isLoading}
+                className={`block w-full px-3 py-2 border ${
+                  formErrors.email ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-300 focus:ring-green-500 focus:border-green-500'
+                } rounded-md shadow-sm focus:outline-none sm:text-sm`}
               />
+              {formErrors.email && (
+                <p className="mt-1 text-sm text-red-600">{formErrors.email}</p>
+              )}
             </div>
             
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -1541,7 +1775,7 @@ const EditUserModal = ({ user, onClose }) => {
                   name="role"
                   value={formData.role}
                   onChange={handleChange}
-                  required
+                  disabled={isLoading}
                   className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                 >
                   <option value="Administrator">Administrator</option>
@@ -1559,7 +1793,7 @@ const EditUserModal = ({ user, onClose }) => {
                   name="status"
                   value={formData.status}
                   onChange={handleChange}
-                  required
+                  disabled={isLoading}
                   className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                 >
                   <option value="Active">Active</option>
@@ -1576,6 +1810,7 @@ const EditUserModal = ({ user, onClose }) => {
                 type="checkbox"
                 checked={formData.twoFactorEnabled}
                 onChange={handleChange}
+                disabled={isLoading}
                 className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
               />
               <label htmlFor="twoFactorEnabled" className="ml-2 block text-sm text-gray-700">
@@ -1586,6 +1821,8 @@ const EditUserModal = ({ user, onClose }) => {
             <div className="border-t border-gray-200 pt-4">
               <button
                 type="button"
+                onClick={onResetPassword}
+                disabled={isLoading}
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
                 <RefreshCw size={16} className="mr-2" />
@@ -1598,15 +1835,22 @@ const EditUserModal = ({ user, onClose }) => {
             <button
               type="button"
               onClick={onClose}
+              disabled={isLoading}
               className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              disabled={isLoading}
+              className={`py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${isLoading ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500`}
             >
-              Save Changes
+              {isLoading ? (
+                <div className="flex items-center">
+                  <RefreshCw size={16} className="animate-spin mr-2" />
+                  Saving...
+                </div>
+              ) : 'Save Changes'}
             </button>
           </div>
         </form>
