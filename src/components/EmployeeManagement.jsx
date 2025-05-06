@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Calendar, Clock, Mail, Phone, MapPin, Users, Award, FileText, Briefcase, User, Download, DollarSign, IndianRupee } from 'lucide-react';
+import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, 
+  Calendar, Clock, Mail, Phone, MapPin, Users, Award, FileText, Briefcase, 
+  UserX, Download, AlertTriangle,X, IndianRupee,UserCheck,TrendingUp,AlertCircle,Info } from 'lucide-react';
 import { 
   fetchEmployees, 
   fetchEmployeeById,
@@ -432,7 +434,7 @@ const EmployeeManagement = () => {
   }
   
   return (
-    <div className="h-full bg-gray-100">
+    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
       {selectedEmployee ? (
         <EmployeeProfile 
           employee={selectedEmployee} 
@@ -443,26 +445,26 @@ const EmployeeManagement = () => {
         />
       ) : (
         <div className="px-6 py-6">
-          {/* Header */}
+          {/* Header with gradient text */}
           <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-semibold text-gray-800">Employee Management</h1>
+            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Employee Management</h1>
             <button 
               onClick={toggleAddModal}
-              className="flex items-center px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200"
+              className="flex items-center px-4 py-2 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm"
             >
               <Plus size={20} className="mr-2" />
               Add Employee
             </button>
           </div>
 
-          {/* Tabs */}
+          {/* Tabs with consistent styling */}
           <div className="mb-6">
             <nav className="flex space-x-4 border-b border-gray-200 overflow-x-auto">
               <button
                 onClick={() => setActiveTab('employees')}
-                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap ${
+                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap transition-all duration-300 ${
                   activeTab === 'employees'
-                    ? 'border-green-500 text-green-600'
+                    ? 'border-green-500 text-green-600 bg-gradient-to-b from-white to-green-50'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
@@ -470,7 +472,7 @@ const EmployeeManagement = () => {
               </button>
               <button
                 onClick={() => setActiveTab('attendance')}
-                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap ${
+                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap transition-all duration-300 ${
                   activeTab === 'attendance'
                     ? 'border-green-500 text-green-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -480,7 +482,7 @@ const EmployeeManagement = () => {
               </button>
               <button
                 onClick={() => setActiveTab('shifts')}
-                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap ${
+                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap transition-all duration-300 ${
                   activeTab === 'shifts'
                     ? 'border-green-500 text-green-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -490,7 +492,7 @@ const EmployeeManagement = () => {
               </button>
               <button
                 onClick={() => setActiveTab('performance')}
-                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap ${
+                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap transition-all duration-300 ${
                   activeTab === 'performance'
                     ? 'border-green-500 text-green-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -501,14 +503,12 @@ const EmployeeManagement = () => {
             </nav>
           </div>
 
-          {/* Show error message if exists */}
+          {/* Error Message */}
           {error && (
             <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
               <div className="flex items-start">
                 <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
+                  <AlertTriangle className="h-5 w-5 text-red-400" />
                 </div>
                 <div className="ml-3">
                   <p className="text-sm text-red-700">{error}</p>
@@ -520,9 +520,7 @@ const EmployeeManagement = () => {
                       className="inline-flex bg-red-50 rounded-md p-1.5 text-red-500 hover:bg-red-100"
                     >
                       <span className="sr-only">Dismiss</span>
-                      <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
+                      <X className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
@@ -530,7 +528,7 @@ const EmployeeManagement = () => {
             </div>
           )}
 
-          {/* Employees Tab */}
+          {/* Employees Tab Content */}
           {activeTab === 'employees' && (
             <div>
               {/* Search and Filters */}
@@ -542,7 +540,7 @@ const EmployeeManagement = () => {
                     </div>
                     <input
                       type="text"
-                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
                       placeholder="Search by name, job title or email..."
                       value={searchQuery}
                       onChange={handleSearch}
@@ -552,7 +550,7 @@ const EmployeeManagement = () => {
 
                 <div>
                   <select
-                    className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                    className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm"
                     value={filters.department}
                     onChange={(e) => handleFilterChange('department', e.target.value)}
                   >
@@ -565,7 +563,7 @@ const EmployeeManagement = () => {
 
                 <div>
                   <select
-                    className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                    className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm"
                     value={filters.status}
                     onChange={(e) => handleFilterChange('status', e.target.value)}
                   >
@@ -605,7 +603,7 @@ const EmployeeManagement = () => {
                       />
                     ))
                   ) : (
-                    <div className="col-span-full py-10 text-center bg-white rounded-lg shadow">
+                    <div className="col-span-full py-10 text-center bg-white rounded-lg shadow-md border border-gray-100">
                       <p className="text-gray-500">No employees found matching your filters</p>
                     </div>
                   )}
@@ -614,48 +612,53 @@ const EmployeeManagement = () => {
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="flex justify-between items-center mt-6">
-                  <button
-                    onClick={() => setCurrentPage(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    className={`px-3 py-1 rounded-md ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
-                  <div className="flex space-x-2 overflow-x-auto">
+                <div className="flex justify-center mt-6">
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => setCurrentPage(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      className={`w-10 h-10 flex items-center justify-center rounded-md transition-all duration-300 ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 shadow'}`}
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    
                     {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
                       <button
                         key={page}
                         onClick={() => setCurrentPage(page)}
-                        className={`w-8 h-8 flex items-center justify-center rounded-md ${currentPage === page ? 'bg-green-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                        className={`w-10 h-10 flex items-center justify-center rounded-md transition-all duration-300 ${
+                          currentPage === page 
+                            ? 'bg-gradient-to-r from-green-500 to-blue-600 text-white shadow-md' 
+                            : 'bg-white text-gray-700 hover:bg-gray-50 shadow'
+                        }`}
                       >
                         {page}
                       </button>
                     ))}
+                    
+                    <button
+                      onClick={() => setCurrentPage(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                      className={`w-10 h-10 flex items-center justify-center rounded-md transition-all duration-300 ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 shadow'}`}
+                    >
+                      <ChevronRight size={16} />
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setCurrentPage(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                    className={`px-3 py-1 rounded-md ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-                  >
-                    <ChevronRight size={16} />
-                  </button>
                 </div>
               )}
             </div>
           )}
 
-          {/* Attendance Tab */}
+          {/* Other tabs content */}
           {activeTab === 'attendance' && (
             <AttendanceTab 
-              attendanceData={attendanceData.summary} // Pass the summary array directly
-              statistics={attendanceData.statistics} // Pass statistics separately
+              attendanceData={attendanceData.summary}
+              statistics={attendanceData.statistics}
               employees={employees} 
               isLoading={isLoading} 
             />
           )}
 
-          {/* Shifts Tab */}
           {activeTab === 'shifts' && (
             <ShiftsTab 
               shiftsData={shiftsData} 
@@ -665,7 +668,6 @@ const EmployeeManagement = () => {
             />
           )}
 
-          {/* Performance Tab */}
           {activeTab === 'performance' && (
             <PerformanceTab 
               performanceData={performanceData} 
@@ -678,7 +680,7 @@ const EmployeeManagement = () => {
         </div>
       )}
 
-      {/* Add Employee Modal */}
+      {/* Modals */}
       {isAddModalOpen && (
         <AddEmployeeModal 
           onClose={toggleAddModal} 
@@ -687,7 +689,6 @@ const EmployeeManagement = () => {
         />
       )}
 
-      {/* Edit Employee Modal */}
       {isEditModalOpen && employeeToEdit && (
         <EditEmployeeModal
           employee={employeeToEdit}
@@ -697,7 +698,6 @@ const EmployeeManagement = () => {
         />
       )}
 
-      {/* Record Attendance Modal */}
       {isAttendanceModalOpen && employeeForAttendance && (
         <RecordAttendanceModal
           employee={{
@@ -712,7 +712,7 @@ const EmployeeManagement = () => {
         />
       )}
 
-      {/* Success Message Notification */}
+      {/* Success Message Toast */}
       {successMessage && (
         <div className="fixed top-6 right-6 bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-md shadow-lg z-50 animate-fadeIn">
           <p>{successMessage}</p>
@@ -726,19 +726,26 @@ const EmployeeManagement = () => {
 const EmployeeCard = ({ employee, onClick, onRecordAttendance }) => {
   return (
     <div 
-      className="bg-white rounded-lg shadow overflow-hidden hover:shadow-md transition-shadow duration-200 cursor-pointer"
+      className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 cursor-pointer"
       onClick={onClick}
     >
+      <div className={`h-2 bg-gradient-to-r ${
+        employee.status === 'Active' ? 'from-green-500 to-green-600' :
+        employee.status === 'On Leave' ? 'from-amber-500 to-amber-400' :
+        employee.status === 'Terminated' ? 'from-red-500 to-red-400' :
+        'from-gray-500 to-gray-400'
+      }`}></div>
+      
       <div className="p-4">
         <div className="flex items-center mb-3">
           <img 
-            src={emp} 
+            src={employee.image} 
             alt={employee.name} 
-            className="w-16 h-16 object-cover rounded-full bg-gray-200"
+            className="w-16 h-16 object-cover rounded-full bg-gray-200 border-2 border-blue-100"
           />
           <div className="ml-4">
-            <h3 className="text-lg font-semibold text-gray-800">{employee.name}</h3>
-            <p className="text-sm text-gray-500">{employee.jobTitle}</p>
+            <h3 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">{employee.name}</h3>
+            <p className="text-sm text-gray-600">{employee.jobTitle}</p>
           </div>
         </div>
         
@@ -795,39 +802,40 @@ const EmployeeProfile = ({ employee, onClose, onEdit, onRecordAttendance, isLoad
   }
   
   return (
-    <div className="bg-white min-h-full">
+    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
       {/* Header */}
-      <div className="bg-gradient-to-r from-green-600 to-green-700 text-white">
+      <div className="bg-white shadow-sm border-b border-gray-100">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center">
             <button 
               onClick={onClose}
-              className="mr-4 p-1 rounded-full hover:bg-green-500 transition-colors duration-200"
+              className="mr-4 p-1 rounded-full hover:bg-gray-100 transition-colors duration-200"
             >
-              <ChevronLeft size={24} />
+              <ChevronLeft size={24} className="text-gray-600" />
             </button>
-            <h1 className="text-2xl font-semibold">{employee.name}</h1>
-            <span className="ml-4 px-3 py-1 bg-white text-green-600 rounded-full text-sm font-medium">
+            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">{employee.name}</h1>
+            <span className="ml-4 px-3 py-1 bg-gradient-to-r from-green-100 to-blue-100 text-green-800 rounded-full text-sm font-medium">
               {employee.job_title}
             </span>
           </div>
         </div>
       </div>
       
-      {/* Profile Content */}
+      {/* Body */}
       <div className="container mx-auto px-6 py-8">
         <div className="flex flex-col lg:flex-row">
           {/* Left Column - Basic Info */}
           <div className="lg:w-1/3 mb-8 lg:mb-0 lg:pr-8">
-            <div className="bg-white shadow rounded-lg overflow-hidden">
+            <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
+              <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
               <div className="p-6 flex flex-col items-center">
                 <img 
                   src={emp} 
                   alt={employee.name} 
-                  className="w-32 h-32 object-cover rounded-full bg-gray-200 mb-4"
+                  className="w-32 h-32 object-cover rounded-full bg-gray-200 mb-4 border-4 border-green-100"
                 />
-                <h2 className="text-xl font-semibold text-gray-800">{employee.name}</h2>
-                <p className="text-gray-500">{employee.job_title}</p>
+                <h2 className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">{employee.name}</h2>
+                <p className="text-gray-600">{employee.job_title}</p>
                 <span className={`mt-2 px-3 py-1 text-xs font-semibold rounded-full ${statusColors[employee.status]}`}>
                   {employee.status}
                 </span>
@@ -858,13 +866,13 @@ const EmployeeProfile = ({ employee, onClose, onEdit, onRecordAttendance, isLoad
                 <div className="mt-6 w-full flex flex-col space-y-2">
                   <button 
                     onClick={() => onEdit(employee)}
-                    className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                    className="w-full py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300"
                   >
                     Edit Profile
                   </button>
                   <button 
                     onClick={() => onRecordAttendance(employee)}
-                    className="w-full py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                    className="w-full py-2 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300"
                   >
                     Record Attendance
                   </button>
@@ -876,72 +884,71 @@ const EmployeeProfile = ({ employee, onClose, onEdit, onRecordAttendance, isLoad
           {/* Right Column - Tabs & Details */}
           <div className="lg:w-2/3">
             {/* Tabs */}
-            <div className="border-b border-gray-200 overflow-x-auto">
-              <nav className="flex -mb-px space-x-8">
-                <button
-                  onClick={() => setActiveTab('overview')}
-                  className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                    activeTab === 'overview'
-                      ? 'border-green-500 text-green-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  Overview
-                </button>
-                <button
-                  onClick={() => setActiveTab('attendance')}
-                  className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                    activeTab === 'attendance'
-                      ? 'border-green-500 text-green-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  Attendance
-                </button>
-                <button
-                  onClick={() => setActiveTab('performance')}
-                  className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                    activeTab === 'performance'
-                      ? 'border-green-500 text-green-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  Performance
-                </button>
-                <button
-                  onClick={() => setActiveTab('payroll')}
-                  className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                    activeTab === 'payroll'
-                      ? 'border-green-500 text-green-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  Payroll
-                </button>
-              </nav>
-            </div>
-            
-            {/* Tab Content */}
-            <div className="py-6">
-              {/* Overview Tab */}
-              {activeTab === 'overview' && (
-                <OverviewTab employee={employee} />
-              )}
+            <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
+              <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+              <div className="border-b border-gray-200 overflow-x-auto">
+                <nav className="flex -mb-px space-x-8 px-6">
+                  <button
+                    onClick={() => setActiveTab('overview')}
+                    className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-300 ${
+                      activeTab === 'overview'
+                        ? 'border-green-500 text-green-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    Overview
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('attendance')}
+                    className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-300 ${
+                      activeTab === 'attendance'
+                        ? 'border-green-500 text-green-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    Attendance
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('performance')}
+                    className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-300 ${
+                      activeTab === 'performance'
+                        ? 'border-green-500 text-green-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    Performance
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('payroll')}
+                    className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-300 ${
+                      activeTab === 'payroll'
+                        ? 'border-green-500 text-green-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    Payroll
+                  </button>
+                </nav>
+              </div>
               
-              {/* Attendance Tab */}
-              {activeTab === 'attendance' && (
-                <AttendanceDetailsTab employee={employee} />
-              )}
-              
-              {/* Performance Tab */}
-              {activeTab === 'performance' && (
-                <PerformanceDetailsTab employee={employee} />
-              )}
-              
-              {/* Payroll Tab */}
-              {activeTab === 'payroll' && (
-                <PayrollTab employee={employee} />
-              )}
+              {/* Tab Content */}
+              <div className="p-6">
+                {activeTab === 'overview' && (
+                  <OverviewTab employee={employee} />
+                )}
+                
+                {activeTab === 'attendance' && (
+                  <AttendanceDetailsTab employee={employee} />
+                )}
+                
+                {activeTab === 'performance' && (
+                  <PerformanceDetailsTab employee={employee} />
+                )}
+                
+                {activeTab === 'payroll' && (
+                  <PayrollTab employee={employee} />
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1184,8 +1191,8 @@ const OverviewTab = ({ employee }) => {
           
           <div className="divide-y divide-gray-200">
             {isLoading ? (
-              <div className="flex justify-center items-center h-32">
-                <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-green-500"></div>
+              <div className="flex justify-center py-12">
+                <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-green-500"></div>
               </div>
             ) : recentActivity.length > 0 ? (
               recentActivity.map(activity => (
@@ -2284,14 +2291,102 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
 
   return (
     <div>
-      <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+      {/* Stats Cards with improved consistent styling */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300">
+          <div className="h-2 bg-gradient-to-r from-green-500 to-green-600"></div>
+          <div className="p-5">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Present Today</p>
+                <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-green-500 mt-1">
+                  {statistics.present || 0}
+                </p>
+              </div>
+              <div className="p-2.5 rounded-xl bg-gradient-to-r from-green-500 to-green-600">
+                <UserCheck size={20} className="text-white" />
+              </div>
+            </div>
+            <div className="mt-2 text-xs text-green-600 flex items-center">
+              <TrendingUp size={14} className="mr-1" />
+              <span>{statistics.attendanceRate || 0}% attendance rate</span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300">
+          <div className="h-2 bg-gradient-to-r from-red-500 to-red-600"></div>
+          <div className="p-5">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Absent Today</p>
+                <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-red-600 to-red-500 mt-1">
+                  {statistics.absent || 0}
+                </p>
+              </div>
+              <div className="p-2.5 rounded-xl bg-gradient-to-r from-red-500 to-red-600">
+                <UserX size={20} className="text-white" />
+              </div>
+            </div>
+            <div className="mt-2 text-xs text-red-600 flex items-center">
+              <AlertTriangle size={14} className="mr-1" />
+              <span>Action may be required</span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300">
+          <div className="h-2 bg-gradient-to-r from-amber-500 to-amber-400"></div>
+          <div className="p-5">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Late Arrivals</p>
+                <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-amber-500 mt-1">
+                  {statistics.late || 0}
+                </p>
+              </div>
+              <div className="p-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400">
+                <Clock size={20} className="text-white" />
+              </div>
+            </div>
+            <div className="mt-2 text-xs text-amber-600 flex items-center">
+              <AlertCircle size={14} className="mr-1" />
+              <span>Review needed</span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300">
+          <div className="h-2 bg-gradient-to-r from-blue-500 to-blue-600"></div>
+          <div className="p-5">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Total Employees</p>
+                <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-blue-500 mt-1">
+                  {employees.length}
+                </p>
+              </div>
+              <div className="p-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600">
+                <Users size={20} className="text-white" />
+              </div>
+            </div>
+            <div className="mt-2 text-xs text-blue-600 flex items-center">
+              <Info size={14} className="mr-1" />
+              <span>Full staff overview</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Calendar navigation with improved styling */}
+      <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300 p-6 mb-6">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6">
           <div className="flex items-center mb-4 sm:mb-0">
             <button
               onClick={() => setView('day')}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md ${
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-300 ${
                 view === 'day' 
-                  ? 'bg-green-600 text-white' 
+                  ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-sm' 
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
@@ -2299,9 +2394,9 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
             </button>
             <button
               onClick={() => setView('week')}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md ml-2 ${
+              className={`px-4 py-2 text-sm font-medium rounded-md ml-2 transition-all duration-300 ${
                 view === 'week' 
-                  ? 'bg-green-600 text-white' 
+                  ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-sm' 
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
@@ -2309,9 +2404,9 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
             </button>
             <button
               onClick={() => setView('month')}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md ml-2 ${
+              className={`px-4 py-2 text-sm font-medium rounded-md ml-2 transition-all duration-300 ${
                 view === 'month' 
-                  ? 'bg-green-600 text-white' 
+                  ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-sm' 
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
@@ -2322,24 +2417,24 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
           <div className="flex items-center">
             <button 
               onClick={navigatePrevious}
-              className="p-1 rounded-full hover:bg-gray-100"
+              className="p-2 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors duration-200"
             >
-              <ChevronLeft size={18} className="text-gray-500" />
+              <ChevronLeft size={20} />
             </button>
-            <span className="mx-4 text-sm font-medium">
+            <span className="mx-4 text-sm font-medium text-gray-700">
               {view === 'day' && formatDate(selectedDate)}
               {view === 'week' && weekDateRange()}
               {view === 'month' && selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
             </span>
             <button 
               onClick={navigateNext}
-              className="p-1 rounded-full hover:bg-gray-100"
+              className="p-2 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors duration-200"
             >
-              <ChevronRight size={18} className="text-gray-500" />
+              <ChevronRight size={20} />
             </button>
             <button 
               onClick={goToToday}
-              className="ml-4 px-3 py-1 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+              className="ml-4 px-4 py-2 text-sm font-medium bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors duration-200"
             >
               Today
             </button>
@@ -2667,9 +2762,10 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
         )}
       </div>
       
-      <div className="bg-white rounded-lg shadow-sm p-6 mt-6">
+      <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300 p-6 mt-6">
+        <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 -mt-6 mb-5"></div>
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium text-gray-800">Record Attendance</h3>
+          <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Record Attendance</h3>
           <div className="flex items-center space-x-4">
             <span className="text-sm text-gray-500">Today: {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
             
@@ -2677,8 +2773,8 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
               onClick={handleBatchSaveAttendance}
               disabled={savingAttendance}
               className={`px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
-                savingAttendance ? 'bg-green-400' : 'bg-green-600 hover:bg-green-700'
-              } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500`}
+                savingAttendance ? 'bg-green-400' : 'bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90'
+              } focus:outline-none transition-all duration-300`}
             >
               {savingAttendance ? 'Saving...' : 'Save All Records'}
             </button>
@@ -2688,7 +2784,7 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
         {/* Success/Error message */}
         {attendanceMessage.text && (
           <div className={`mb-4 p-3 rounded-md ${
-            attendanceMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+            attendanceMessage.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'
           }`}>
             {attendanceMessage.text}
           </div>
@@ -3254,61 +3350,62 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
     
     return (
       <div>
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6">
-            <div className="flex items-center mb-4 sm:mb-0">
-              <button
-                onClick={() => handleViewChange('week')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md ${
-                  view === 'week' 
-                    ? 'bg-green-600 text-white' 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Week
-              </button>
-              <button
-                onClick={() => handleViewChange('month')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md ml-2 ${
-                  view === 'month' 
-                    ? 'bg-green-600 text-white' 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Month
-              </button>
-            </div>
-            
-            <div className="flex items-center">
-              <button 
-                className="p-1 rounded-full hover:bg-gray-100"
-                onClick={navigatePrevious}
-              >
-                <ChevronLeft size={18} className="text-gray-500" />
-              </button>
-              <span className="mx-4 text-sm font-medium">
-                {getDateRangeDisplay()}
-              </span>
-              <button 
-                className="p-1 rounded-full hover:bg-gray-100"
-                onClick={navigateNext}
-              >
-                <ChevronRight size={18} className="text-gray-500" />
-              </button>
-              <button 
-                className="ml-4 px-3 py-1 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
-                onClick={() => setCurrentDate(new Date())}
-              >
-                Today
-              </button>
-            </div>
+         <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300 p-6 mb-6">
+        <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 -mt-6 mb-5"></div>
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6">
+          <div className="flex items-center mb-4 sm:mb-0">
+            <button
+              onClick={() => handleViewChange('week')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md ${
+                view === 'week' 
+                  ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-sm' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              } transition-all duration-300`}
+            >
+              Week
+            </button>
+            <button
+              onClick={() => handleViewChange('month')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md ml-2 ${
+                view === 'month' 
+                  ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-sm' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              } transition-all duration-300`}
+            >
+              Month
+            </button>
           </div>
-            
-          {isLoading ? (
-            <div className="flex justify-center py-12">
-              <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-green-500"></div>
-            </div>
-          ) : view === 'week' ? (
+          
+          <div className="flex items-center">
+            <button 
+              className="p-1 rounded-full hover:bg-gray-100"
+              onClick={navigatePrevious}
+            >
+              <ChevronLeft size={18} className="text-gray-500" />
+            </button>
+            <span className="mx-4 text-sm font-medium">
+              {getDateRangeDisplay()}
+            </span>
+            <button 
+              className="p-1 rounded-full hover:bg-gray-100"
+              onClick={navigateNext}
+            >
+              <ChevronRight size={18} className="text-gray-500" />
+            </button>
+            <button 
+              className="ml-4 px-3 py-1 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-all duration-300"
+              onClick={() => setCurrentDate(new Date())}
+            >
+              Today
+            </button>
+          </div>
+        </div>
+          
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-green-500"></div>
+          </div>
+        ) : view === 'week' ? (
             <div className="overflow-x-auto">
               <table className="min-w-full border-separate" style={{ borderSpacing: 0 }}>
                 <thead>
@@ -3430,31 +3527,35 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white rounded-lg shadow-sm p-6">
+        {/* Shift Templates Card */}
+          <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300 p-6">
+            <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 -mt-6 mb-5"></div>
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-medium text-gray-800">Shift Templates</h3>
+              <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">
+                Shift Templates
+              </h3>
               <button 
-                onClick={() => { setTemplateToEdit(null); setShowTemplateModal(true); }}
-                className="px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700"
+                onClick={() => {setTemplateToEdit(null); setShowTemplateModal(true);}}
+                className="px-3 py-1.5 text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 rounded-md hover:opacity-90 transition-all duration-300 shadow-sm"
               >
                 Add Template
               </button>
             </div>
             <div className="space-y-4">
               {shiftTemplates.map(template => (
-                <div key={template.id} className="border border-gray-200 rounded-lg p-4">
+                <div key={template.id} className="border border-gray-200 rounded-lg p-4 hover:border-green-200 transition-all duration-300">
                   <div className="flex justify-between items-center mb-2">
                     <h4 className="text-sm font-medium text-gray-800">{template.name}</h4>
                     <div className="flex space-x-2">
                       <button 
                         onClick={() => handleEditTemplate(template)}
-                        className="text-sm text-blue-600 hover:text-blue-800"
+                        className="text-sm text-blue-600 hover:text-blue-800 transition-colors duration-200"
                       >
                         Edit
                       </button>
                       <button 
                         onClick={() => handleDeleteTemplate(template.id)}
-                        className="text-sm text-red-600 hover:text-red-800"
+                        className="text-sm text-red-600 hover:text-red-800 transition-colors duration-200"
                       >
                         Delete
                       </button>
@@ -3476,8 +3577,12 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
             </div>
           </div>
           
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h3 className="text-lg font-medium text-gray-800 mb-4">Quick Assign</h3>
+          {/* Quick Assign Card */}
+          <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300 p-6">
+            <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 -mt-6 mb-5"></div>
+            <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700 mb-4">
+              Quick Assign
+            </h3>
             
             {/* Show success/error message */}
             {assignMessage.text && (
@@ -3585,8 +3690,8 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
                 className={`w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
                   assignLoading 
                     ? 'bg-green-400 cursor-not-allowed' 
-                    : 'bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500'
-                }`}
+                    : 'bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90'
+                } transition-all duration-300 focus:outline-none`}
               >
                 {assignLoading ? (
                   <>
@@ -3638,15 +3743,14 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
     
     return (
       <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+        <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+          <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
           <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-            <h3 className="text-lg font-medium text-gray-800">
+            <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">
               {template ? 'Edit Shift Template' : 'Add Shift Template'}
             </h3>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-500 transition-colors duration-200">
+              <X size={20} />
             </button>
           </div>
           
@@ -3705,13 +3809,13 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
               <button
                 type="button"
                 onClick={onClose}
-                className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none transition-all duration-300"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 focus:outline-none transition-all duration-300"
               >
                 {template ? 'Update Template' : 'Create Template'}
               </button>
@@ -3959,83 +4063,92 @@ const PerformanceTab = ({
       )}
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm font-medium text-gray-500">Average Performance</p>
-              <p className="text-2xl font-semibold text-gray-800 mt-1">
-                {typeof avgRating === 'number' ? `${avgRating.toFixed(1)}` : '0'}/5.0
-              </p>
-            </div>
-            <div className="p-2 rounded-full bg-green-50 text-green-600">
-              <Award size={20} />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center">
-            <div className="flex mr-2">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <svg key={star} className={`w-5 h-5 ${star <= Math.round(avgRating || 0) ? 'text-yellow-400' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
-              ))}
-            </div>
-            <span className="text-xs text-gray-500">Team average</span>
-          </div>
-      </div>
-        
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm font-medium text-gray-500">Upcoming Reviews</p>
-              <p className="text-2xl font-semibold text-gray-800 mt-1">{upcomingReviews.length}</p>
-            </div>
-            <div className="p-2 rounded-full bg-amber-50 text-amber-600">
-              <Calendar size={20} />
-            </div>
-          </div>
-          <div className="mt-4 space-y-1">
-            {upcomingReviews.slice(0, 2).map((review, index) => (
-              <div key={index} className="flex justify-between text-xs">
-                <span className="text-gray-700">{review.employees?.name || 'Unknown'}</span>
-                <span className="text-gray-500">
-                  {(() => {
-                    const reviewDate = new Date(review.scheduled_date);
-                    const today = new Date();
-                    const diffTime = reviewDate - today;
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                    return diffDays <= 0 ? 'Due today' : `Due in ${diffDays} days`;
-                  })()}
-                </span>
+        <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300">
+          <div className="h-2 bg-gradient-to-r from-green-500 to-green-600"></div>
+          <div className="p-5">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Average Performance</p>
+                <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-green-500 mt-1">
+                  {typeof avgRating === 'number' ? `${avgRating.toFixed(1)}` : '0'}/5.0
+                </p>
               </div>
-            ))}
-            {upcomingReviews.length === 0 && (
-              <span className="text-xs text-gray-500">No upcoming reviews</span>
-            )}
+              <div className="p-2.5 rounded-xl bg-gradient-to-r from-green-500 to-green-600">
+                <Award size={20} className="text-white" />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center">
+              <div className="flex mr-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <svg key={star} className={`w-5 h-5 ${star <= Math.round(avgRating || 0) ? 'text-yellow-400' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                  </svg>
+                ))}
+              </div>
+              <span className="text-xs text-gray-500">Team average</span>
+            </div>
           </div>
         </div>
         
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm font-medium text-gray-500">Top Performer</p>
-              <p className="text-2xl font-semibold text-gray-800 mt-1">{topPerformer?.name || "None"}</p>
+        <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300">
+          <div className="h-2 bg-gradient-to-r from-amber-500 to-amber-400"></div>
+          <div className="p-5">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Upcoming Reviews</p>
+                <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-amber-500 mt-1">
+                  {upcomingReviews.length}
+                </p>
+              </div>
+              <div className="p-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400">
+                <Calendar size={20} className="text-white" />
+              </div>
             </div>
-            <div className="p-2 rounded-full bg-blue-50 text-blue-600">
-              <Award size={20} />
+            <div className="mt-4 space-y-1">
+              {upcomingReviews.slice(0, 2).map((review, index) => (
+                <div key={index} className="flex justify-between text-xs">
+                  <span className="text-gray-700">{review.employees?.name || 'Unknown'}</span>
+                  <span className="text-gray-500">
+                    {formatDate(review.scheduled_date)}
+                  </span>
+                </div>
+              ))}
+              {upcomingReviews.length === 0 && (
+                <span className="text-xs text-gray-500">No upcoming reviews</span>
+              )}
             </div>
           </div>
-          <div className="mt-4 text-xs text-gray-600 flex items-center">
-            <span>Rating: {topPerformer?.performance_rating || "N/A"}/5.0</span>
-            <span className="mx-2">•</span>
-            <span>{topPerformer?.job_title || ""}</span>
+        </div>
+        
+        <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300">
+          <div className="h-2 bg-gradient-to-r from-blue-500 to-blue-600"></div>
+          <div className="p-5">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Top Performer</p>
+                <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-blue-500 mt-1">
+                  {topPerformer?.name || "None"}
+                </p>
+              </div>
+              <div className="p-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600">
+                <Award size={20} className="text-white" />
+              </div>
+            </div>
+            <div className="mt-4 text-xs text-gray-600 flex items-center">
+              <span>Rating: {topPerformer?.performance_rating || "N/A"}/5.0</span>
+              <span className="mx-2">•</span>
+              <span>{topPerformer?.job_title || ""}</span>
+            </div>
           </div>
         </div>
       </div>
       
-      <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-        <h3 className="text-lg font-medium text-gray-800 mb-4">Team Performance Overview</h3>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+      <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300 mb-6">
+        <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+        <div className="p-6">
+          <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700 mb-4">Team Performance Overview</h3>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -4132,23 +4245,26 @@ const PerformanceTab = ({
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
       
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium text-gray-800">Schedule Performance Review</h3>
-          <button 
-            onClick={handleNewReview}
-            className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
-            disabled={isLoading || reviewsLoading}
-          >
-            New Review
-          </button>
-        </div>
-        
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+      <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300">
+        <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+        <div className="p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Schedule Performance Review</h3>
+            <button 
+              onClick={handleNewReview}
+              className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 focus:outline-none transition-all duration-300 shadow-sm"
+              disabled={isLoading || reviewsLoading}
+            >
+              New Review
+            </button>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -4255,6 +4371,7 @@ const PerformanceTab = ({
             </tbody>
           </table>
         </div>
+        </div>
       </div>
       
       {/* Performance Review Modal */}
@@ -4270,7 +4387,8 @@ const PerformanceTab = ({
       {/* Delete Confirmation Dialog */}
       {confirmDeleteOpen && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+            <div className="h-1 bg-gradient-to-r from-red-400 to-red-500 -mt-6 mb-4"></div>
             <h3 className="text-lg font-medium text-gray-900 mb-4">Cancel Performance Review</h3>
             <p className="text-sm text-gray-500 mb-4">
               Are you sure you want to cancel this performance review? This action cannot be undone.
@@ -4278,14 +4396,14 @@ const PerformanceTab = ({
             <div className="flex justify-end space-x-3">
               <button
                 onClick={handleCancelDelete}
-                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-all duration-300"
                 disabled={reviewsLoading}
               >
                 No, Keep Review
               </button>
               <button
                 onClick={handleDeleteReview}
-                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
+                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-red-600 to-red-500 hover:opacity-90 transition-all duration-300"
                 disabled={reviewsLoading}
               >
                 {reviewsLoading ? 'Cancelling...' : 'Yes, Cancel Review'}
@@ -4352,17 +4470,17 @@ const AddEmployeeModal = ({ onClose, onSubmit, isLoading }) => {
   };
   
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-screen overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-100">
+        <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-lg font-medium text-gray-800">Add New Employee</h3>
+          <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Add New Employee</h3>
           <button 
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-500"
+            className="text-gray-400 hover:text-gray-500 transition-colors duration-200"
+            disabled={isLoading}
           >
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <X size={20} />
           </button>
         </div>
         
@@ -5310,15 +5428,14 @@ const PerformanceReviewModal = ({
   
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+        <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-lg font-medium text-gray-800">
+          <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">
             {isEditing ? 'Edit Performance Review' : 'Schedule Performance Review'}
           </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-500 transition-colors duration-200">
+            <X size={20} />
           </button>
         </div>
         
@@ -5479,14 +5596,14 @@ const PerformanceReviewModal = ({
             <button
               type="button"
               onClick={onClose}
-              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none transition-all duration-300"
               disabled={isLoading}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 focus:outline-none transition-all duration-300"
               disabled={isLoading}
             >
               {isLoading ? (

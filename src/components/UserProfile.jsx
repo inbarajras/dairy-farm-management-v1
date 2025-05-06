@@ -14,7 +14,8 @@ import {
   Camera,
   Save,
   Trash2,
-  Edit
+  Edit,
+  Plus
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -201,67 +202,75 @@ const UserProfile = ({ userData: initialUserData }) => {
   };
 
   return (
-    <div className="h-full bg-gray-100">
+    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
       <div className="px-6 py-6">
-        {/* <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-semibold text-gray-800">User Profile</h1>
-          {!isEditing ? (
-            <button 
-              onClick={toggleEdit}
-              className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-            >
-              <Edit size={18} className="mr-2" />
-              Edit Profile
-            </button>
-          ) : (
-            <button 
-              onClick={handleSubmit}
-              className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-            >
-              <Save size={18} className="mr-2" />
-              Save Changes
-            </button>
-          )}
-        </div> */}
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Profile</h1>
+          {/* <div className="flex space-x-2">
+            {isEditing ? (
+              <>
+                <button 
+                  onClick={handleSubmit}
+                  className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 transition-opacity shadow-sm"
+                >
+                  Save Changes
+                </button>
+                <button 
+                  onClick={toggleEdit}
+                  className="px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-all duration-300"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button 
+                onClick={toggleEdit}
+                className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 transition-opacity shadow-sm"
+              >
+                <Edit3 size={16} className="mr-2 inline" />
+                Edit Profile
+              </button>
+            )}
+          </div> */}
+        </div>
 
-        {/* Profile Tab Navigation */}
-        <div className="mb-6 flex space-x-2">
+        <div className="mb-6 flex space-x-4">
           <button 
             onClick={() => setActiveTab('profile')} 
-            className={`px-4 py-2 rounded-md text-sm font-medium ${
+            className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px transition-all duration-300 ${
               activeTab === 'profile' 
-                ? 'bg-green-600 text-white' 
-                : 'bg-white text-gray-700 hover:bg-gray-100'
+                ? 'border-green-500 text-green-600 bg-gradient-to-b from-white to-green-50'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
             Profile
           </button>
           {/* <button 
             onClick={() => setActiveTab('security')} 
-            className={`px-4 py-2 rounded-md text-sm font-medium ${
+            className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px transition-all duration-300 ${
               activeTab === 'security' 
-                ? 'bg-green-600 text-white' 
-                : 'bg-white text-gray-700 hover:bg-gray-100'
+                ? 'border-green-500 text-green-600' 
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
             Security
           </button>
           <button 
             onClick={() => setActiveTab('preferences')} 
-            className={`px-4 py-2 rounded-md text-sm font-medium ${
+            className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px transition-all duration-300 ${
               activeTab === 'preferences' 
-                ? 'bg-green-600 text-white' 
-                : 'bg-white text-gray-700 hover:bg-gray-100'
+                ? 'border-green-500 text-green-600' 
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
             Preferences
           </button>
           <button 
             onClick={() => setActiveTab('activity')} 
-            className={`px-4 py-2 rounded-md text-sm font-medium ${
+            className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px transition-all duration-300 ${
               activeTab === 'activity' 
-                ? 'bg-green-600 text-white' 
-                : 'bg-white text-gray-700 hover:bg-gray-100'
+                ? 'border-green-500 text-green-600' 
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
             Activity
@@ -271,9 +280,9 @@ const UserProfile = ({ userData: initialUserData }) => {
         {/* Profile Tab */}
         {activeTab === 'profile' && (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* Left Column - Photo and Basic Info */}
             <div className="lg:col-span-1">
-              <div className="bg-white shadow rounded-lg p-6">
+              <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 p-6">
+                <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 -mx-6 -mt-6 mb-6"></div>
                 <div className="flex flex-col items-center">
                   <div className="relative">
                     <img 
@@ -282,7 +291,7 @@ const UserProfile = ({ userData: initialUserData }) => {
                       className="w-32 h-32 rounded-full object-cover border-4 border-white shadow"
                     />
                     {isEditing && (
-                      <label htmlFor="avatar-upload" className="absolute bottom-0 right-0 bg-green-600 text-white p-2 rounded-full cursor-pointer hover:bg-green-700">
+                      <label htmlFor="avatar-upload" className="absolute bottom-0 right-0 bg-gradient-to-r from-green-600 to-blue-600 text-white p-2 rounded-full cursor-pointer hover:opacity-90 transition-opacity shadow-sm">
                         <Camera size={16} />
                         <input 
                           id="avatar-upload" 
@@ -295,7 +304,7 @@ const UserProfile = ({ userData: initialUserData }) => {
                     )}
                   </div>
                   
-                  <h2 className="mt-4 text-xl font-semibold text-gray-800">
+                  <h2 className="mt-4 text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">
                     {userData.firstName} {userData.lastName}
                   </h2>
                   <p className="text-sm text-gray-500">
@@ -332,10 +341,10 @@ const UserProfile = ({ userData: initialUserData }) => {
               </div>
             </div>
             
-            {/* Right Column - Detailed Information */}
             <div className="lg:col-span-3">
-              <div className="bg-white shadow rounded-lg p-6 mb-6">
-                <h3 className="text-lg font-medium text-gray-800 mb-4">About</h3>
+              <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 p-6 mb-6">
+                <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 -mx-6 -mt-6 mb-6"></div>
+                <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">About</h3>
                 
                 {isEditing ? (
                   <textarea
@@ -343,15 +352,16 @@ const UserProfile = ({ userData: initialUserData }) => {
                     value={userData.bio}
                     onChange={handleChange}
                     rows={4}
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
                   ></textarea>
                 ) : (
                   <p className="text-gray-600">{userData.bio}</p>
                 )}
               </div>
               
-              <div className="bg-white shadow rounded-lg p-6 mb-6">
-                <h3 className="text-lg font-medium text-gray-800 mb-4">Personal Information</h3>
+              <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 p-6 mb-6">
+                <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 -mx-6 -mt-6 mb-6"></div>
+                <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">Personal Information</h3>
                 
                 {isEditing ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -419,7 +429,7 @@ const UserProfile = ({ userData: initialUserData }) => {
                         className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                       />
                     </div>
-                  </div>
+                    </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                     <div>
@@ -450,8 +460,9 @@ const UserProfile = ({ userData: initialUserData }) => {
                 )}
               </div>
               
-              <div className="bg-white shadow rounded-lg p-6 mb-6">
-                <h3 className="text-lg font-medium text-gray-800 mb-4">Professional Information</h3>
+              <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 p-6 mb-6">
+                <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 -mx-6 -mt-6 mb-6"></div>
+                <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">Professional Information</h3>
                 
                 {isEditing ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -541,9 +552,10 @@ const UserProfile = ({ userData: initialUserData }) => {
                 )}
               </div>
               
-              <div className="bg-white shadow rounded-lg p-6">
+              <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 p-6">
+                <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 -mx-6 -mt-6 mb-6"></div>
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-medium text-gray-800">Skills & Certifications</h3>
+                  <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Skills & Certifications</h3>
                 </div>
                 
                 <div className="mb-6">
@@ -551,7 +563,7 @@ const UserProfile = ({ userData: initialUserData }) => {
                   
                   <div className="flex flex-wrap gap-2 mb-2">
                     {userData.skills.map((skill, index) => (
-                      <div key={index} className="flex items-center bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
+                      <div key={index} className="flex items-center bg-gradient-to-r from-green-50 to-blue-50 text-green-800 px-3 py-1 rounded-full text-sm">
                         {skill}
                         {isEditing && (
                           <button 
@@ -572,19 +584,19 @@ const UserProfile = ({ userData: initialUserData }) => {
                       <input
                         type="text"
                         placeholder="Add a skill"
-                        className="block w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                        className="block w-full px-3 py-2 border border-gray-300 rounded-l-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
                         id="new-skill"
                       />
                       <button
                         type="button"
                         onClick={() => {
-                          const input = document.getElementById('new-skill');
-                          if (input.value.trim()) {
-                            handleSkillChange('add', null, input.value.trim());
-                            input.value = '';
+                          const newSkill = document.getElementById('new-skill').value.trim();
+                          if (newSkill) {
+                            handleSkillChange('add', null, newSkill);
+                            document.getElementById('new-skill').value = '';
                           }
                         }}
-                        className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-r-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                        className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-r-lg text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 transition-opacity shadow-sm"
                       >
                         Add
                       </button>
@@ -597,7 +609,7 @@ const UserProfile = ({ userData: initialUserData }) => {
                   
                   <div className="space-y-4">
                     {userData.certifications.map((cert, index) => (
-                      <div key={index} className={`p-3 ${isEditing ? 'border border-gray-200 rounded-md' : ''}`}>
+                      <div key={index} className={`p-3 ${isEditing ? 'border border-gray-200 rounded-lg' : ''}`}>
                         {isEditing ? (
                           <div className="grid grid-cols-12 gap-2">
                             <div className="col-span-7">
@@ -605,7 +617,7 @@ const UserProfile = ({ userData: initialUserData }) => {
                                 type="text"
                                 value={cert.name}
                                 onChange={(e) => handleCertChange('update', index, 'name', e.target.value)}
-                                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                                className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
                                 placeholder="Certification name"
                               />
                             </div>
@@ -614,14 +626,14 @@ const UserProfile = ({ userData: initialUserData }) => {
                                 type="date"
                                 value={cert.expiry}
                                 onChange={(e) => handleCertChange('update', index, 'expiry', e.target.value)}
-                                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                                className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
                               />
                             </div>
                             <div className="col-span-1 flex items-center justify-center">
                               <button
                                 type="button"
                                 onClick={() => handleCertChange('remove', index)}
-                                className="text-red-600 hover:text-red-900"
+                                className="text-red-600 hover:text-red-900 transition-colors"
                               >
                                 <Trash2 size={16} />
                               </button>
@@ -633,7 +645,7 @@ const UserProfile = ({ userData: initialUserData }) => {
                               <p className="text-sm font-medium text-gray-800">{cert.name}</p>
                             </div>
                             <div>
-                              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                              <span className="text-xs bg-gradient-to-r from-blue-50 to-blue-100 text-blue-800 px-2 py-1 rounded-full">
                                 Expires: {formatDate(cert.expiry)}
                               </span>
                             </div>
@@ -647,8 +659,9 @@ const UserProfile = ({ userData: initialUserData }) => {
                     <button
                       type="button"
                       onClick={() => handleCertChange('add')}
-                      className="mt-4 inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                      className="mt-4 inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300"
                     >
+                      <Plus size={16} className="mr-2" />
                       Add Certification
                     </button>
                   )}
@@ -661,9 +674,10 @@ const UserProfile = ({ userData: initialUserData }) => {
         {/* Security Tab */}
         {activeTab === 'security' && (
           <div className="space-y-6">
-            <div className="bg-white shadow rounded-lg p-6">
-              <h3 className="text-lg font-medium text-gray-800 mb-4 flex items-center">
-                <Key size={20} className="mr-2" />
+            <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 p-6">
+              <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 -mx-6 -mt-6 mb-6"></div>
+              <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">
+                <Key size={20} className="mr-2 inline" />
                 Change Password
               </h3>
               
@@ -704,7 +718,7 @@ const UserProfile = ({ userData: initialUserData }) => {
                 <div>
                   <button
                     type="button"
-                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300"
                   >
                     Update Password
                   </button>
@@ -712,9 +726,10 @@ const UserProfile = ({ userData: initialUserData }) => {
               </form>
             </div>
             
-            <div className="bg-white shadow rounded-lg p-6">
-              <h3 className="text-lg font-medium text-gray-800 mb-4 flex items-center">
-                <Shield size={20} className="mr-2" />
+            <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 p-6">
+              <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 -mx-6 -mt-6 mb-6"></div>
+              <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">
+                <Shield size={20} className="mr-2 inline" />
                 Two-Factor Authentication
               </h3>
               
@@ -778,8 +793,9 @@ const UserProfile = ({ userData: initialUserData }) => {
         {/* Preferences Tab */}
         {activeTab === 'preferences' && (
           <div className="space-y-6">
-            <div className="bg-white shadow rounded-lg p-6">
-              <h3 className="text-lg font-medium text-gray-800 mb-4">Notification Preferences</h3>
+            <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 p-6">
+              <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 -mx-6 -mt-6 mb-6"></div>
+              <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">Notification Preferences</h3>
               
               <div className="space-y-4">
                 <div className="flex items-center justify-between pb-4 border-b border-gray-200">
@@ -896,9 +912,10 @@ const UserProfile = ({ userData: initialUserData }) => {
         {/* Activity Tab */}
         {activeTab === 'activity' && (
           <div className="space-y-6">
-            <div className="bg-white shadow rounded-lg p-6">
-              <h3 className="text-lg font-medium text-gray-800 mb-4">Recent Activity</h3>
-              
+            <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 p-6">
+              <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 -mx-6 -mt-6 mb-6"></div>
+              <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">Recent Activity</h3>
+                
               <div className="space-y-6">
                 <div className="flow-root">
                   <ul className="-mb-8">
