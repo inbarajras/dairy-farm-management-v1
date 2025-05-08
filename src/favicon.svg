@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Background with blue gradient -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2196F3" />
+      <stop offset="100%" stop-color="#0D47A1" />
+    </linearGradient>
+    <linearGradient id="milkGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#E3F2FD" />
+    </linearGradient>
+    <linearGradient id="grassGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4CAF50" />
+      <stop offset="100%" stop-color="#2E7D32" />
+    </linearGradient>
+    <linearGradient id="sunGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFC107" />
+      <stop offset="100%" stop-color="#FF9800" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="4" />
+      <feOffset dx="0" dy="2" result="offsetblur" />
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.2" />
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background rounded square -->
+  <rect width="512" height="512" rx="100" ry="100" fill="url(#bgGradient)" />
+  
+  <!-- Sun in upper right corner -->
+  <g transform="translate(380, 120)" filter="url(#shadow)">
+    <circle cx="0" cy="0" r="45" fill="url(#sunGradient)" />
+    <!-- Sun rays -->
+    <g>
+      <line x1="0" y1="-65" x2="0" y2="-55" stroke="#FFC107" stroke-width="6" stroke-linecap="round" />
+      <line x1="45" y1="-45" x2="38" y2="-38" stroke="#FFC107" stroke-width="6" stroke-linecap="round" />
+      <line x1="65" y1="0" x2="55" y2="0" stroke="#FFC107" stroke-width="6" stroke-linecap="round" />
+      <line x1="45" y1="45" x2="38" y2="38" stroke="#FFC107" stroke-width="6" stroke-linecap="round" />
+      <line x1="-45" y1="45" x2="-38" y2="38" stroke="#FFC107" stroke-width="6" stroke-linecap="round" />
+      <line x1="-65" y1="0" x2="-55" y2="0" stroke="#FFC107" stroke-width="6" stroke-linecap="round" />
+      <line x1="-45" y1="-45" x2="-38" y2="-38" stroke="#FFC107" stroke-width="6" stroke-linecap="round" />
+    </g>
+  </g>
+  
+  <!-- Milk bottle - center -->
+  <g transform="translate(256, 236)" filter="url(#shadow)">
+    <!-- Bottle neck -->
+    <path d="M-25,-120 C-35,-120 -40,-110 -40,-100 L-40,-80 L40,-80 L40,-100 C40,-110 35,-120 25,-120 Z" 
+          fill="#FFFFFF" />
+    
+    <!-- Bottle body -->
+    <path d="M-40,-80 
+             L-55,-40 
+             L-55,80 
+             C-55,110 -30,130 0,130 
+             C30,130 55,110 55,80 
+             L55,-40 
+             L40,-80 Z" 
+          fill="url(#milkGradient)" />
+             
+    <!-- Bottle cap -->
+    <path d="M-40,-100 C-40,-110 -35,-120 -25,-120 C-15,-120 15,-120 25,-120 C35,-120 40,-110 40,-100 L40,-95 L-40,-95 Z" fill="#424242" />
+    
+    <!-- Milk level inside bottle -->
+    <path d="M-45,-20 
+             L45,-20 
+             L45,70 
+             C45,100 25,120 0,120 
+             C-25,120 -45,100 -45,70 Z" 
+          fill="#FFFFFF" opacity="0.5" />
+  </g>
+  
+  <!-- Grass at bottom -->
+  <g transform="translate(0, 400)">
+    <!-- Base grass shape -->
+    <path d="M0,112 L512,112 L512,0 C480,20 450,-10 420,15 C390,-15 360,25 330,0 
+             C300,20 270,-10 240,15 C210,-15 180,25 150,0 
+             C120,20 90,-10 60,15 C30,-15 0,25 0,0 Z" 
+          fill="url(#grassGradient)" />
+    
+    <!-- Grass blades for texture -->
+    <g>
+      <path d="M50,0 C60,-20 70,-30 75,-40" stroke="#4CAF50" stroke-width="4" stroke-linecap="round" />
+      <path d="M120,0 C130,-15 135,-35 130,-50" stroke="#4CAF50" stroke-width="4" stroke-linecap="round" />
+      <path d="M190,0 C200,-25 210,-35 205,-55" stroke="#4CAF50" stroke-width="4" stroke-linecap="round" />
+      <path d="M260,0 C270,-20 275,-30 280,-45" stroke="#4CAF50" stroke-width="4" stroke-linecap="round" />
+      <path d="M330,0 C340,-25 345,-40 350,-50" stroke="#4CAF50" stroke-width="4" stroke-linecap="round" />
+      <path d="M400,0 C410,-15 420,-25 425,-40" stroke="#4CAF50" stroke-width="4" stroke-linecap="round" />
+      <path d="M470,0 C480,-20 485,-35 490,-45" stroke="#4CAF50" stroke-width="4" stroke-linecap="round" />
+    </g>
+  </g>
+  
+  <!-- Milk drops -->
+  <g>
+    <path d="M180,340 C175,320 170,340 175,350 C180,360 185,355 180,340 Z" fill="#E3F2FD" opacity="0.9" />
+    <path d="M210,360 C205,340 200,360 205,370 C210,380 215,375 210,360 Z" fill="#E3F2FD" opacity="0.7" />
+  </g>
+  
+  <!-- Data/chart element to represent management aspect -->
+  <g transform="translate(140, 340)" opacity="0.6">
+    <rect x="0" y="0" width="100" height="40" rx="6" ry="6" fill="#FFFFFF" opacity="0.4" />
+    <path d="M10,30 L30,15 L50,25 L70,10 L90,20" stroke="#FFFFFF" stroke-width="2" fill="none" />
+    <circle cx="30" cy="15" r="3" fill="#FFFFFF" />
+    <circle cx="50" cy="25" r="3" fill="#FFFFFF" />
+    <circle cx="70" cy="10" r="3" fill="#FFFFFF" />
+  </g>
+</svg>

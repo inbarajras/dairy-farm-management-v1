@@ -1,0 +1,710 @@
+
+-- Create tables
+CREATE TABLE cows (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  tag_number VARCHAR NOT NULL,
+  name VARCHAR NOT NULL,
+  breed VARCHAR NOT NULL,
+  date_of_birth DATE NOT NULL,
+  status VARCHAR NOT NULL,
+  health_status VARCHAR NOT NULL,
+  owner VARCHAR NOT NULL,
+  last_health_check DATE,
+  vaccination_status VARCHAR,
+  alerts JSONB DEFAULT '[]'::jsonb,
+  image_url VARCHAR,
+  purchase_date DATE,
+  purchase_price DECIMAL(10,2),
+  initial_weight DECIMAL(10,2),
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE milk_production (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  cow_id UUID REFERENCES cows(id) ON DELETE CASCADE,
+  date DATE NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  shift VARCHAR,
+  quality VARCHAR,
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE health_events (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  cow_id UUID REFERENCES cows(id) ON DELETE CASCADE,
+  event_type VARCHAR NOT NULL,
+  event_date DATE NOT NULL,
+  description TEXT NOT NULL,
+  performed_by VARCHAR,
+  medications JSONB DEFAULT '[]'::jsonb,
+  notes TEXT,
+  follow_up DATE,
+  status VARCHAR,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE breeding_events (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  cow_id UUID REFERENCES cows(id) ON DELETE CASCADE,
+  date DATE NOT NULL,
+  event_type VARCHAR NOT NULL,
+  details TEXT,
+  result VARCHAR,
+  notes TEXT,
+  performed_by VARCHAR,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create trigger for updated_at
+CREATE OR REPLACE FUNCTION update_modified_column()
+RETURNS TRIGGER AS $$
+BEGIN
+   NEW.updated_at = NOW();
+   RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_cows_updated_at
+BEFORE UPDATE ON cows
+FOR EACH ROW
+EXECUTE PROCEDURE update_modified_column();
+
+-- Create RLS policies for authentication
+ALTER TABLE cows ENABLE ROW LEVEL SECURITY;
+ALTER TABLE milk_production ENABLE ROW LEVEL SECURITY;
+ALTER TABLE health_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE breeding_events ENABLE ROW LEVEL SECURITY;
+
+-- Create policies (assuming you have authentication set up)
+CREATE POLICY "Enable access to all users" ON cows FOR ALL TO authenticated USING (true);
+CREATE POLICY "Enable access to all users" ON milk_production FOR ALL TO authenticated USING (true);
+CREATE POLICY "Enable access to all users" ON health_events FOR ALL TO authenticated USING (true);
+CREATE POLICY "Enable access to all users" ON breeding_events FOR ALL TO authenticated USING (true);
+
+
+-- Create reproductive_status table to store current status
+CREATE TABLE reproductive_status (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  cow_id UUID REFERENCES cows(id) ON DELETE CASCADE,
+  status VARCHAR NOT NULL,
+  last_heat_date DATE,
+  next_heat_date DATE,
+  calving_count INTEGER DEFAULT 0,
+  last_calving_date DATE,
+  breeding_plan TEXT,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create RLS policies for authentication
+ALTER TABLE reproductive_status ENABLE ROW LEVEL SECURITY;
+
+-- Create policies
+CREATE POLICY "Enable access to all users" ON reproductive_status FOR ALL TO authenticated USING (true);
+
+
+-- Create reports table for storing generated report metadata
+CREATE TABLE IF NOT EXISTS reports (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title TEXT NOT NULL,
+    report_type VARCHAR(50) NOT NULL,
+    format VARCHAR(10) NOT NULL,
+    file_path TEXT,
+    file_size VARCHAR(20),
+    date_range_start TIMESTAMP WITH TIME ZONE,
+    date_range_end TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_by UUID REFERENCES auth.users(id),
+    description TEXT,
+    status VARCHAR(20) DEFAULT 'completed',
+    download_count INTEGER DEFAULT 0,
+    metadata JSONB
+);
+
+-- Add indexes for faster querying
+CREATE INDEX IF NOT EXISTS idx_reports_report_type ON reports(report_type);
+CREATE INDEX IF NOT EXISTS idx_reports_created_at ON reports(created_at);
+CREATE INDEX IF NOT EXISTS idx_reports_created_by ON reports(created_by);
+
+-- Add RLS policies if you're using row-level security
+ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
+
+-- Allow authenticated users to view all reports
+CREATE POLICY "Allow users to view reports" 
+ON reports FOR SELECT 
+USING (auth.role() = 'authenticated');
+
+-- Allow authenticated users to insert new reports
+CREATE POLICY "Allow users to create reports" 
+ON reports FOR INSERT 
+WITH CHECK (auth.role() = 'authenticated');
+
+-- Allow users to update their own reports
+CREATE POLICY "Allow users to update their own reports" 
+ON reports FOR UPDATE 
+USING (auth.uid() = created_by);
+
+-- Allow users to delete their own reports
+CREATE POLICY "Allow users to delete their own reports" 
+ON reports FOR DELETE 
+USING (auth.uid() = created_by);
+
+
+-- Create medications table
+CREATE TABLE medications (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name VARCHAR NOT NULL,
+  type VARCHAR NOT NULL,
+  stock INTEGER NOT NULL DEFAULT 0,
+  unit VARCHAR NOT NULL,
+  expiration_date DATE,
+  supplier VARCHAR,
+  reorder_level INTEGER,
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create vaccination_schedule table if you want a separate one
+-- (alternatively, use the health_events table with follow_up dates as shown in the service)
+CREATE TABLE vaccination_schedule (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  cow_id UUID REFERENCES cows(id) ON DELETE CASCADE,
+  vaccination_type VARCHAR NOT NULL,
+  due_date DATE NOT NULL,
+  status VARCHAR NOT NULL DEFAULT 'Scheduled',
+  assigned_to VARCHAR,
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create a medication_usage table to track medication inventory changes
+CREATE TABLE medication_usage (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  medication_id UUID REFERENCES medications(id) ON DELETE CASCADE,
+  health_event_id UUID REFERENCES health_events(id) ON DELETE SET NULL,
+  quantity INTEGER NOT NULL,
+  usage_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  used_by VARCHAR,
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create an index to improve query performance
+CREATE INDEX idx_health_events_cow_id ON health_events(cow_id);
+CREATE INDEX idx_health_events_event_date ON health_events(event_date);
+CREATE INDEX idx_health_events_status ON health_events(status);
+CREATE INDEX idx_health_events_event_type ON health_events(event_type);
+CREATE INDEX idx_vaccination_schedule_due_date ON vaccination_schedule(due_date);
+CREATE INDEX idx_medications_name ON medications(name);
+CREATE INDEX idx_medications_type ON medications(type);
+
+
+-- Create employees table
+CREATE TABLE employees (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name VARCHAR NOT NULL,
+  job_title VARCHAR NOT NULL,
+  department VARCHAR NOT NULL,
+  email VARCHAR NOT NULL,
+  phone VARCHAR NOT NULL,
+  address TEXT,
+  date_joined DATE NOT NULL,
+  status VARCHAR NOT NULL DEFAULT 'Active',
+  schedule VARCHAR NOT NULL DEFAULT 'Full-time',
+  image_url VARCHAR DEFAULT '/api/placeholder/120/120',
+  performance_rating DECIMAL(3, 1) DEFAULT 0,
+  attendance_rate INTEGER DEFAULT 100,
+  salary DECIMAL(10, 2) NOT NULL,
+  skills JSONB DEFAULT '[]'::jsonb,
+  certifications JSONB DEFAULT '[]'::jsonb,
+  last_review_date DATE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create employee attendance table
+CREATE TABLE employee_attendance (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  employee_id UUID REFERENCES employees(id) ON DELETE CASCADE,
+  date DATE NOT NULL,
+  status VARCHAR NOT NULL,
+  hours_worked DECIMAL(4, 1) DEFAULT 0,
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create performance reviews table
+CREATE TABLE performance_reviews (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  employee_id UUID REFERENCES employees(id) ON DELETE CASCADE,
+  reviewer_id UUID REFERENCES employees(id) ON DELETE SET NULL,
+  scheduled_date DATE NOT NULL,
+  completion_date DATE,
+  review_type VARCHAR NOT NULL,
+  status VARCHAR NOT NULL DEFAULT 'Scheduled',
+  rating DECIMAL(3, 1),
+  summary TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create indexes for better performance
+CREATE INDEX idx_employee_attendance_employee_id ON employee_attendance(employee_id);
+CREATE INDEX idx_employee_attendance_date ON employee_attendance(date);
+CREATE INDEX idx_performance_reviews_employee_id ON performance_reviews(employee_id);
+CREATE INDEX idx_performance_reviews_scheduled_date ON performance_reviews(scheduled_date);
+
+-- Create employee_shifts table
+CREATE TABLE IF NOT EXISTS public.employee_shifts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES public.employees(id) ON DELETE CASCADE,
+    week_start DATE NOT NULL,
+    shifts JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    UNIQUE (employee_id, week_start)
+);
+
+-- Add RLS policies if you're using Row Level Security
+ALTER TABLE public.employee_shifts ENABLE ROW LEVEL SECURITY;
+
+-- Create policy to allow authenticated users to read shifts
+CREATE POLICY "Allow authenticated users to read shifts"
+ON public.employee_shifts
+FOR SELECT
+USING (auth.role() = 'authenticated');
+
+-- Create policy to allow authenticated users to create shifts
+CREATE POLICY "Allow authenticated users to create shifts"
+ON public.employee_shifts
+FOR INSERT
+WITH CHECK (auth.role() = 'authenticated');
+
+-- Create policy to allow authenticated users to update shifts
+CREATE POLICY "Allow authenticated users to update shifts"
+ON public.employee_shifts
+FOR UPDATE
+USING (auth.role() = 'authenticated');
+
+
+-- Create financial_stats table for dashboard metrics
+CREATE TABLE financial_stats (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  month VARCHAR NOT NULL,
+  year INTEGER NOT NULL,
+  net_profit DECIMAL(10, 2) NOT NULL,
+  revenue DECIMAL(10, 2) NOT NULL,
+  expenses DECIMAL(10, 2) NOT NULL,
+  cashflow DECIMAL(10, 2) NOT NULL,
+  previous_net_profit DECIMAL(10, 2) NOT NULL,
+  previous_revenue DECIMAL(10, 2) NOT NULL,
+  previous_expenses DECIMAL(10, 2) NOT NULL,
+  previous_cashflow DECIMAL(10, 2) NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(month, year)
+);
+
+-- Create revenue_data table for charts
+CREATE TABLE revenue_data (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  month VARCHAR NOT NULL,
+  year INTEGER NOT NULL,
+  income DECIMAL(10, 2) NOT NULL,
+  expenses DECIMAL(10, 2) NOT NULL,
+  profit DECIMAL(10, 2) NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(month, year)
+);
+
+-- Create revenue_categories table for pie charts
+CREATE TABLE revenue_categories (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name VARCHAR NOT NULL,
+  value DECIMAL(10, 2) NOT NULL,
+  percentage INTEGER NOT NULL,
+  color VARCHAR NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create customers table
+CREATE TABLE customers (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name VARCHAR NOT NULL,
+  type VARCHAR NOT NULL,
+  contact_person VARCHAR,
+  email VARCHAR NOT NULL,
+  phone VARCHAR NOT NULL,
+  address TEXT,
+  payment_terms VARCHAR NOT NULL DEFAULT 'Net 30',
+  total_purchases DECIMAL(10, 2) DEFAULT 0,
+  status VARCHAR NOT NULL DEFAULT 'Active',
+  last_order DATE,
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create expense_data table for expense trends
+CREATE TABLE expense_data (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  month VARCHAR NOT NULL,
+  year INTEGER NOT NULL,
+  feed DECIMAL(10, 2) NOT NULL,
+  labor DECIMAL(10, 2) NOT NULL,
+  utilities DECIMAL(10, 2) NOT NULL,
+  veterinary DECIMAL(10, 2) NOT NULL,
+  maintenance DECIMAL(10, 2) NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(month, year)
+);
+
+-- Create expense_categories table
+CREATE TABLE expense_categories (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name VARCHAR NOT NULL,
+  value DECIMAL(10, 2) NOT NULL,
+  percentage INTEGER NOT NULL,
+  color VARCHAR NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create expenses table
+CREATE TABLE expenses (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  date DATE NOT NULL,
+  category VARCHAR NOT NULL,
+  amount DECIMAL(10, 2) NOT NULL,
+  vendor VARCHAR NOT NULL,
+  description TEXT,
+  status VARCHAR NOT NULL DEFAULT 'Pending',
+  payment_method VARCHAR NOT NULL DEFAULT 'Cash',
+  receipt_url VARCHAR,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create invoices table
+CREATE TABLE invoices (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  invoice_number VARCHAR NOT NULL UNIQUE,
+  customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
+  date DATE NOT NULL,
+  due_date DATE NOT NULL,
+  amount DECIMAL(10, 2) NOT NULL,
+  status VARCHAR NOT NULL DEFAULT 'Pending',
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create invoice_items table
+CREATE TABLE invoice_items (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  invoice_id UUID REFERENCES invoices(id) ON DELETE CASCADE,
+  description VARCHAR NOT NULL,
+  quantity INTEGER NOT NULL,
+  unit_price DECIMAL(10, 2) NOT NULL,
+  amount DECIMAL(10, 2) NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create invoice_aging table
+CREATE TABLE invoice_aging (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  period VARCHAR NOT NULL,
+  amount DECIMAL(10, 2) NOT NULL,
+  percentage INTEGER NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create payroll_payments table (linked to employees)
+CREATE TABLE payroll_payments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  payment_id VARCHAR NOT NULL,
+  payment_date DATE NOT NULL,
+  payment_type VARCHAR NOT NULL,
+  total_amount DECIMAL(10, 2) NOT NULL,
+  status VARCHAR NOT NULL DEFAULT 'Pending',
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create employee_payroll_items table (connects employees to payroll)
+CREATE TABLE employee_payroll_items (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  payroll_payment_id UUID REFERENCES payroll_payments(id) ON DELETE CASCADE,
+  employee_id UUID REFERENCES employees(id) ON DELETE CASCADE,
+  salary_amount DECIMAL(10, 2),
+  hourly_rate DECIMAL(10, 2),
+  hours_worked DECIMAL(6, 2),
+  gross_pay DECIMAL(10, 2) NOT NULL,
+  deductions DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  net_pay DECIMAL(10, 2) NOT NULL,
+  pay_period_start DATE NOT NULL,
+  pay_period_end DATE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE (payroll_payment_id, employee_id)
+);
+
+-- Add payroll history view
+CREATE VIEW payroll_history AS
+SELECT 
+  pp.id,
+  pp.payment_id,
+  pp.payment_date AS date,
+  pp.payment_type AS type,
+  pp.total_amount AS amount,
+  COUNT(DISTINCT epi.employee_id) AS employees,
+  pp.status
+FROM 
+  payroll_payments pp
+LEFT JOIN 
+  employee_payroll_items epi ON pp.id = epi.payroll_payment_id
+GROUP BY 
+  pp.id, pp.payment_id, pp.payment_date, pp.payment_type, pp.total_amount, pp.status
+ORDER BY 
+  pp.payment_date DESC;
+
+-- Add upcoming payroll view (simulates scheduled payments)
+CREATE VIEW upcoming_payroll AS
+WITH next_payments AS (
+  SELECT 
+    'UP' || ROW_NUMBER() OVER() AS payment_id,
+    CASE 
+      WHEN e.schedule = 'Full-time' THEN 
+        (CURRENT_DATE + INTERVAL '1 month')::DATE
+      ELSE 
+        (CURRENT_DATE + INTERVAL '15 days')::DATE
+    END AS date,
+    CASE 
+      WHEN e.schedule = 'Full-time' THEN 'Monthly Salary'
+      ELSE 'Bi-weekly Wages'
+    END AS type,
+    e.schedule,
+    COUNT(*) AS employee_count,
+    SUM(
+      CASE 
+        WHEN e.schedule = 'Full-time' THEN e.salary / 12
+        ELSE e.salary / 26
+      END
+    ) AS estimated_amount
+  FROM 
+    employees e
+  WHERE 
+    e.status = 'Active'
+  GROUP BY 
+    e.schedule
+)
+SELECT 
+  payment_id AS id,
+  date,
+  type,
+  estimated_amount,
+  employee_count AS employees
+FROM 
+  next_payments;
+
+  -- Create profiles table that extends Supabase auth users
+create table public.profiles (
+  id uuid references auth.users(id) primary key,
+  first_name text,
+  last_name text,
+  display_name text,
+  email text not null,
+  role text not null default 'Employee',
+  status text not null default 'Active',
+  phone text,
+  address text, 
+  job_title text,
+  department text,
+  last_login timestamp with time zone,
+  date_joined timestamp with time zone default now(),
+  two_factor_enabled boolean default false,
+  profile_image text,
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now()
+);
+
+-- Create audit log table
+create table public.audit_logs (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid references public.profiles(id),
+  action text not null,
+  details jsonb,
+  ip_address text,
+  created_at timestamp with time zone default now()
+);
+
+-- Create system settings table
+create table public.system_settings (
+  key text primary key,
+  value jsonb not null,
+  updated_at timestamp with time zone default now(),
+  updated_by uuid references public.profiles(id)
+);
+
+-- Initial system settings
+insert into public.system_settings (key, value) values 
+('general', '{"farmName":"Pranavika Dairy Farms Pvt Ltd","address":"Pollachi","phone":"(555) 123-4567","email":"contact@greenmeadowsdairy.com","timezone":"America/Los_Angeles","dateFormat":"MM/DD/YYYY","language":"en-US"}'::jsonb),
+('notifications', '{"emailNotifications":true,"pushNotifications":true,"smsNotifications":false,"lowInventoryAlerts":true,"healthAlerts":true,"milkProductionReports":true,"financialReports":true}'::jsonb),
+('backup', '{"automaticBackups":true,"backupFrequency":"daily","backupTime":"02:00","retentionPeriod":30,"lastBackup":"2023-04-26T02:00:00","backupLocation":"cloud"}'::jsonb),
+('security', '{"passwordExpiryDays":90,"requireStrongPasswords":true,"loginAttempts":5,"sessionTimeout":30,"enableTwoFactor":true,"auditLogging":true}'::jsonb);
+
+-- Set up RLS policies
+alter table public.profiles enable row level security;
+alter table public.audit_logs enable row level security;
+alter table public.system_settings enable row level security;
+
+-- Add RLS policies
+create policy "Allow all authenticated users to view profiles" on profiles
+  for select using (auth.role() = 'authenticated');
+
+-- create policy "Allow users to update their own profiles" on profiles
+--   for update using (auth.uid() = id);
+
+-- create policy "Allow admins to update any profile" on profiles
+--   for update using (
+--     auth.uid() in (
+--       select id from profiles where role = 'Administrator'
+--     )
+--   );
+
+-- Remove the policy allowing users to update their own profiles
+drop policy "Allow users to update their own profiles" on profiles;
+
+-- Remove the policy allowing admins to update any profile
+drop policy "Allow admins to update any profile" on profiles;
+
+create policy "Allow admins to view audit logs" on audit_logs
+  for select using (
+    auth.uid() in (
+      select id from profiles where role = 'Administrator'
+    )
+  );
+
+create policy "Allow authenticated users to view system settings" on system_settings
+  for select using (auth.role() = 'authenticated');
+
+create policy "Allow admins to update system settings" on system_settings
+  for update using (
+    auth.uid() in (
+      select id from profiles where role = 'Administrator'
+    )
+  );
+
+
+
+  -- Create a trigger function that creates a profile entry when a new user signs up via Supabase Auth
+create or replace function public.handle_new_user() 
+returns trigger as $$
+begin
+  insert into public.profiles (
+    id, 
+    email,
+    first_name,
+    last_name,
+    display_name,
+    role
+  ) values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data->>'first_name', ''),
+    coalesce(new.raw_user_meta_data->>'last_name', ''),
+    concat(
+      coalesce(new.raw_user_meta_data->>'first_name', ''), 
+      ' ', 
+      coalesce(new.raw_user_meta_data->>'last_name', '')
+    ),
+    coalesce(new.raw_user_meta_data->>'role', 'Employee')
+  );
+  return new;
+end;
+$$ language plpgsql security definer;
+
+  
+-- Create trigger function for auth user updates
+create or replace function public.handle_user_update() 
+returns trigger as $$
+begin
+  update public.profiles
+  set 
+    email = new.email,
+    updated_at = now()
+  where id = new.id;
+  return new;
+end;
+$$ language plpgsql security definer;
+
+
+
+
+-- Allow database trigger for creating profile from auth
+create or replace function public.handle_new_user() 
+returns trigger as $$
+begin
+  insert into public.profiles (
+    id, 
+    email,
+    first_name,
+    last_name,
+    display_name,
+    role,
+    status
+  ) values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data->>'first_name', ''),
+    coalesce(new.raw_user_meta_data->>'last_name', ''),
+    concat(
+      coalesce(new.raw_user_meta_data->>'first_name', ''), 
+      ' ', 
+      coalesce(new.raw_user_meta_data->>'last_name', '')
+    ),
+    coalesce(new.raw_user_meta_data->>'role', 'Employee'),
+    'Active'
+  );
+  return new;
+end;
+$$ language plpgsql security definer;
+
+-- Create an audit logs table if it doesn't exist
+create table if not exists public.audit_logs (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid references public.profiles(id),
+  action text not null,
+  details jsonb,
+  ip_address text,
+  created_at timestamp with time zone default now()
+);
+
+-- Enable RLS on audit_logs table
+alter table public.audit_logs enable row level security;
+
+ALTER TABLE cows 
+  ADD COLUMN IF NOT EXISTS mother VARCHAR,
+  ADD COLUMN IF NOT EXISTS father VARCHAR,
+  ADD COLUMN IF NOT EXISTS birth_type VARCHAR DEFAULT 'Single',
+  ADD COLUMN IF NOT EXISTS is_calf BOOLEAN DEFAULT false,
+  ADD COLUMN IF NOT EXISTS transition_date DATE,
+  ADD COLUMN IF NOT EXISTS current_weight DECIMAL(10,2),
+  ADD COLUMN IF NOT EXISTS growth_rate DECIMAL(10,2);
+
+-- Update existing cows with calf status
+UPDATE cows
+SET is_calf = (status = 'Calf')
+WHERE status = 'Calf';
+
+
+-- Add quality parameters to milk_production table
+ALTER TABLE milk_production
+  ADD COLUMN IF NOT EXISTS fat DECIMAL(4,2),
+  ADD COLUMN IF NOT EXISTS protein DECIMAL(4,2),
+  ADD COLUMN IF NOT EXISTS lactose DECIMAL(4,2),
+  ADD COLUMN IF NOT EXISTS somatic_cell_count INTEGER,
+  ADD COLUMN IF NOT EXISTS bacteria_count INTEGER,
+  ADD COLUMN IF NOT EXISTS quality_grade VARCHAR;

@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Background with blue gradient -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2196F3" />
+      <stop offset="100%" stop-color="#0D47A1" />
+    </linearGradient>
+    <linearGradient id="milkGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#E3F2FD" />
+    </linearGradient>
+    <linearGradient id="sunGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFEB3B" />
+      <stop offset="100%" stop-color="#FFA000" />
+    </linearGradient>
+    <linearGradient id="grassGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4CAF50" />
+      <stop offset="100%" stop-color="#2E7D32" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="4" />
+      <feOffset dx="0" dy="2" result="offsetblur" />
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.2" />
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background rounded square -->
+  <rect width="512" height="512" rx="100" ry="100" fill="url(#bgGradient)" />
+  
+  <!-- Sun in the sky -->
+  <g transform="translate(100, 100)">
+    <circle cx="0" cy="0" r="60" fill="url(#sunGradient)" filter="url(#shadow)" />
+    <!-- Sun rays -->
+    <g stroke="#FFEB3B" stroke-width="6" stroke-linecap="round">
+      <line x1="0" y1="-80" x2="0" y2="-70" />
+      <line x1="57" y1="-57" x2="49" y2="-49" />
+      <line x1="80" y1="0" x2="70" y2="0" />
+      <line x1="57" y1="57" x2="49" y2="49" />
+      <line x1="-57" y1="-57" x2="-49" y2="-49" />
+      <line x1="-80" y1="0" x2="-70" y2="0" />
+      <line x1="-57" y1="57" x2="-49" y2="49" />
+    </g>
+  </g>
+  
+  <!-- Milk bottle - centered -->
+  <g transform="translate(256, 210)" filter="url(#shadow)">
+    <!-- Bottle neck -->
+    <path d="M-30,0 
+             C-30,-20 -20,-40 0,-40 
+             C20,-40 30,-20 30,0 
+             L30,30 
+             L-30,30 Z" 
+          fill="#FFFFFF" />
+    
+    <!-- Bottle body -->
+    <path d="M-30,30 
+             L-50,80 
+             L-50,200 
+             C-50,240 -30,260 0,260 
+             C30,260 50,240 50,200 
+             L50,80 
+             L30,30 Z" 
+          fill="url(#milkGradient)" />
+             
+    <!-- Bottle cap -->
+    <path d="M-20,-20 C-20,-30 -10,-40 0,-40 C10,-40 20,-30 20,-20 L20,-15 L-20,-15 Z" fill="#424242" />
+    
+    <!-- Milk level -->
+    <path d="M-40,100 
+             L40,100 
+             L40,200 
+             C40,230 20,250 0,250 
+             C-20,250 -40,230 -40,200 Z" 
+          fill="#FFFFFF" opacity="0.7" />
+  </g>
+  
+  <!-- Grass at the bottom -->
+  <g transform="translate(0, 380)">
+    <path d="M0,0 
+             C80,-40 120,40 200,0 
+             C280,-40 320,40 400,0 
+             C480,-40 520,40 600,0 
+             L600,132 L0,132 Z" 
+          fill="url(#grassGradient)" />
+    
+    <!-- Individual grass blades for detail -->
+    <g stroke="url(#grassGradient)" stroke-width="5" stroke-linecap="round">
+      <line x1="50" y1="0" x2="40" y2="-30" />
+      <line x1="50" y1="0" x2="60" y2="-25" />
+      <line x1="150" y1="0" x2="140" y2="-35" />
+      <line x1="150" y1="0" x2="160" y2="-30" />
+      <line x1="250" y1="0" x2="240" y2="-40" />
+      <line x1="250" y1="0" x2="260" y2="-35" />
+      <line x1="350" y1="0" x2="340" y2="-30" />
+      <line x1="350" y1="0" x2="360" y2="-25" />
+      <line x1="450" y1="0" x2="440" y2="-35" />
+      <line x1="450" y1="0" x2="460" y2="-30" />
+    </g>
+  </g>
+  
+  <!-- Milk drops -->
+  <g>
+    <path d="M180,340 C175,320 170,340 175,350 C180,360 185,355 180,340 Z" fill="#E3F2FD" opacity="0.9" />
+    <path d="M320,370 C315,350 310,370 315,380 C320,390 325,385 320,370 Z" fill="#E3F2FD" opacity="0.7" />
+    <path d="M220,350 C215,330 210,350 215,360 C220,370 225,365 220,350 Z" fill="#E3F2FD" opacity="0.8" />
+  </g>
+  
+  <!-- Small farm building silhouette for context -->
+  <g transform="translate(380, 320)">
+    <path d="M0,0 L60,0 L60,40 L0,40 Z" fill="#FFFFFF" opacity="0.5" />
+    <path d="M-10,-20 L70,-20 L30,-50 Z" fill="#FFFFFF" opacity="0.5" />
+    <rect x="20" y="15" width="20" height="25" fill="#0D47A1" opacity="0.5" />
+  </g>
+</svg>

@@ -760,24 +760,37 @@ function createPdfReport(reportType, data) {
   // Create PDF document
   const doc = new jsPDF();
   
+  // Format date strings consistently for display
+  const formatDateStr = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+  };
+  
   // Add title and info
   let title;
   switch (reportType) {
     case 'daily':
-      title = `Daily Production Report - ${new Date(data.date).toLocaleDateString()}`;
+      title = `Daily Production Report - ${formatDateStr(data.date)}`;
       break;
     case 'weekly':
-      title = `Weekly Summary Report - ${new Date(data.weekStart).toLocaleDateString()} to ${new Date(data.weekEnd).toLocaleDateString()}`;
+      title = `Weekly Summary Report - ${formatDateStr(data.weekStart)} to ${formatDateStr(data.weekEnd)}`;
       break;
     case 'monthly':
-      title = `Monthly Analysis Report - ${new Date(data.monthStart).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+      title = `Monthly Analysis Report - ${formatDateStr(data.monthStart)} to ${formatDateStr(data.monthEnd)}`;
       break;
     case 'quality':
-      title = `Quality Metrics Report - ${new Date(data.periodStart).toLocaleDateString()} to ${new Date(data.periodEnd).toLocaleDateString()}`;
+      title = `Quality Metrics Report - ${formatDateStr(data.periodStart)} to ${formatDateStr(data.periodEnd)}`;
       break;
     case 'compliance':
-      title = `Compliance Report - ${new Date(data.periodStart).toLocaleDateString()} to ${new Date(data.periodEnd).toLocaleDateString()}`;
+      title = `Compliance Report - ${formatDateStr(data.periodStart)} to ${formatDateStr(data.periodEnd)}`;
       break;
+    default:
+      title = `Milk Production Report`;
   }
   
   // Set title
@@ -797,6 +810,7 @@ function createPdfReport(reportType, data) {
       doc.text('Summary', 20, y);
       y += 10;
       doc.setFontSize(12);
+      doc.text(`Date: ${formatDateStr(data.date)}`, 20, y); y += 8;
       doc.text(`Total Milk Production: ${data.totalMilk.toFixed(1)} L`, 20, y); y += 8;
       doc.text(`Morning Production: ${data.morningMilk.toFixed(1)} L`, 20, y); y += 8;
       doc.text(`Evening Production: ${data.eveningMilk.toFixed(1)} L`, 20, y); y += 8;
@@ -807,14 +821,12 @@ function createPdfReport(reportType, data) {
       doc.text('Top Producers', 20, y);
       y += 10;
       
-      // Using autoTable directly from import instead of doc.autoTable
       const topProducersData = data.topProducers.map(cow => [
         cow.name,
         cow.tagNumber,
         `${cow.totalAmount.toFixed(1)} L`
       ]);
       
-      // Use the autoTable function imported above
       autoTable(doc, {
         startY: y,
         head: [['Cow Name', 'Tag Number', 'Total Production']],
@@ -825,12 +837,13 @@ function createPdfReport(reportType, data) {
       
       y = doc.lastAutoTable.finalY + 15;
       
-      // Collections
+      // Collections - ENSURE DATE COLUMN IS INCLUDED
       doc.setFontSize(16);
       doc.text('Collection Records', 20, y);
       y += 10;
       
       const collectionsData = data.collections.map(c => [
+        formatDateStr(c.date), // Include formatted date
         c.shift,
         c.cowName,
         c.cowTag,
@@ -838,10 +851,9 @@ function createPdfReport(reportType, data) {
         c.quality
       ]);
       
-      // Use the autoTable function imported above
       autoTable(doc, {
         startY: y,
-        head: [['Shift', 'Cow', 'Tag', 'Amount', 'Quality']],
+        head: [['Date', 'Shift', 'Cow', 'Tag', 'Amount', 'Quality']],  // Include Date in header
         body: collectionsData,
         theme: 'striped',
         headStyles: { fillColor: [76, 175, 80] }
@@ -854,6 +866,7 @@ function createPdfReport(reportType, data) {
       doc.text('Weekly Summary', 20, y);
       y += 10;
       doc.setFontSize(12);
+      doc.text(`Period: ${formatDateStr(data.weekStart)} to ${formatDateStr(data.weekEnd)}`, 20, y); y += 8;
       doc.text(`Total Weekly Production: ${data.totalMilk.toFixed(1)} L`, 20, y); y += 8;
       doc.text(`Average Daily Production: ${data.averageDailyMilk.toFixed(1)} L`, 20, y); y += 15;
       
@@ -863,16 +876,15 @@ function createPdfReport(reportType, data) {
       y += 10;
       
       const dailyData = data.dailyBreakdown.map(day => [
-        new Date(day.date).toLocaleDateString(),
+        formatDateStr(day.date), // Ensure date is formatted properly
         `${day.morningAmount.toFixed(1)} L`,
         `${day.eveningAmount.toFixed(1)} L`,
         `${day.totalAmount.toFixed(1)} L`
       ]);
       
-      // Use the autoTable function imported above
       autoTable(doc, {
         startY: y,
-        head: [['Date', 'Morning', 'Evening', 'Total']],
+        head: [['Date', 'Morning', 'Evening', 'Total']],  // Include Date in header
         body: dailyData,
         theme: 'striped',
         headStyles: { fillColor: [76, 175, 80] }
@@ -891,7 +903,6 @@ function createPdfReport(reportType, data) {
         `${cow.totalAmount.toFixed(1)} L`
       ]);
       
-      // Use the autoTable function imported above
       autoTable(doc, {
         startY: y,
         head: [['Cow Name', 'Tag Number', 'Total Production']],
@@ -900,22 +911,181 @@ function createPdfReport(reportType, data) {
         headStyles: { fillColor: [76, 175, 80] }
       });
       break;
-    
-    // Add other report types similarly...
+      
     case 'monthly':
+      // Monthly report implementation
+      doc.setFontSize(16);
+      doc.text('Monthly Production Analysis', 20, y);
+      y += 10;
+      doc.setFontSize(12);
+      doc.text(`Period: ${formatDateStr(data.monthStart)} to ${formatDateStr(data.monthEnd)}`, 20, y); y += 8;
+      doc.text(`Total Monthly Production: ${data.totalMilk.toFixed(1)} L`, 20, y); y += 8;
+      doc.text(`Average Daily Production: ${data.averageDailyMilk.toFixed(1)} L`, 20, y); y += 15;
+      
+      // Weekly breakdown
+      doc.setFontSize(16);
+      doc.text('Weekly Breakdown', 20, y);
+      y += 10;
+      
+      const weeklyData = data.weeklyBreakdown.map(week => [
+        `Week ${week.week} (${week.year})`,
+        formatDateStr(week.startDate),
+        formatDateStr(week.endDate),
+        `${week.totalAmount.toFixed(1)} L`
+      ]);
+      
+      autoTable(doc, {
+        startY: y,
+        head: [['Week', 'Start Date', 'End Date', 'Total Production']],
+        body: weeklyData,
+        theme: 'striped',
+        headStyles: { fillColor: [76, 175, 80] }
+      });
+      
+      y = doc.lastAutoTable.finalY + 15;
+      
+      // Top performing cows
+      doc.setFontSize(16);
+      doc.text('Top Performing Cows', 20, y);
+      y += 10;
+      
+      const topCows = data.cowPerformance.slice(0, 10).map(cow => [
+        cow.name,
+        cow.tagNumber,
+        `${cow.totalAmount.toFixed(1)} L`,
+        `${cow.avgPerDay.toFixed(1)} L`,
+        cow.collectionDays
+      ]);
+      
+      autoTable(doc, {
+        startY: y,
+        head: [['Cow Name', 'Tag Number', 'Total Production', 'Avg Per Day', 'Days Collected']],
+        body: topCows,
+        theme: 'striped',
+        headStyles: { fillColor: [76, 175, 80] }
+      });
+      break;
+    
     case 'quality':
+      // Quality report implementation
+      doc.setFontSize(16);
+      doc.text('Milk Quality Analysis', 20, y);
+      y += 10;
+      doc.setFontSize(12);
+      doc.text(`Period: ${formatDateStr(data.periodStart)} to ${formatDateStr(data.periodEnd)}`, 20, y); y += 8;
+      doc.text(`Total Samples: ${data.sampleCount}`, 20, y); y += 15;
+      
+      // Quality averages
+      doc.setFontSize(16);
+      doc.text('Quality Parameter Averages', 20, y);
+      y += 10;
+      
+      const qualityData = [
+        ['Fat Content', `${data.qualityAverages.fat.toFixed(2)}%`, `${data.standards.fat.min}% - ${data.standards.fat.max}%`, `${data.compliance.fat.toFixed(1)}%`],
+        ['Protein Content', `${data.qualityAverages.protein.toFixed(2)}%`, `${data.standards.protein.min}% - ${data.standards.protein.max}%`, `${data.compliance.protein.toFixed(1)}%`],
+        ['Lactose Content', `${data.qualityAverages.lactose.toFixed(2)}%`, `${data.standards.lactose.min}% - ${data.standards.lactose.max}%`, `${data.compliance.lactose.toFixed(1)}%`],
+        ['Somatic Cell Count', `${data.qualityAverages.somatic.toFixed(0)}`, `< ${data.standards.somatic.max}`, `${data.compliance.somatic.toFixed(1)}%`],
+        ['Bacteria Count', `${data.qualityAverages.bacteria.toFixed(0)}`, `< ${data.standards.bacteria.max}`, `${data.compliance.bacteria.toFixed(1)}%`],
+        ['Overall Compliance', '', '', `${data.compliance.overall.toFixed(1)}%`]
+      ];
+      
+      autoTable(doc, {
+        startY: y,
+        head: [['Parameter', 'Average', 'Standard Range', 'Compliance Rate']],
+        body: qualityData,
+        theme: 'striped',
+        headStyles: { fillColor: [76, 175, 80] }
+      });
+      
+      y = doc.lastAutoTable.finalY + 15;
+      
+      // Daily trends
+      doc.setFontSize(16);
+      doc.text('Daily Quality Trends', 20, y);
+      y += 10;
+      
+      // Show only first 10 days to avoid overcrowding
+      const trendsData = data.dailyTrends.slice(0, 10).map(day => [
+        formatDateStr(day.date),
+        `${day.fatAvg.toFixed(2)}%`,
+        `${day.proteinAvg.toFixed(2)}%`,
+        `${day.lactoseAvg.toFixed(2)}%`,
+        day.somaticAvg.toFixed(0),
+        day.bacteriaAvg.toFixed(0)
+      ]);
+      
+      autoTable(doc, {
+        startY: y,
+        head: [['Date', 'Fat %', 'Protein %', 'Lactose %', 'SCC', 'Bacteria']],
+        body: trendsData,
+        theme: 'striped',
+        headStyles: { fillColor: [76, 175, 80] }
+      });
+      break;
+      
     case 'compliance':
-      // These would be implemented with their specific data structures
-      // For brevity, I'm not implementing all report types in full detail
+      // Compliance report implementation
+      doc.setFontSize(16);
+      doc.text('Milk Quality Compliance Report', 20, y);
+      y += 10;
+      doc.setFontSize(12);
+      doc.text(`Period: ${formatDateStr(data.periodStart)} to ${formatDateStr(data.periodEnd)}`, 20, y); y += 8;
+      doc.text(`Total Samples: ${data.compliance.totalSamples}`, 20, y); y += 8;
+      doc.text(`Compliant Samples: ${data.compliance.compliantSamples} (${data.compliance.complianceRate.toFixed(1)}%)`, 20, y); y += 8;
+      doc.text(`Non-Compliant Samples: ${data.compliance.violationCount}`, 20, y); y += 15;
+      
+      // Compliance summary
+      doc.setFontSize(16);
+      doc.text('Compliance by Parameter', 20, y);
+      y += 10;
+      
+      const complianceData = [
+        ['Fat Content', `${data.compliance.fat.toFixed(1)}%`],
+        ['Protein Content', `${data.compliance.protein.toFixed(1)}%`],
+        ['Lactose Content', `${data.compliance.lactose.toFixed(1)}%`],
+        ['Somatic Cell Count', `${data.compliance.somatic.toFixed(1)}%`],
+        ['Bacteria Count', `${data.compliance.bacteria.toFixed(1)}%`],
+        ['Overall', `${data.compliance.overall.toFixed(1)}%`]
+      ];
+      
+      autoTable(doc, {
+        startY: y,
+        head: [['Parameter', 'Compliance Rate']],
+        body: complianceData,
+        theme: 'striped',
+        headStyles: { fillColor: [76, 175, 80] }
+      });
+      
+      y = doc.lastAutoTable.finalY + 15;
+      
+      // Top violations
+      if (data.compliance.violations && data.compliance.violations.length > 0) {
+        doc.setFontSize(16);
+        doc.text('Compliance Violations', 20, y);
+        y += 10;
+        
+        const violationsData = data.compliance.violations.slice(0, 10).map(v => [
+          formatDateStr(v.date),
+          v.violationCount,
+          v.violations.join("; ")
+        ]);
+        
+        autoTable(doc, {
+          startY: y,
+          head: [['Date', 'Violations', 'Details']],
+          body: violationsData,
+          theme: 'striped',
+          headStyles: { fillColor: [76, 175, 80] }
+        });
+      }
+      break;
+
+    default:
       doc.setFontSize(16);
       doc.text('Report Data', 20, y);
       y += 10;
       doc.setFontSize(12);
-      doc.text(`This is a sample ${reportType} report.`, 20, y);
-      y += 8;
-      doc.text(`For full implementation, the specific data for this report type`, 20, y);
-      y += 8;
-      doc.text(`would be formatted and presented here.`, 20, y);
+      doc.text(`This is a ${reportType} report.`, 20, y);
       break;
   }
   

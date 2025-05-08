@@ -21,7 +21,6 @@ import {
   deletePerformanceReview,
   getEmployeePerformanceReviews
 } from './services/employeeService';
-import { supabase } from '../lib/supabase';
 import emp from './emp.jpg';
 
 // Status badge colors - unchanged

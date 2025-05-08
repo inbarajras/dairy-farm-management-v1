@@ -5,13 +5,16 @@ import { fetchCows, addCow, updateCow, deleteCow, recordHealthEvent, recordMilkP
  } from './services/cowService';
 import cowSample from './cow.jpg';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area } from 'recharts';
+import { supabase } from '../lib/supabase';
 
 // Status badge colors
 const statusColors = {
   'Active': 'bg-green-100 text-green-800',
-  'On Leave': 'bg-amber-100 text-amber-800',
-  'Terminated': 'bg-red-100 text-red-800',
-  'Dry': 'bg-blue-100 text-blue-800'
+  'Dry': 'bg-blue-100 text-blue-800',
+  'Sold': 'bg-amber-100 text-amber-800',
+  'Deceased': 'bg-red-100 text-red-800',
+  'Calf': 'bg-purple-100 text-purple-800',
+  'Heifer': 'bg-pink-100 text-pink-800'
 };
 
 // Health status colors
@@ -450,8 +453,10 @@ const CowManagement = () => {
                 className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
                 value={filters.status}
                 onChange={(e) => handleFilterChange('status', e.target.value)}
-              >
+                >
                 <option value="All">All Status</option>
+                <option value="Calf">Calf</option>
+                <option value="Heifer">Heifer</option>
                 <option value="Active">Active</option>
                 <option value="Dry">Dry</option>
                 <option value="Sold">Sold</option>
@@ -798,6 +803,11 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
     activity: false
   });
   const [error, setError] = useState(null);
+  const [showTransitionModal, setShowTransitionModal] = useState(false);
+  
+  // Determine if cow is a calf based on age and status
+  const isCalf = cow.status === 'Calf' || (cow.age && parseInt(cow.age) < 1);
+  const isHeifer = cow.status === 'Heifer';
   
   // Safely check for milkProduction array and ensure it has data
   const hasMilkProductionData = cow?.milkProduction && Array.isArray(cow.milkProduction) && cow.milkProduction.length > 0;
@@ -854,24 +864,41 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
     }
   }, [activeTab, cow, healthHistory.length]);
 
-  // Fixed loadHealthHistory function
   const loadHealthHistory = async () => {
+    if (!cow?.id || healthHistory.length > 0) return;
+    
+    setLoading(prevState => ({ ...prevState, health: true }));
     try {
-      setLoading(prev => ({ ...prev, health: true }));
-      const history = await fetchHealthHistory(cow.id);
-      
-      // Sanitize the history data to ensure medications is always an array
-      const sanitizedHistory = history.map(event => ({
-        ...event,
-        medications: Array.isArray(event.medications) ? event.medications : []
-      }));
-      
-      setHealthHistory(sanitizedHistory);
-    } catch (err) {
-      console.error('Failed to load health history:', err);
-      setError(`Failed to load health history: ${err.message}`);
+      const { data, error } = await supabase
+        .from('health_events')
+        .select('*')
+        .eq('cow_id', cow.id)
+        .order('event_date', { ascending: false });
+        
+      if (error) {
+        console.error('Error fetching health history:', error);
+        setError(error.message);
+      } else {
+        // Transform data to match component structure
+        const formattedData = data.map(record => ({
+          id: record.id,
+          eventDate: record.event_date,
+          eventType: record.event_type,
+          description: record.description,
+          performedBy: record.performed_by,
+          medications: record.medications || [],
+          notes: record.notes,
+          followUp: record.follow_up,
+          status: record.status
+        }));
+        
+        setHealthHistory(formattedData);
+      }
+    } catch (error) {
+      console.error('Error in health history fetch:', error);
+      setError(error.message);
     } finally {
-      setLoading(prev => ({ ...prev, health: false }));
+      setLoading(prevState => ({ ...prevState, health: false }));
     }
   };
   
@@ -919,6 +946,10 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
     }
   }, [activeTab, cow, recentActivities.length]);
 
+  const toggleTransitionModal = () => {
+    setShowTransitionModal(!showTransitionModal);
+  };
+
   return (
     <div className="bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30 min-h-full">
       {/* Header bar with gradient */}
@@ -931,14 +962,17 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
             >
               <ChevronLeft size={24} />
             </button>
-            <h1 className="text-2xl font-semibold">{cow.name}</h1>
+            <h1 className="text-2xl font-semibold">
+              {cow.name}
+              {isCalf && <span className="ml-2 px-2 py-0.5 bg-purple-200 text-purple-800 rounded-full text-sm">Calf</span>}
+              {isHeifer && <span className="ml-2 px-2 py-0.5 bg-pink-200 text-pink-800 rounded-full text-sm">Heifer</span>}
+            </h1>
           </div>
         </div>
       </div>
       
       <div className="container mx-auto px-6 py-8">
         <div className="flex flex-col lg:flex-row">
-          {/* Left sidebar with cow details */}
           <div className="lg:w-1/3 mb-8 lg:mb-0 lg:pr-8">
             <div className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
               <div className="p-6 flex flex-col items-center">
@@ -966,7 +1000,9 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Status:</span>
-                    <span className="text-gray-800 font-medium">{cow.status}</span>
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusColors[cow.status] || 'bg-gray-100 text-gray-800'}`}>
+                      {cow.status}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Owner:</span>
@@ -983,16 +1019,26 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                 <div className="mt-6 w-full flex flex-col space-y-2">
                   <button 
                     onClick={onEdit}
-                    className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                    className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-500 to-blue-600 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300 hover:shadow-md hover:shadow-blue-500/20"
                   >
                     Edit Details
                   </button>
                   <button 
                     onClick={onRecordHealthEvent}
-                    className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-cyan-600 hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-cyan-500 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300 hover:shadow-md hover:shadow-blue-500/20"
                   >
                     Record Health Event
                   </button>
+                  
+                  {/* Add transition button for calves/heifers */}
+                  {(isCalf || isHeifer) && (
+                    <button 
+                      onClick={toggleTransitionModal}
+                      className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all duration-300 hover:shadow-md hover:shadow-purple-500/20"
+                    >
+                      {isCalf ? "Transition to Heifer" : "Transition to Milking"}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1034,16 +1080,32 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                   >
                     Overview
                   </button>
-                  <button
-                    onClick={() => setActiveTab('milk')}
-                    className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-300 ${
-                      activeTab === 'milk'
-                        ? 'border-green-500 text-green-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    Milk Production
-                  </button>
+                  {/* Show milk tab only for adults */}
+                  {!isCalf && !isHeifer && (
+                    <button
+                      onClick={() => setActiveTab('milk')}
+                      className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-300 ${
+                        activeTab === 'milk'
+                          ? 'border-green-500 text-green-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
+                    >
+                      Milk Production
+                    </button>
+                  )}
+                  {/* Show growth tab for calves */}
+                  {(isCalf || isHeifer) && (
+                    <button
+                      onClick={() => setActiveTab('growth')}
+                      className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-300 ${
+                        activeTab === 'growth'
+                          ? 'border-green-500 text-green-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
+                    >
+                      Growth & Development
+                    </button>
+                  )}
                   <button
                     onClick={() => setActiveTab('health')}
                     className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-300 ${
@@ -1054,44 +1116,77 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                   >
                     Health Records
                   </button>
-                  <button
-                    onClick={() => setActiveTab('breeding')}
-                    className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-300 ${
-                      activeTab === 'breeding'
-                        ? 'border-green-500 text-green-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    Breeding
-                  </button>
+                  {/* Show breeding tab only for heifers and adults */}
+                  {!isCalf && (
+                    <button
+                      onClick={() => setActiveTab('breeding')}
+                      className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-300 ${
+                        activeTab === 'breeding'
+                          ? 'border-green-500 text-green-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
+                    >
+                      Breeding
+                    </button>
+                  )}
                 </nav>
               </div>
               
               <div className="py-6 px-6">
-                {/* Tab content for Overview */}
+                {/* Overview tab remains mostly the same */}
                 {activeTab === 'overview' && (
                   <div>
+                    {/* Customized metrics based on cow status */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                      <div className="bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <p className="text-sm font-medium text-gray-500">Avg. Milk Production</p>
-                            <p className="text-2xl font-semibold text-gray-800 mt-1">
-                              {!isNaN(avgMilkProduction) ? avgMilkProduction.toFixed(1) : '0.0'}L
-                            </p>
+                      {/* For calves, show growth metrics */}
+                      {(isCalf || isHeifer) ? (
+                        <>
+                          <div className="bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <p className="text-sm font-medium text-gray-500">Current Weight</p>
+                                <p className="text-2xl font-semibold text-gray-800 mt-1">
+                                  {cow.initialWeight || '0.0'} kg
+                                </p>
+                              </div>
+                              <div className="p-2 rounded-full bg-gradient-to-r from-purple-50 to-purple-100 text-purple-600">
+                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                                </svg>
+                              </div>
+                            </div>
+                            <div className="mt-4 text-xs text-green-600 flex items-center">
+                              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                              </svg>
+                              <span>Growing steadily</span>
+                            </div>
                           </div>
-                          <div className="p-2 rounded-full bg-gradient-to-r from-blue-50 to-blue-100 text-blue-600">
-                            <Droplet className="h-5 w-5" />
+                        </>
+                      ) : (
+                        // For milking cows, show milk production metrics
+                        <div className="bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="text-sm font-medium text-gray-500">Avg. Milk Production</p>
+                              <p className="text-2xl font-semibold text-gray-800 mt-1">
+                                {!isNaN(avgMilkProduction) ? avgMilkProduction.toFixed(1) : '0.0'}L
+                              </p>
+                            </div>
+                            <div className="p-2 rounded-full bg-gradient-to-r from-blue-50 to-blue-100 text-blue-600">
+                              <Droplet className="h-5 w-5" />
+                            </div>
+                          </div>
+                          <div className="mt-4 text-xs text-green-600 flex items-center">
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                            </svg>
+                            <span>+3% from last week</span>
                           </div>
                         </div>
-                        <div className="mt-4 text-xs text-green-600 flex items-center">
-                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                          </svg>
-                          <span>+3% from last week</span>
-                        </div>
-                      </div>
+                      )}
                       
+                      {/* Health check info - common to all */}
                       <div className="bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
                         <div className="flex justify-between items-start">
                           <div>
@@ -1107,11 +1202,18 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                         </div>
                       </div>
                       
+                      {/* Next action - customized by status */}
                       <div className="bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
                         <div className="flex justify-between items-start">
                           <div>
                             <p className="text-sm font-medium text-gray-500">Next Action</p>
-                            <p className="text-lg font-semibold text-gray-800 mt-1">Regular checkup</p>
+                            <p className="text-lg font-semibold text-gray-800 mt-1">
+                              {isCalf 
+                                ? "Growth checkup" 
+                                : isHeifer 
+                                ? "Reproductive assessment"
+                                : "Regular checkup"}
+                            </p>
                           </div>
                           <div className="p-2 rounded-full bg-gradient-to-r from-amber-50 to-amber-100 text-amber-600">
                             <Calendar className="h-5 w-5" />
@@ -1323,11 +1425,105 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                     </div>
                   </div>
                 )}
+
+                {/* New Growth & Development tab - shown only for calves and heifers */}
+                {activeTab === 'growth' && (isCalf || isHeifer) && (
+                  <div>
+                    <div className="bg-white shadow-lg rounded-lg p-6 mb-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
+                      <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-purple-600 mb-4">Growth Progress</h3>
+                      <div className="h-64">
+                        {/* Here you would add a growth chart component */}
+                        <div className="h-full bg-gradient-to-r from-purple-50/40 via-gray-50 to-pink-50/30 rounded-lg flex items-center justify-center">
+                          <p className="text-gray-500">Growth tracking chart will display here</p>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-3 mt-4">
+                        <div className="text-center p-2 rounded-lg bg-gradient-to-b from-purple-50 to-purple-100 border border-purple-200">
+                          <p className="text-xs text-gray-500">Birth Weight</p>
+                          <p className="text-lg font-bold text-purple-600">
+                            {cow.initialWeight || 'N/A'} kg
+                          </p>
+                        </div>
+                        <div className="text-center p-2 rounded-lg bg-gradient-to-b from-green-50 to-green-100 border border-green-200">
+                          <p className="text-xs text-gray-500">Current Weight</p>
+                          <p className="text-lg font-bold text-green-600">
+                            {cow.currentWeight || cow.initialWeight || 'N/A'} kg
+                          </p>
+                        </div>
+                        <div className="text-center p-2 rounded-lg bg-gradient-to-b from-blue-50 to-blue-100 border border-blue-200">
+                          <p className="text-xs text-gray-500">Growth Rate</p>
+                          <p className="text-lg font-bold text-blue-600">
+                            {cow.growthRate || 'N/A'} kg/month
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
+                      <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                        <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-purple-600">Development Milestones</h3>
+                        <button className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gradient-to-r from-purple-500 to-purple-600 hover:opacity-90 transition-opacity shadow-sm">
+                          Record Milestone
+                        </button>
+                      </div>
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gradient-to-r from-purple-50/40 via-gray-50 to-pink-50/30">
+                          <tr>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Date
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Milestone
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Weight (kg)
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Notes
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {/* Sample data - would be replaced by actual milestone data */}
+                          <tr className="hover:bg-gray-50 transition-colors duration-200">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {formatDate(cow.dateOfBirth)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                              Birth
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {cow.initialWeight || 'N/A'} kg
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              Healthy birth
+                            </td>
+                          </tr>
+                          {/* Additional sample milestones */}
+                          <tr className="hover:bg-gray-50 transition-colors duration-200">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {formatDate(new Date(new Date(cow.dateOfBirth).getTime() + 30*24*60*60*1000))}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                              First Month Check
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {parseInt(cow.initialWeight || 0) + 15} kg
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              Growing well
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
                 
                 {/* Tab content for Health */}
                 {activeTab === 'health' && (
                   <div>
-                    {/* Health status content would go here */}
                     <div className="bg-white shadow-lg rounded-lg p-6 mb-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
                       <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-600">Health Status</h3>
@@ -1355,7 +1551,7 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                           <p className="text-sm text-gray-800">{cow.vaccinationStatus || 'Up to date'}</p>
                         </div>
                         
-                        <div className="border-l border-gray-200 pl-6">
+                        {/* <div className="border-l border-gray-200 pl-6">
                           <h4 className="text-sm font-medium text-gray-500 mb-2">Vital Signs (Last Check)</h4>
                           <div className="space-y-2">
                             <div className="flex justify-between">
@@ -1375,7 +1571,7 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                               <span className="text-sm font-medium text-gray-800">580 kg</span>
                             </div>
                           </div>
-                        </div>
+                        </div> */}
                       </div>
                     </div>
                     
@@ -1391,11 +1587,15 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                         <div className="divide-y divide-gray-200">
                           {healthHistory.map((record, index) => (
                             <HealthRecord 
-                              key={index}
+                              key={record.id || index}
                               date={record.eventDate} 
                               type={record.eventType} 
                               description={record.description}
                               performedBy={record.performedBy}
+                              medications={record.medications}
+                              notes={record.notes}
+                              followUp={record.followUp}
+                              status={record.status}
                             />
                           ))}
                         </div>
@@ -1531,6 +1731,193 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
         </div>
       </div>
       </div>
+      {/* Transition Modal */}
+      {showTransitionModal && (
+        <TransitionModal 
+          cow={cow}
+          isCalf={isCalf}
+          onClose={toggleTransitionModal}
+          onTransition={(data) => {
+            onEdit({ ...cow, ...data }); // Update the cow with new status
+            toggleTransitionModal();
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+const TransitionModal = ({ cow, isCalf, onClose, onTransition }) => {
+  const [formData, setFormData] = useState({
+    status: isCalf ? 'Heifer' : 'Active',
+    transitionDate: new Date().toISOString().split('T')[0],
+    currentWeight: cow.initialWeight || '',
+    notes: ''
+  });
+  
+  const [errors, setErrors] = useState({});
+  
+  // Handle form field changes
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
+    
+    // Clear error for this field when it's changed
+    if (errors[name]) {
+      setErrors({
+        ...errors,
+        [name]: ''
+      });
+    }
+  };
+  
+  // Validate the form
+  const validateForm = () => {
+    const newErrors = {};
+    
+    if (!formData.transitionDate) {
+      newErrors.transitionDate = 'Transition date is required';
+    }
+    
+    if (!formData.currentWeight) {
+      newErrors.currentWeight = 'Current weight is required';
+    } else if (isNaN(formData.currentWeight) || parseFloat(formData.currentWeight) <= 0) {
+      newErrors.currentWeight = 'Please enter a valid weight';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+  
+  // Handle form submission
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      return; // Don't submit if validation fails
+    }
+    
+    // Prepare data for transition
+    const transitionData = {
+      status: formData.status,
+      currentWeight: parseFloat(formData.currentWeight),
+      transitionDate: formData.transitionDate,
+      notes: formData.notes || null,
+      alerts: [...(cow.alerts || []), isCalf ? 'Transitioned to heifer' : 'Transitioned to milking cow']
+    };
+    
+    onTransition(transitionData);
+  };
+  
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+        <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50 flex justify-between items-center">
+          <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-purple-700 to-pink-700">
+            {isCalf ? "Transition to Heifer" : "Transition to Milking"}
+          </h3>
+          <button 
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-500 transition-colors duration-200"
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="p-6">
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="transitionDate" className="block text-sm font-medium text-gray-700 mb-1">
+                Transition Date *
+              </label>
+              <input
+                type="date"
+                id="transitionDate"
+                name="transitionDate"
+                value={formData.transitionDate}
+                onChange={handleChange}
+                className={`block w-full px-3 py-2 border ${errors.transitionDate ? 'border-red-300' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm transition-all duration-300`}
+              />
+              {errors.transitionDate && (
+                <p className="mt-1 text-xs text-red-500">{errors.transitionDate}</p>
+              )}
+            </div>
+            
+            <div>
+              <label htmlFor="currentWeight" className="block text-sm font-medium text-gray-700 mb-1">
+                Current Weight (kg) *
+              </label>
+              <input
+                type="number"
+                id="currentWeight"
+                name="currentWeight"
+                value={formData.currentWeight}
+                onChange={handleChange}
+                step="0.1"
+                className={`block w-full px-3 py-2 border ${errors.currentWeight ? 'border-red-300' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm transition-all duration-300`}
+              />
+              {errors.currentWeight && (
+                <p className="mt-1 text-xs text-red-500">{errors.currentWeight}</p>
+              )}
+            </div>
+            
+            <div>
+              <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
+                New Status *
+              </label>
+              <select
+                id="status"
+                name="status"
+                value={formData.status}
+                onChange={handleChange}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm transition-all duration-300"
+              >
+                {isCalf ? (
+                  <option value="Heifer">Heifer</option>
+                ) : (
+                  <option value="Active">Active (Milking)</option>
+                )}
+              </select>
+            </div>
+            
+            <div>
+              <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
+                Notes
+              </label>
+              <textarea
+                id="notes"
+                name="notes"
+                rows="3"
+                value={formData.notes}
+                onChange={handleChange}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm transition-all duration-300"
+                placeholder="Add any notes about this transition..."
+              ></textarea>
+            </div>
+          </div>
+          
+          <div className="mt-6 flex justify-end space-x-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+            >
+              {isCalf ? "Transition to Heifer" : "Transition to Milking"}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 };
@@ -1564,13 +1951,50 @@ const ActivityItem = ({ type, description, date }) => {
 };
 
 // Health Record Component
-const HealthRecord = ({ date, type, description, performedBy }) => {
+const HealthRecord = ({ date, type, description, performedBy, medications, notes, followUp, status }) => {
+  const medicationsList = Array.isArray(medications) ? medications : [];
   return (
     <div className="px-6 py-4 hover:bg-gray-50 transition-colors duration-200">
       <div className="flex justify-between items-start">
         <div>
-          <p className="text-gray-800 font-medium">{type}</p>
+          <div className="flex items-center space-x-2">
+            <p className="text-gray-800 font-medium">{type}</p>
+            <span className={`px-2 py-1 text-xs leading-5 font-semibold rounded-full ${
+              status === 'Completed' ? 'bg-green-100 text-green-800' :
+              status === 'In progress' ? 'bg-amber-100 text-amber-800' :
+              status === 'Scheduled' ? 'bg-blue-100 text-blue-800' :
+              'bg-gray-100 text-gray-800'
+            }`}>
+              {status}
+            </span>
+          </div>
           <p className="text-sm text-gray-600 mt-1">{description}</p>
+          
+          {medicationsList.length > 0 && (
+            <div className="mt-2">
+              <p className="text-xs font-medium text-gray-600">Medications:</p>
+              <ul className="mt-1 space-y-1">
+                {medications.map((med, idx) => (
+                  <li key={idx} className="text-xs text-gray-600 flex items-center">
+                    <span className="w-1 h-1 bg-gray-400 rounded-full mr-2"></span>
+                    {med.name} ({med.dosage} - {med.method})
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          
+          {notes && (
+            <p className="text-xs text-gray-500 mt-2 italic">"{notes}"</p>
+          )}
+          
+          {followUp && (
+            <div className="mt-2 text-xs text-blue-600 flex items-center">
+              <Calendar size={12} className="mr-1" />
+              Follow-up: {formatDate(followUp)}
+            </div>
+          )}
+          
           <p className="text-xs text-gray-500 mt-2">Performed by: {performedBy}</p>
         </div>
         <div className="text-right">
@@ -1590,15 +2014,20 @@ const AddCowModal = ({ onClose, onAdd }) => {
     name: '',
     breed: 'Holstein',
     dateOfBirth: '',
-    status: 'Active',
+    status: 'Calf', // Default to Calf when birthdate is recent
     healthStatus: 'Healthy',
     owner: '',
     purchaseDate: '',
     purchasePrice: '',
     initialWeight: '',
     notes: '',
-    photo: null
+    photo: null,
+    // Calf-specific fields
+    mother: '',
+    father: '',
+    birthType: 'Single' // Single, Twin, etc.
   });
+  const [errors, setErrors] = useState({});
   
   // Handle form field changes
   const handleChange = (e) => {
@@ -1607,11 +2036,88 @@ const AddCowModal = ({ onClose, onAdd }) => {
       ...formData,
       [name]: value
     });
+    
+    // Clear error for this field when it's changed
+    if (errors[name]) {
+      setErrors({
+        ...errors,
+        [name]: ''
+      });
+    }
+  };
+  
+  // Validate form data for current step
+  const validateCurrentStep = () => {
+    const newErrors = {};
+    
+    // Validation for step 1
+    if (currentStep === 1) {
+      if (!formData.tagNumber.trim()) {
+        newErrors.tagNumber = 'Tag number is required';
+      } else if (!/^[A-Za-z0-9-]+$/.test(formData.tagNumber.trim())) {
+        newErrors.tagNumber = 'Tag number can only contain letters, numbers and hyphens';
+      }
+      
+      if (!formData.name.trim()) {
+        newErrors.name = 'Name is required';
+      }
+      
+      if (!formData.dateOfBirth) {
+        newErrors.dateOfBirth = 'Date of birth is required';
+      } else {
+        const birthDate = new Date(formData.dateOfBirth);
+        const today = new Date();
+        if (birthDate > today) {
+          newErrors.dateOfBirth = 'Date of birth cannot be in the future';
+        }
+      }
+      
+      if (!formData.owner.trim()) {
+        newErrors.owner = 'Owner is required';
+      }
+    }
+    
+    // Validation for step 2
+    if (currentStep === 2) {
+      if (formData.purchaseDate) {
+        const purchaseDate = new Date(formData.purchaseDate);
+        const birthDate = new Date(formData.dateOfBirth);
+        const today = new Date();
+        
+        if (purchaseDate < birthDate) {
+          newErrors.purchaseDate = 'Purchase date cannot be before birth date';
+        }
+        
+        if (purchaseDate > today) {
+          newErrors.purchaseDate = 'Purchase date cannot be in the future';
+        }
+      }
+      
+      if (formData.purchasePrice && isNaN(formData.purchasePrice)) {
+        newErrors.purchasePrice = 'Purchase price must be a number';
+      }
+      
+      if (formData.initialWeight) {
+        if (isNaN(formData.initialWeight)) {
+          newErrors.initialWeight = 'Weight must be a number';
+        } else if (parseFloat(formData.initialWeight) <= 0) {
+          newErrors.initialWeight = 'Weight must be greater than 0';
+        }
+      }
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0; // Returns true if no errors
   };
   
   // Handle form submission
   const handleSubmit = (e) => {
     e.preventDefault();
+    
+    // Final validation before submission
+    if (!validateCurrentStep()) {
+      return;
+    }
     
     // Create a new cow object
     const newCow = {
@@ -1629,7 +2135,10 @@ const AddCowModal = ({ onClose, onAdd }) => {
       lastHealthCheck: new Date().toISOString().split('T')[0],
       vaccinationStatus: 'Up to date',
       image: '/api/placeholder/160/160', // Use placeholder for demo
-      notes: formData.notes
+      notes: formData.notes,
+      purchaseDate: formData.purchaseDate || null,
+      purchasePrice: formData.purchasePrice || null,
+      initialWeight: formData.initialWeight || null
     };
     
     onAdd(newCow);
@@ -1662,7 +2171,9 @@ const AddCowModal = ({ onClose, onAdd }) => {
   
   // Go to next step
   const nextStep = () => {
-    setCurrentStep(currentStep + 1);
+    if (validateCurrentStep()) {
+      setCurrentStep(currentStep + 1);
+    }
   };
   
   // Go to previous step
@@ -1733,9 +2244,11 @@ const AddCowModal = ({ onClose, onAdd }) => {
                       name="tagNumber"
                       value={formData.tagNumber}
                       onChange={handleChange}
-                      required
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                      className={`block w-full px-3 py-2 border ${errors.tagNumber ? 'border-red-300' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300`}
                     />
+                    {errors.tagNumber && (
+                      <p className="mt-1 text-xs text-red-500">{errors.tagNumber}</p>
+                    )}
                   </div>
                   
                   <div>
@@ -1748,9 +2261,11 @@ const AddCowModal = ({ onClose, onAdd }) => {
                       name="name"
                       value={formData.name}
                       onChange={handleChange}
-                      required
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                      className={`block w-full px-3 py-2 border ${errors.name ? 'border-red-300' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300`}
                     />
+                    {errors.name && (
+                      <p className="mt-1 text-xs text-red-500">{errors.name}</p>
+                    )}
                   </div>
                 </div>
                 
@@ -1764,7 +2279,6 @@ const AddCowModal = ({ onClose, onAdd }) => {
                       name="breed"
                       value={formData.breed}
                       onChange={handleChange}
-                      required
                       className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
                     >
                       <option value="Holstein">Holstein</option>
@@ -1786,9 +2300,11 @@ const AddCowModal = ({ onClose, onAdd }) => {
                       name="dateOfBirth"
                       value={formData.dateOfBirth}
                       onChange={handleChange}
-                      required
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                      className={`block w-full px-3 py-2 border ${errors.dateOfBirth ? 'border-red-300' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300`}
                     />
+                    {errors.dateOfBirth && (
+                      <p className="mt-1 text-xs text-red-500">{errors.dateOfBirth}</p>
+                    )}
                   </div>
                 </div>
                 
@@ -1802,15 +2318,66 @@ const AddCowModal = ({ onClose, onAdd }) => {
                       name="status"
                       value={formData.status}
                       onChange={handleChange}
-                      required
                       className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
-                    >
+                      >
+                      <option value="Calf">Calf</option>
+                      <option value="Heifer">Heifer</option>
                       <option value="Active">Active</option>
                       <option value="Dry">Dry</option>
                       <option value="Sold">Sold</option>
                       <option value="Deceased">Deceased</option>
                     </select>
                   </div>
+                  {formData.status === 'Calf' && (
+                    <div className="space-y-6 mt-4">
+                      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                        <div>
+                          <label htmlFor="mother" className="block text-sm font-medium text-gray-700 mb-1">
+                            Mother (Tag/Name)
+                          </label>
+                          <input
+                            type="text"
+                            id="mother"
+                            name="mother"
+                            value={formData.mother}
+                            onChange={handleChange}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                          />
+                        </div>
+                        
+                        <div>
+                          <label htmlFor="father" className="block text-sm font-medium text-gray-700 mb-1">
+                            Father (Tag/Name)
+                          </label>
+                          <input
+                            type="text"
+                            id="father"
+                            name="father"
+                            value={formData.father}
+                            onChange={handleChange}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <label htmlFor="birthType" className="block text-sm font-medium text-gray-700 mb-1">
+                          Birth Type
+                        </label>
+                        <select
+                          id="birthType"
+                          name="birthType"
+                          value={formData.birthType}
+                          onChange={handleChange}
+                          className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                        >
+                          <option value="Single">Single</option>
+                          <option value="Twin">Twin</option>
+                          <option value="Triplet">Triplet</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <label htmlFor="owner" className="block text-sm font-medium text-gray-700 mb-1">
                       Owner *
@@ -1821,9 +2388,11 @@ const AddCowModal = ({ onClose, onAdd }) => {
                       name="owner"
                       value={formData.owner}
                       onChange={handleChange}
-                      required
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                      className={`block w-full px-3 py-2 border ${errors.owner ? 'border-red-300' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm`}
                     />
+                    {errors.owner && (
+                      <p className="mt-1 text-xs text-red-500">{errors.owner}</p>
+                    )}
                   </div>
                   <div>
                     <label htmlFor="healthStatus" className="block text-sm font-medium text-gray-700 mb-1">
@@ -1834,7 +2403,6 @@ const AddCowModal = ({ onClose, onAdd }) => {
                       name="healthStatus"
                       value={formData.healthStatus}
                       onChange={handleChange}
-                      required
                       className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
                     >
                       <option value="Healthy">Healthy</option>
@@ -1907,8 +2475,11 @@ const AddCowModal = ({ onClose, onAdd }) => {
                       name="purchaseDate"
                       value={formData.purchaseDate}
                       onChange={handleChange}
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                      className={`block w-full px-3 py-2 border ${errors.purchaseDate ? 'border-red-300' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300`}
                     />
+                    {errors.purchaseDate && (
+                      <p className="mt-1 text-xs text-red-500">{errors.purchaseDate}</p>
+                    )}
                   </div>
                   
                   <div>
@@ -1925,10 +2496,14 @@ const AddCowModal = ({ onClose, onAdd }) => {
                         name="purchasePrice"
                         value={formData.purchasePrice}
                         onChange={handleChange}
-                        className="block w-full pl-7 pr-12 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                        className={`block w-full pl-7 pr-12 py-2 border ${errors.purchasePrice ? 'border-red-300' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300`}
                         placeholder="0.00"
+                        step="0.01"
                       />
                     </div>
+                    {errors.purchasePrice && (
+                      <p className="mt-1 text-xs text-red-500">{errors.purchasePrice}</p>
+                    )}
                   </div>
                 </div>
                 
@@ -1942,8 +2517,12 @@ const AddCowModal = ({ onClose, onAdd }) => {
                     name="initialWeight"
                     value={formData.initialWeight}
                     onChange={handleChange}
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                    className={`block w-full px-3 py-2 border ${errors.initialWeight ? 'border-red-300' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300`}
+                    step="0.1"
                   />
+                  {errors.initialWeight && (
+                    <p className="mt-1 text-xs text-red-500">{errors.initialWeight}</p>
+                  )}
                 </div>
                 
                 <div>
@@ -2086,57 +2665,169 @@ const AddCowModal = ({ onClose, onAdd }) => {
 // EditCowModal Component
 const EditCowModal = ({ cow, onClose, onEdit }) => {
   const [formData, setFormData] = useState({
-    id: cow.id, // Make sure to include the cow's ID
+    id: cow.id || '',
     tagNumber: cow.tagNumber || '',
     name: cow.name || '',
     breed: cow.breed || 'Holstein',
-    dateOfBirth: cow.dateOfBirth || '',
+    dateOfBirth: cow.dateOfBirth ? new Date(cow.dateOfBirth).toISOString().split('T')[0] : '',
     status: cow.status || 'Active',
     healthStatus: cow.healthStatus || 'Healthy',
-    owner: cow.owner || 'Farm Owner', // Include owner with a default value
-    purchaseDate: cow.purchaseDate || '',
+    owner: cow.owner || '',
+    lastHealthCheck: cow.lastHealthCheck ? new Date(cow.lastHealthCheck).toISOString().split('T')[0] : '',
+    vaccinationStatus: cow.vaccinationStatus || 'Up to date',
+    purchaseDate: cow.purchaseDate ? new Date(cow.purchaseDate).toISOString().split('T')[0] : '',
     purchasePrice: cow.purchasePrice || '',
     initialWeight: cow.initialWeight || '',
     notes: cow.notes || '',
-    photo: cow.photo || null,
-    alerts: Array.isArray(cow.alerts) ? cow.alerts : []
+    photo: cow.image && cow.image !== '/api/placeholder/160/160' ? cow.image : null,
+    alerts: Array.isArray(cow.alerts) ? [...cow.alerts] : []
   });
+  
+  const [errors, setErrors] = useState({});
   
   // Handle form field changes
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
+    setFormData(prevData => ({
+      ...prevData,
       [name]: value
-    });
+    }));
+    
+    // Clear error for this field when it's changed
+    if (errors[name]) {
+      setErrors({
+        ...errors,
+        [name]: ''
+      });
+    }
+  };
+  
+  // Validate form data
+  const validateForm = () => {
+    const newErrors = {};
+    
+    // Validate required fields
+    if (!formData.tagNumber.trim()) {
+      newErrors.tagNumber = 'Tag number is required';
+    } else if (!/^[A-Za-z0-9-]+$/.test(formData.tagNumber.trim())) {
+      newErrors.tagNumber = 'Tag number can only contain letters, numbers and hyphens';
+    }
+    
+    if (!formData.name.trim()) {
+      newErrors.name = 'Name is required';
+    }
+    
+    if (!formData.dateOfBirth) {
+      newErrors.dateOfBirth = 'Date of birth is required';
+    } else {
+      const birthDate = new Date(formData.dateOfBirth);
+      const today = new Date();
+      if (birthDate > today) {
+        newErrors.dateOfBirth = 'Date of birth cannot be in the future';
+      }
+    }
+    
+    if (!formData.owner.trim()) {
+      newErrors.owner = 'Owner is required';
+    }
+    
+    // Validate purchase date if provided
+    if (formData.purchaseDate) {
+      const purchaseDate = new Date(formData.purchaseDate);
+      const birthDate = new Date(formData.dateOfBirth);
+      const today = new Date();
+      
+      if (purchaseDate < birthDate) {
+        newErrors.purchaseDate = 'Purchase date cannot be before birth date';
+      }
+      
+      if (purchaseDate > today) {
+        newErrors.purchaseDate = 'Purchase date cannot be in the future';
+      }
+    }
+    
+    // Validate numeric fields
+    if (formData.purchasePrice && isNaN(formData.purchasePrice)) {
+      newErrors.purchasePrice = 'Purchase price must be a number';
+    }
+    
+    if (formData.initialWeight) {
+      if (isNaN(formData.initialWeight)) {
+        newErrors.initialWeight = 'Weight must be a number';
+      } else if (parseFloat(formData.initialWeight) <= 0) {
+        newErrors.initialWeight = 'Weight must be greater than 0';
+      }
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0; // Returns true if no errors
   };
   
   // Handle form submission
   const handleSubmit = (e) => {
     e.preventDefault();
+    
+    // Validate form before submission
+    if (!validateForm()) {
+      return; // Stop form submission if validation fails
+    }
+    
+    // Create a clean copy of data to ensure it matches database schema
+    const submissionData = {
+      id: formData.id,
+      tagNumber: formData.tagNumber,
+      name: formData.name,
+      breed: formData.breed,
+      dateOfBirth: formData.dateOfBirth,
+      status: formData.status,
+      healthStatus: formData.healthStatus,
+      owner: formData.owner,
+      lastHealthCheck: formData.lastHealthCheck,
+      vaccinationStatus: formData.vaccinationStatus,
+      purchaseDate: formData.purchaseDate || null,
+      purchasePrice: formData.purchasePrice ? parseFloat(formData.purchasePrice) : null,
+      initialWeight: formData.initialWeight ? parseFloat(formData.initialWeight) : null,
+      notes: formData.notes || null,
+      photo: formData.photo,
+      alerts: formData.alerts || []
+    };
+    
+    console.log('Submitting updated cow data:', submissionData);
+    
     // Pass the updated cow data to the parent component
-    onEdit(formData);
+    onEdit(submissionData);
     onClose();
   };
   
   // Handle file selection
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
-      setFormData({
-        ...formData,
+      setFormData(prevData => ({
+        ...prevData,
         photo: e.target.files[0]
-      });
+      }));
     }
   };
   
+  // Get photo preview correctly for both File objects and URL strings
+  const getPhotoPreview = () => {
+    if (!formData.photo) return null;
+    
+    if (formData.photo instanceof File) {
+      return URL.createObjectURL(formData.photo);
+    }
+    
+    return formData.photo; // It's a URL string
+  };
+  
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-screen overflow-y-auto">
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-lg font-medium text-gray-800">Edit Cow</h3>
+        <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-blue-50 flex justify-between items-center">
+          <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-700 to-blue-700">Edit Cow</h3>
           <button 
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-500"
+            className="text-gray-400 hover:text-gray-500 transition-colors duration-200"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -2157,9 +2848,11 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
                   name="tagNumber"
                   value={formData.tagNumber}
                   onChange={handleChange}
-                  required
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  className={`block w-full px-3 py-2 border ${errors.tagNumber ? 'border-red-300' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300`}
                 />
+                {errors.tagNumber && (
+                  <p className="mt-1 text-xs text-red-500">{errors.tagNumber}</p>
+                )}
               </div>
               
               <div>
@@ -2172,9 +2865,11 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
                   name="name"
                   value={formData.name}
                   onChange={handleChange}
-                  required
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  className={`block w-full px-3 py-2 border ${errors.name ? 'border-red-300' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300`}
                 />
+                {errors.name && (
+                  <p className="mt-1 text-xs text-red-500">{errors.name}</p>
+                )}
               </div>
             </div>
             
@@ -2188,8 +2883,7 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
                   name="breed"
                   value={formData.breed}
                   onChange={handleChange}
-                  required
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
                 >
                   <option value="Holstein">Holstein</option>
                   <option value="Jersey">Jersey</option>
@@ -2210,28 +2904,68 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
                   name="dateOfBirth"
                   value={formData.dateOfBirth}
                   onChange={handleChange}
-                  required
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  className={`block w-full px-3 py-2 border ${errors.dateOfBirth ? 'border-red-300' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300`}
                 />
+                {errors.dateOfBirth && (
+                  <p className="mt-1 text-xs text-red-500">{errors.dateOfBirth}</p>
+                )}
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div>
+                <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
+                  Status *
+                </label>
+                <select
+                  id="status"
+                  name="status"
+                  value={formData.status}
+                  onChange={handleChange}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                  >
+                  <option value="Calf">Calf</option>
+                  <option value="Heifer">Heifer</option>
+                  <option value="Active">Active</option>
+                  <option value="Dry">Dry</option>
+                  <option value="Sold">Sold</option>
+                  <option value="Deceased">Deceased</option>
+                </select>
+              </div>
+              
+              <div>
+                <label htmlFor="owner" className="block text-sm font-medium text-gray-700 mb-1">
+                  Owner *
+                </label>
+                <input
+                  type="text"
+                  id="owner"
+                  name="owner"
+                  value={formData.owner}
+                  onChange={handleChange}
+                  className={`block w-full px-3 py-2 border ${errors.owner ? 'border-red-300' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300`}
+                />
+                {errors.owner && (
+                  <p className="mt-1 text-xs text-red-500">{errors.owner}</p>
+                )}
               </div>
             </div>
             
             <div>
-              <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
-                Status *
+              <label htmlFor="healthStatus" className="block text-sm font-medium text-gray-700 mb-1">
+                Health Status *
               </label>
               <select
-                id="status"
-                name="status"
-                value={formData.status}
+                id="healthStatus"
+                name="healthStatus"
+                value={formData.healthStatus}
                 onChange={handleChange}
-                required
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
               >
-                <option value="Active">Active</option>
-                <option value="Dry">Dry</option>
-                <option value="Sold">Sold</option>
-                <option value="Deceased">Deceased</option>
+                <option value="Healthy">Healthy</option>
+                <option value="Monitored">Monitored</option>
+                <option value="Under treatment">Under treatment</option>
+                <option value="Completed">Completed</option>
               </select>
             </div>
             
@@ -2243,14 +2977,14 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
                 {formData.photo ? (
                   <div className="relative">
                     <img 
-                      src={typeof formData.photo === 'string' ? formData.photo : URL.createObjectURL(formData.photo)} 
+                      src={getPhotoPreview()} 
                       alt="Cow" 
-                      className="h-24 w-24 object-cover rounded-md"
+                      className="h-24 w-24 object-cover rounded-md border-2 border-green-100 shadow-sm"
                     />
                     <button
                       type="button"
-                      onClick={() => setFormData({...formData, photo: null})}
-                      className="absolute top-0 right-0 -mt-2 -mr-2 bg-red-500 text-white rounded-full p-1"
+                      onClick={() => setFormData(prev => ({...prev, photo: null}))}
+                      className="absolute top-0 right-0 -mt-2 -mr-2 bg-red-500 text-white rounded-full p-1 shadow-md transform transition-transform duration-300 hover:scale-110"
                     >
                       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -2258,7 +2992,7 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
                     </button>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-center h-24 w-24 border-2 border-gray-300 border-dashed rounded-md">
+                  <div className="flex items-center justify-center h-24 w-24 border-2 border-gray-300 border-dashed rounded-md hover:border-green-400 transition-colors duration-300">
                     <label htmlFor="file-upload" className="relative cursor-pointer">
                       <div className="flex flex-col items-center justify-center">
                         <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2293,8 +3027,11 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
                   name="purchaseDate"
                   value={formData.purchaseDate}
                   onChange={handleChange}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  className={`block w-full px-3 py-2 border ${errors.purchaseDate ? 'border-red-300' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300`}
                 />
+                {errors.purchaseDate && (
+                  <p className="mt-1 text-xs text-red-500">{errors.purchaseDate}</p>
+                )}
               </div>
               
               <div>
@@ -2311,16 +3048,20 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
                     name="purchasePrice"
                     value={formData.purchasePrice}
                     onChange={handleChange}
-                    className="block w-full pl-7 pr-12 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                    className={`block w-full pl-7 pr-12 py-2 border ${errors.purchasePrice ? 'border-red-300' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300`}
                     placeholder="0.00"
+                    step="0.01"
                   />
                 </div>
+                {errors.purchasePrice && (
+                  <p className="mt-1 text-xs text-red-500">{errors.purchasePrice}</p>
+                )}
               </div>
             </div>
             
             <div>
               <label htmlFor="initialWeight" className="block text-sm font-medium text-gray-700 mb-1">
-                Weight (kg)
+                Initial Weight (kg)
               </label>
               <input
                 type="number"
@@ -2328,8 +3069,12 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
                 name="initialWeight"
                 value={formData.initialWeight}
                 onChange={handleChange}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                className={`block w-full px-3 py-2 border ${errors.initialWeight ? 'border-red-300' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300`}
+                step="0.1"
               />
+              {errors.initialWeight && (
+                <p className="mt-1 text-xs text-red-500">{errors.initialWeight}</p>
+              )}
             </div>
             
             <div>
@@ -2342,7 +3087,7 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
                 rows={4}
                 value={formData.notes}
                 onChange={handleChange}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
                 placeholder="Any additional information about this cow..."
               ></textarea>
             </div>
@@ -2352,13 +3097,13 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
             <button
               type="button"
               onClick={onClose}
-              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300 transform hover:scale-105"
             >
               Save Changes
             </button>
