@@ -12,6 +12,7 @@ import {
   fetchCowsForSelection,
   addMedication
 } from './services/healthService';
+import { supabase } from '../lib/supabase';
 
 // Status badge colors - no change
 const statusColors = {
@@ -885,7 +886,138 @@ const VaccinationsTab = ({ vaccinationSchedule }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState('calendar');
   const [filteredVaccinations, setFilteredVaccinations] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isAddVaccineModalOpen, setIsAddVaccineModalOpen] = useState(false);
+
+  const handlePrevMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  };
   
+  const handleNextMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+  };
+  
+  const handleToday = () => {
+    setCurrentDate(new Date());
+  };
+  
+  
+  // Update the complete vaccination function to maintain consistency
+  const handleCompleteVaccination = async (vac) => {
+    try {
+      setIsLoading(true);
+      
+      // 1. Update the vaccination_schedule entry
+      const { error: vacUpdateError } = await supabase
+        .from('vaccination_schedule')
+        .update({ 
+          status: 'Completed'
+          // Remove completed_date since it doesn't exist in your schema
+        })
+        .eq('id', vac.id);
+      
+      if (vacUpdateError) throw vacUpdateError;
+      
+      // 2. Create a completed health event for this vaccination
+      const healthEventData = {
+        cow_id: vac.cowId,
+        event_type: 'Vaccination',
+        event_date: new Date().toISOString().split('T')[0],
+        description: `Completed ${vac.vaccinationType} vaccination`,
+        performed_by: vac.assignedTo || 'Farm Staff',
+        status: 'Completed'
+        // Removed vaccination_id since it doesn't exist in your schema
+      };
+      
+      const { error: healthEventError } = await supabase
+        .from('health_events')
+        .insert(healthEventData);
+      
+      if (healthEventError) throw healthEventError;
+      
+      // 3. Update any existing "Scheduled" health events for this vaccination
+      // Use cow_id and description/vaccination_type instead of vaccination_id
+      const { error: updateRelatedError } = await supabase
+        .from('health_events')
+        .update({ status: 'Completed' })
+        .eq('cow_id', vac.cowId)
+        .eq('description', vac.vaccinationType)
+        .eq('status', 'Scheduled');
+      
+      if (updateRelatedError) throw updateRelatedError;
+      
+      // 4. Refresh data after successful operations
+      const updatedSchedule = await fetchVaccinationSchedule();
+      
+      // 5. Update filtered list for UI
+      setFilteredVaccinations(prevVacs => 
+        prevVacs.filter(v => v.id !== vac.id)
+      );
+      
+      alert('Vaccination marked as complete');
+    } catch (error) {
+      console.error('Error completing vaccination:', error);
+      alert('Failed to complete vaccination. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const handleRescheduleVaccination = async (vacId, newDate) => {
+    try {
+      setIsLoading(true);
+      
+      // Get the vaccination details first to use cow_id and type for related health events
+      const { data: vacDetails, error: vacDetailsError } = await supabase
+        .from('vaccination_schedule')
+        .select('*')
+        .eq('id', vacId)
+        .single();
+      
+      if (vacDetailsError) throw vacDetailsError;
+      
+      // 1. Update the vaccination_schedule entry
+      const { error: vacUpdateError } = await supabase
+        .from('vaccination_schedule')
+        .update({ 
+          due_date: newDate,
+          status: 'Rescheduled'
+        })
+        .eq('id', vacId);
+      
+      if (vacUpdateError) throw vacUpdateError;
+      
+      // 2. Update any related health events using cow_id and description/type
+      const { error: healthEventError } = await supabase
+        .from('health_events')
+        .update({ 
+          follow_up: newDate,
+          status: 'Scheduled',
+          notes: (prevNotes) => `${prevNotes || ''}${prevNotes ? '\n' : ''}Rescheduled from ${new Date().toISOString().split('T')[0]} to ${newDate}`
+        })
+        .eq('cow_id', vacDetails.cow_id)
+        .eq('description', vacDetails.vaccination_type)
+        .eq('status', 'Scheduled');
+      
+      if (healthEventError) throw healthEventError;
+      
+      // 3. Refresh data
+      const updatedSchedule = await fetchVaccinationSchedule();
+      
+      // 4. Update filtered list for UI
+      setFilteredVaccinations(prevVacs => 
+        prevVacs.map(vac => vac.id === vacId ? {...vac, dueDate: newDate, status: 'Rescheduled'} : vac)
+      );
+      
+      alert('Vaccination rescheduled successfully');
+    } catch (error) {
+      console.error('Error rescheduling vaccination:', error);
+      alert('Failed to reschedule vaccination. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     // Filter vaccinations based on view
     if (view === 'calendar') {
@@ -915,8 +1047,14 @@ const VaccinationsTab = ({ vaccinationSchedule }) => {
   
   // Get vaccinations for a specific day
   const getVaccinationsForDay = (day) => {
+    // Create date with local timezone, set to midnight
     const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
-    const dateString = date.toISOString().split('T')[0];
+    
+    // Format date as YYYY-MM-DD using local timezone
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const dayStr = String(day).padStart(2, '0');
+    const dateString = `${year}-${month}-${dayStr}`;
     
     return vaccinationSchedule.filter(vac => vac.dueDate === dateString);
   };
@@ -929,6 +1067,51 @@ const VaccinationsTab = ({ vaccinationSchedule }) => {
       return 'bg-green-100 text-green-800 font-semibold';
     }
     return '';
+  };
+
+  const toggleAddVaccineModal = () => {
+    setIsAddVaccineModalOpen(!isAddVaccineModalOpen);
+  };
+
+
+  const handleAddVaccination = async (formData) => {
+    try {
+      setIsLoading(true);
+      
+      // This will now create entries in both tables with the corrected function
+      const result = await addVaccination(formData);
+      
+      // Refresh vaccination schedule
+      const updatedSchedule = await fetchVaccinationSchedule();
+      
+      // Refresh health events
+      const events = await fetchHealthEvents();
+      
+      // Update parent component's data through props or context
+      // For now just update filtered vaccinations
+      if (view === 'upcoming') {
+        const today = new Date();
+        setFilteredVaccinations(
+          updatedSchedule
+            .filter(vac => new Date(vac.dueDate) >= today)
+            .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
+        );
+      } else {
+        setFilteredVaccinations(updatedSchedule);
+      }
+      
+      // Close modal
+      setIsAddVaccineModalOpen(false);
+      
+      // Show success message
+      alert('Vaccination scheduled successfully');
+    } catch (error) {
+      console.error('Error scheduling vaccination:', error);
+      // Explicitly show the error message
+      alert(`Failed to schedule vaccination: ${error.message || 'Unknown error'}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   return (
@@ -971,16 +1154,25 @@ const VaccinationsTab = ({ vaccinationSchedule }) => {
             </div>
             
             <div className="flex items-center">
-              <button className="p-1 rounded-full hover:bg-gray-100 transition-colors duration-200">
+              <button 
+                onClick={handlePrevMonth}
+                className="p-1 rounded-full hover:bg-gray-100 transition-colors duration-200"
+              >
                 <ChevronLeft size={18} className="text-gray-500" />
               </button>
               <span className="mx-4 text-sm font-medium text-gray-700">
                 {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
               </span>
-              <button className="p-1 rounded-full hover:bg-gray-100 transition-colors duration-200">
+              <button 
+                onClick={handleNextMonth}
+                className="p-1 rounded-full hover:bg-gray-100 transition-colors duration-200"
+              >
                 <ChevronRight size={18} className="text-gray-500" />
               </button>
-              <button className="ml-4 px-3 py-1.5 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors duration-200">
+              <button 
+                onClick={handleToday}
+                className="ml-4 px-3 py-1.5 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors duration-200"
+              >
                 Today
               </button>
             </div>
@@ -1002,20 +1194,32 @@ const VaccinationsTab = ({ vaccinationSchedule }) => {
                 
                 {/* Days of the month */}
                 {days.map(day => {
-                  const vaccinations = getVaccinationsForDay(day);
+                  // Create date object for this day (from local timezone)
+                  const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+                  
+                  // Format date as YYYY-MM-DD using local timezone
+                  const year = date.getFullYear();
+                  const month = String(date.getMonth() + 1).padStart(2, '0');
+                  const dayStr = String(day).padStart(2, '0');
+                  const dateString = `${year}-${month}-${dayStr}`;
+                  
+                  const vaccinations = vaccinationSchedule.filter(vac => vac.dueDate === dateString);
+                  
                   const isToday = new Date().getDate() === day && 
-                                  new Date().getMonth() === currentDate.getMonth() && 
-                                  new Date().getFullYear() === currentDate.getFullYear();
-                                  
+                                new Date().getMonth() === currentDate.getMonth() && 
+                                new Date().getFullYear() === currentDate.getFullYear();
+                                
                   return (
                     <div 
                       key={day} 
-                      className={`bg-white p-2 min-h-[80px] border-t ${
+                      className={`bg-white p-2 min-h-[80px] border-t relative ${
                         isToday ? 'bg-blue-50 border-t-2 border-t-blue-500' : ''
-                      }`}
+                      } ${vaccinations.length > 0 ? 'bg-green-50' : ''}`}
                     >
                       <div className={`flex justify-between items-center mb-1 ${isToday ? 'font-semibold' : ''}`}>
-                        <span className={`text-sm ${getDayStatusClass(day)}`}>{day}</span>
+                        <span className={`text-sm ${vaccinations.length > 0 ? 'font-semibold text-green-800' : ''}`}>
+                          {day}
+                        </span>
                         {vaccinations.length > 0 && (
                           <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-green-600 rounded-full">
                             {vaccinations.length}
@@ -1029,9 +1233,9 @@ const VaccinationsTab = ({ vaccinationSchedule }) => {
                             <div 
                               key={vac.id} 
                               className="text-xs p-1 rounded bg-green-50 border-l-2 border-green-400 cursor-pointer hover:bg-green-100 transition-colors duration-200 truncate"
-                              title={`${vac.cowName} - ${vac.vaccinationType}`}
+                              title={`${vac.cowName || 'Unknown'} - ${vac.vaccinationType}`}
                             >
-                              {vac.cowName}
+                              {vac.cowName || 'Unknown'} - {vac.vaccinationType}
                             </div>
                           ))}
                           {vaccinations.length > 2 && (
@@ -1044,6 +1248,105 @@ const VaccinationsTab = ({ vaccinationSchedule }) => {
                     </div>
                   );
                 })}
+              </div>
+              {/* Full Vaccination List */}
+              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 mt-6 mb-6">
+                <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+                <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                  <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">All Vaccinations</h2>
+                  <div className="flex items-center">
+                    {/* <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Search className="h-4 w-4 text-gray-400" />
+                      </div>
+                      <input
+                        type="text"
+                        className="block w-full pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                        placeholder="Search vaccinations..."
+                        onChange={(e) => {
+                          // Add search functionality if needed
+                        }}
+                      />
+                    </div> */}
+                  </div>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
+                      <tr>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cow</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned To</th>
+                        <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {vaccinationSchedule.length > 0 ? (
+                        vaccinationSchedule.map(vac => (
+                          <tr key={vac.id} className="hover:bg-gray-50 transition-colors duration-200">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="text-sm font-medium text-gray-900">{vac.cowName || 'Unknown'}</div>
+                                <div className="text-sm text-gray-500 ml-2">({vac.cowTag || 'N/A'})</div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {vac.vaccinationType}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {formatDate(vac.dueDate)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColors[getStatusWithDate(vac.dueDate)]}`}>
+                                {getStatusWithDate(vac.dueDate)}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {vac.assignedTo}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                              <div className="flex justify-end space-x-2">
+                                <button 
+                                  onClick={() => handleCompleteVaccination(vac)}
+                                  disabled={isLoading}
+                                  className="text-green-600 hover:text-green-900 transition-colors duration-200"
+                                >
+                                  Complete
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    const newDate = prompt('Enter new date (YYYY-MM-DD):', vac.dueDate);
+                                    if (newDate && /^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+                                      handleRescheduleVaccination(vac.id, newDate);
+                                    } else if (newDate) {
+                                      alert('Please use format YYYY-MM-DD');
+                                    }
+                                  }}
+                                  disabled={isLoading}
+                                  className="text-blue-600 hover:text-blue-900 transition-colors duration-200"
+                                >
+                                  Reschedule
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="6" className="px-6 py-8 text-center">
+                            <div className="flex flex-col items-center justify-center">
+                              <Calendar className="h-8 w-8 text-gray-400 mb-2" />
+                              <p className="text-gray-500">No vaccinations scheduled</p>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -1067,10 +1370,25 @@ const VaccinationsTab = ({ vaccinationSchedule }) => {
                       <div className="text-right">
                         <p className="text-sm font-medium text-gray-900">{formatDate(vac.dueDate)}</p>
                         <div className="mt-2 space-x-2">
-                          <button className="px-3 py-1 text-xs text-white bg-gradient-to-r from-green-600 to-green-700 rounded-md hover:opacity-90 shadow-sm transition-all duration-300">
-                            Complete
+                          <button 
+                            onClick={() => handleCompleteVaccination(vac)}
+                            disabled={isLoading}
+                            className={`px-3 py-1 text-xs text-white bg-gradient-to-r from-green-600 to-green-700 rounded-md hover:opacity-90 shadow-sm transition-all duration-300 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          >
+                            {isLoading ? 'Processing...' : 'Complete'}
                           </button>
-                          <button className="px-3 py-1 text-xs text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors duration-200">
+                          <button 
+                            onClick={() => {
+                              const newDate = prompt('Enter new date (YYYY-MM-DD):', vac.dueDate);
+                              if (newDate && /^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+                                handleRescheduleVaccination(vac.id, newDate);
+                              } else if (newDate) {
+                                alert('Please use format YYYY-MM-DD');
+                              }
+                            }}
+                            disabled={isLoading}
+                            className={`px-3 py-1 text-xs text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors duration-200 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          >
                             Reschedule
                           </button>
                         </div>
@@ -1098,66 +1416,180 @@ const VaccinationsTab = ({ vaccinationSchedule }) => {
           <h3 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Schedule Vaccination</h3>
         </div>
         <div className="p-6">
-          <form className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="cow" className="block text-sm font-medium text-gray-700 mb-1">
-                  Cow *
-                </label>
+          <button 
+            onClick={toggleAddVaccineModal}
+            className="w-full py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300 flex items-center justify-center"
+          >
+            <Plus size={16} className="mr-2" />
+            Schedule New Vaccination
+          </button>
+        </div>
+      </div>
+      {/* Add Vaccination Modal */}
+      {isAddVaccineModalOpen && (
+        <AddVaccinationModal 
+          onClose={toggleAddVaccineModal} 
+          onSubmit={handleAddVaccination} 
+          isLoading={isLoading} 
+        />
+      )}
+    </div>
+  );
+};
+
+const AddVaccinationModal = ({ onClose, onSubmit, isLoading }) => {
+  const [formData, setFormData] = useState({
+    cowId: '',
+    vaccinationType: '',
+    dueDate: new Date().toISOString().split('T')[0],
+    assignedTo: '',
+    notes: ''
+  });
+  const [cows, setCows] = useState([]);
+  const [isLoadingCows, setIsLoadingCows] = useState(true);
+  const [error, setError] = useState(null);
+  
+  // Load cows for selection
+  useEffect(() => {
+    const loadCows = async () => {
+      try {
+        const cowsList = await fetchCowsForSelection();
+        setCows(cowsList);
+      } catch (err) {
+        console.error('Error loading cows:', err);
+        setError('Failed to load cow list');
+      } finally {
+        setIsLoadingCows(false);
+      }
+    };
+    
+    loadCows();
+  }, []);
+  
+  // Handle form field changes
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
+  };
+  
+  // Handle form submission
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    try {
+      await onSubmit(formData);
+    } catch (err) {
+      setError('Failed to schedule vaccination');
+    }
+  };
+  
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-100">
+        <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Schedule New Vaccination</h3>
+          <button 
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-500 transition-colors duration-200"
+            disabled={isLoading}
+          >
+            <X size={20} />
+          </button>
+        </div>
+        
+        {error && (
+          <div className="mx-6 mt-4 p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg">
+            {error}
+          </div>
+        )}
+        
+        <form onSubmit={handleSubmit}>
+          <div className="px-6 py-4 space-y-6">
+            <div>
+              <label htmlFor="cowId" className="block text-sm font-medium text-gray-700 mb-1">
+                Cow *
+              </label>
+              {isLoadingCows ? (
+                <div className="animate-pulse h-10 bg-gray-200 rounded-lg"></div>
+              ) : (
                 <select
-                  id="cow"
+                  id="cowId"
+                  name="cowId"
+                  value={formData.cowId}
+                  onChange={handleChange}
+                  required
                   className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                 >
                   <option value="">Select a cow</option>
-                  <option value="C001">Daisy (A128)</option>
-                  <option value="C002">Bella (B094)</option>
-                  <option value="C003">Buttercup (C215)</option>
-                  <option value="C004">Millie (D073)</option>
-                  <option value="C005">Luna (E162)</option>
+                  {cows.map(cow => (
+                    <option key={cow.id} value={cow.id}>
+                      {cow.name} ({cow.tag_number})
+                    </option>
+                  ))}
                 </select>
-              </div>
-              
-              <div>
-                <label htmlFor="vaccination-type" className="block text-sm font-medium text-gray-700 mb-1">
-                  Vaccination Type *
-                </label>
-                <select
-                  id="vaccination-type"
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                >
-                  <option value="">Select a vaccination type</option>
-                  <option value="annual">Annual Booster</option>
-                  <option value="bvd">BVD Vaccine</option>
-                  <option value="respiratory">Respiratory Vaccine</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              
-              <div>
-                <label htmlFor="due-date" className="block text-sm font-medium text-gray-700 mb-1">
-                  Due Date *
-                </label>
-                <input
-                  type="date"
-                  id="due-date"
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                />
-              </div>
-              
-              <div>
-                <label htmlFor="assigned-to" className="block text-sm font-medium text-gray-700 mb-1">
-                  Assigned To *
-                </label>
-                <select
-                  id="assigned-to"
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                >
-                  <option value="">Select a person</option>
-                  <option value="dr-smith">Dr. Smith</option>
-                  <option value="dr-johnson">Dr. Johnson</option>
-                  <option value="staff">Farm Staff</option>
-                </select>
-              </div>
+              )}
+            </div>
+            
+            <div>
+              <label htmlFor="vaccinationType" className="block text-sm font-medium text-gray-700 mb-1">
+                Vaccination Type *
+              </label>
+              <select
+                id="vaccinationType"
+                name="vaccinationType"
+                value={formData.vaccinationType}
+                onChange={handleChange}
+                required
+                className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              >
+                <option value="">Select a vaccination type</option>
+                <option value="Annual Booster">Annual Booster</option>
+                <option value="BVD Vaccine">BVD Vaccine</option>
+                <option value="Respiratory Vaccine">Respiratory Vaccine</option>
+                <option value="Brucellosis Vaccine">Brucellosis Vaccine</option>
+                <option value="Blackleg Vaccine">Blackleg Vaccine</option>
+                <option value="Anthrax Vaccine">Anthrax Vaccine</option>
+                <option value="Leptospirosis Vaccine">Leptospirosis Vaccine</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            
+            <div>
+              <label htmlFor="dueDate" className="block text-sm font-medium text-gray-700 mb-1">
+                Due Date *
+              </label>
+              <input
+                type="date"
+                id="dueDate"
+                name="dueDate"
+                value={formData.dueDate}
+                onChange={handleChange}
+                required
+                className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="assignedTo" className="block text-sm font-medium text-gray-700 mb-1">
+                Assigned To *
+              </label>
+              <select
+                id="assignedTo"
+                name="assignedTo"
+                value={formData.assignedTo}
+                onChange={handleChange}
+                required
+                className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              >
+                <option value="">Select a person</option>
+                <option value="Dr. Smith">Dr. Smith</option>
+                <option value="Dr. Johnson">Dr. Johnson</option>
+                <option value="Farm Staff">Farm Staff</option>
+              </select>
             </div>
             
             <div>
@@ -1166,25 +1598,116 @@ const VaccinationsTab = ({ vaccinationSchedule }) => {
               </label>
               <textarea
                 id="notes"
+                name="notes"
                 rows={3}
+                value={formData.notes}
+                onChange={handleChange}
                 className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                 placeholder="Any additional information..."
               ></textarea>
             </div>
-            
-            <div>
-              <button 
-                type="submit" 
-                className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300"
-              >
-                Schedule
-              </button>
-            </div>
-          </form>
-        </div>
+          </div>
+          
+          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+            <button
+              type="button"
+              onClick={onClose}
+              className="py-2 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300"
+              disabled={isLoading}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300"
+            >
+              {isLoading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Scheduling...
+                </>
+              ) : 'Schedule Vaccination'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
+};
+
+export const addVaccination = async (vaccinationData) => {
+  try {
+    // Begin by creating an entry in the vaccination_schedule table
+    const { data: vacScheduleData, error: vacScheduleError } = await supabase
+      .from('vaccination_schedule')
+      .insert({
+        cow_id: vaccinationData.cowId,
+        vaccination_type: vaccinationData.vaccinationType,
+        due_date: vaccinationData.dueDate,
+        assigned_to: vaccinationData.assignedTo,
+        notes: vaccinationData.notes,
+        status: 'Scheduled'
+      })
+      .select()
+      .single();
+    
+    if (vacScheduleError) throw vacScheduleError;
+    
+    // Also create an entry in health_events for future reference and follow-up
+    const healthEventData = {
+      cow_id: vaccinationData.cowId,
+      event_type: 'Vaccination',
+      event_date: new Date().toISOString().split('T')[0], // Today as creation date
+      description: vaccinationData.vaccinationType,
+      performed_by: vaccinationData.assignedTo,
+      notes: vaccinationData.notes,
+      follow_up: vaccinationData.dueDate, // Due date becomes follow-up date
+      status: 'Scheduled'
+      // Removed vaccination_id since it doesn't exist in your schema
+    };
+    
+    const { data: healthEventDatas, error: healthEventError } = await supabase
+      .from('health_events')
+      .insert(healthEventData)
+      .select()
+      .single();
+    
+    if (healthEventError) throw healthEventError;
+    
+    return { vacScheduleData, healthEventData };
+  } catch (error) {
+    console.error('Error adding vaccination:', error);
+    throw error;
+  }
+};
+
+// Update vaccination status
+export const updateVaccination = async (vaccinationId, updateData) => {
+  try {
+    // Convert data to the database schema
+    const dbRecord = {
+      due_date: updateData.dueDate,
+      status: updateData.status,
+      completed_date: updateData.completedDate || null
+    };
+    
+    const { data, error } = await supabase
+      .from('vaccination_schedule')
+      .update(dbRecord)
+      .eq('id', vaccinationId)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error updating vaccination:', error);
+    throw error;
+  }
 };
 
 // Medications Tab Component

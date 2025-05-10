@@ -318,40 +318,37 @@ export const fetchVaccinationSchedule = async () => {
     // Check if table exists first
     await createVaccinationScheduleIfNeeded();
     
-    // For demo purposes, we'll use health_events with event_type = 'Vaccination' 
-    // and follow_up date set
-    const { data, error } = await supabase
-      .from('health_events')
+    // Get vaccinations from vaccination_schedule table
+    const { data: vacScheduleData, error: vacScheduleError } = await supabase
+      .from('vaccination_schedule')
       .select(`
         id,
         cow_id,
-        event_type,
-        description,
-        follow_up,
-        performed_by,
+        vaccination_type,
+        due_date,
         status,
+        assigned_to,
+        notes,
         cows:cow_id (id, name, tag_number)
       `)
-      .eq('event_type', 'Vaccination')
-      .not('follow_up', 'is', null)
-      .order('follow_up');
+      .not('status', 'eq', 'Completed')
+      .order('due_date');
     
-    if (error) throw error;
+    if (vacScheduleError) throw vacScheduleError;
     
     // Format data to match expected structure
-    return data.map(vac => ({
+    return vacScheduleData.map(vac => ({
       id: vac.id,
       cowId: vac.cow_id,
       cowName: vac.cows ? vac.cows.name : 'Unknown',
-      cowTag: vac.cows ? vac.cows.tag_number : 'Unknown',
-      vaccinationType: vac.description,
-      dueDate: vac.follow_up,
+      cowTag: vac.cows ? vac.cows.tag_number : 'N/A',
+      vaccinationType: vac.vaccination_type,
+      dueDate: vac.due_date,
       status: vac.status || 'Scheduled',
-      assignedTo: vac.performed_by || 'Unassigned'
+      assignedTo: vac.assigned_to || 'Unassigned'
     }));
   } catch (error) {
     console.error('Error fetching vaccination schedule:', error);
-    // For demo, return empty array so UI doesn't break
     return [];
   }
 };

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Users, Clipboard, Droplet, Thermometer, DollarSign, Settings, LogOut, X, Menu, IndianRupee } from 'lucide-react';
+import { Home, Users, Clipboard, Droplet, Thermometer, DollarSign, Settings, LogOut, X, Menu, IndianRupee, Package } from 'lucide-react';
+import { Toaster } from 'react-hot-toast';
 
 import AuthenticationScreen from './components/AuthenticationScreen';
 import FarmDashboard from './components/FarmDashboard';
@@ -8,6 +9,7 @@ import MilkProduction from './components/MilkProduction';
 import HealthManagement from './components/HealthManagement';
 import EmployeeManagement from './components/EmployeeManagement';
 import FinancesManagement from './components/FinanceManagement';
+import InventoryManagement from './components/InventoryManagement';
 import SettingsScreen from './components/Settings';
 import ResetPasswordPage from '../src/pages/ResetPasswordPage';
 
@@ -70,6 +72,8 @@ const App = () => {
         return <HealthManagement />;
       case 'employees':
         return <EmployeeManagement />;
+      case 'inventory':
+        return <InventoryManagement />;
       case 'finances':
         return <FinancesManagement/>;
       case 'settings':
@@ -91,6 +95,7 @@ const App = () => {
 
   return (
     <div className="h-screen bg-gray-100 flex">
+      <Toaster position="top-right" />
       {/* Sidebar */}
       <div className={`bg-white shadow-md z-20 transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-20'} flex flex-col`}>
         <div className="p-4 flex items-center justify-between border-b">
@@ -129,6 +134,13 @@ const App = () => {
             active={activeModule === 'health'} 
             collapsed={!sidebarOpen} 
             onClick={() => setActiveModule('health')}
+          />
+          <NavItem 
+            icon={<Package size={20} />} 
+            label="Inventory" 
+            active={activeModule === 'inventory'} 
+            collapsed={!sidebarOpen} 
+            onClick={() => setActiveModule('inventory')}
           />
           <NavItem 
             icon={<Users size={20} />} 
