@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Users, Clipboard, Droplet, Thermometer, DollarSign, Settings, LogOut,X,Menu, IndianRupee } from 'lucide-react';
+import { Home, Users, Clipboard, Droplet, Thermometer, DollarSign, Settings, LogOut, X, Menu, IndianRupee } from 'lucide-react';
 
 import AuthenticationScreen from './components/AuthenticationScreen';
 import FarmDashboard from './components/FarmDashboard';
@@ -9,16 +9,42 @@ import HealthManagement from './components/HealthManagement';
 import EmployeeManagement from './components/EmployeeManagement';
 import FinancesManagement from './components/FinanceManagement';
 import SettingsScreen from './components/Settings';
+import ResetPasswordPage from '../src/pages/ResetPasswordPage';
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeModule, setActiveModule] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [currentPage, setCurrentPage] = useState(null);
+
+  // Check for URL path on initial load and when URL changes
+  useEffect(() => {
+    const checkUrlPath = () => {
+      const pathname = window.location.pathname;
+      
+      // Handle reset-password path
+      if (pathname === '/reset-password') {
+        setCurrentPage('reset-password');
+      } else {
+        setCurrentPage(null);
+      }
+    };
+
+    // Check on initial load
+    checkUrlPath();
+
+    // Add event listener for URL changes
+    window.addEventListener('popstate', checkUrlPath);
+
+    // Cleanup listener
+    return () => window.removeEventListener('popstate', checkUrlPath);
+  }, []);
 
   // Handle authentication
   const handleAuthentication = () => {
     console.log('LoggedIn');
     setIsAuthenticated(true);
+    setCurrentPage(null); // Reset to main app after authentication
   };
 
   // Handle logout
@@ -53,6 +79,11 @@ const App = () => {
     }
   };
 
+  // Handle special pages like reset password
+  if (currentPage === 'reset-password') {
+    return <ResetPasswordPage onComplete={() => setCurrentPage(null)} />;
+  }
+
   // If not authenticated, show login screen
   if (!isAuthenticated) {
     return <AuthenticationScreen onAuthenticate={handleAuthentication} />;
@@ -63,10 +94,6 @@ const App = () => {
       {/* Sidebar */}
       <div className={`bg-white shadow-md z-20 transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-20'} flex flex-col`}>
         <div className="p-4 flex items-center justify-between border-b">
-          {/* <div className={`flex items-center ${!sidebarOpen && 'justify-center w-full'}`}>
-            <div className="w-10 h-10 rounded-full bg-green-600 flex items-center justify-center text-white font-bold">CF</div>
-            {sidebarOpen && <span className="ml-3 font-medium text-lg">CowFarm</span>}
-          </div> */}
           <button onClick={toggleSidebar} className={`text-gray-500 hover:text-gray-700 ${!sidebarOpen && 'hidden'}`}>
             <X size={20} />
           </button>
