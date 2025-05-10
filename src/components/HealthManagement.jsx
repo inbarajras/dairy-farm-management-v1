@@ -63,6 +63,15 @@ const HealthManagement = () => {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [dashboardStats, setDashboardStats] = useState({
+    upcomingTasks: [],
+    recentEvents: [],
+    healthTrend: { percentage: 0, direction: 'stable' }
+  });
+  const [isEditEventOpen, setIsEditEventOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [eventToDelete, setEventToDelete] = useState(null);
+
   
   // Load health data
   useEffect(() => {
@@ -90,6 +99,9 @@ const HealthManagement = () => {
           healthStats: stats,
           medications: medications
         });
+        
+        // Load dashboard data with real-time data
+        await loadDashboardData(events, vaccinations);
       } catch (err) {
         console.error('Error loading health data:', err);
         setError('Failed to load health data. Please refresh the page to try again.');
@@ -101,6 +113,74 @@ const HealthManagement = () => {
     loadHealthData();
   }, []);
   
+
+  const loadDashboardData = async (events = [], vaccinations = []) => {
+    try {
+      // Get today's date for filtering
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+      
+      // Calculate upcoming tasks (events with follow-up)
+      const upcomingTasks = events
+        .filter(event => event.followUp && new Date(event.followUp) >= today)
+        .sort((a, b) => new Date(a.followUp) - new Date(b.followUp))
+        .slice(0, 5)
+        .map(task => ({
+          id: task.id,
+          type: task.eventType,
+          date: new Date(task.followUp).toLocaleString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+          }),
+          description: task.description || '',
+          cowName: task.cowName || 'Unknown',
+          cowTag: task.cowTag || 'N/A'
+        }));
+      
+      // Get recent events (most recent first)
+      const recentEvents = [...events]
+        .sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate))
+        .slice(0, 5);
+      
+      // Calculate health trend
+      // Compare current month with previous month
+      const currentMonthEvents = events.filter(event => {
+        const eventDate = new Date(event.eventDate);
+        return eventDate.getMonth() === today.getMonth() && 
+               eventDate.getFullYear() === today.getFullYear();
+      });
+      
+      const lastMonthDate = new Date(today);
+      lastMonthDate.setMonth(today.getMonth() - 1);
+      
+      const lastMonthEvents = events.filter(event => {
+        const eventDate = new Date(event.eventDate);
+        return eventDate.getMonth() === lastMonthDate.getMonth() && 
+               eventDate.getFullYear() === lastMonthDate.getFullYear();
+      });
+      
+      let healthTrend = { percentage: 0, direction: 'stable' };
+      if (lastMonthEvents.length > 0) {
+        const change = ((currentMonthEvents.length - lastMonthEvents.length) / lastMonthEvents.length) * 100;
+        healthTrend = {
+          percentage: Math.abs(Math.round(change)),
+          direction: change > 0 ? 'increase' : change < 0 ? 'decrease' : 'stable'
+        };
+      }
+      
+      // Set dashboard data state
+      setDashboardStats({
+        upcomingTasks,
+        recentEvents,
+        healthTrend
+      });
+      
+    } catch (err) {
+      console.error('Error loading dashboard data:', err);
+    }
+  };
+
   // Filter health events based on search and filters
   const filteredEvents = healthData.healthEvents.filter(event => {
     // Search filter
@@ -139,12 +219,18 @@ const HealthManagement = () => {
     try {
       await addHealthEvent(eventData);
       
-      // Refresh health events list
+      // Refresh health events list and vaccination schedule
       const events = await fetchHealthEvents();
+      const vaccinations = await fetchVaccinationSchedule();
+      
       setHealthData(prev => ({
         ...prev,
-        healthEvents: events
+        healthEvents: events,
+        vaccinationSchedule: vaccinations
       }));
+      
+      // Update dashboard with fresh data
+      await loadDashboardData(events, vaccinations);
       
       // Close modal
       setIsAddEventOpen(false);
@@ -158,7 +244,74 @@ const HealthManagement = () => {
     setSelectedEvent(event);
     setIsViewEventModalOpen(true);
   };
+
+  const handleEditEvent = (event) => {
+    setSelectedEvent(event);
+    setIsEditEventOpen(true);
+  };
+
+  const handleUpdateEvent = async (eventId, updatedData) => {
+    try {
+      await updateHealthEvent(eventId, updatedData);
+      
+      // Refresh health events list and vaccination schedule
+      const events = await fetchHealthEvents();
+      const vaccinations = await fetchVaccinationSchedule();
+      
+      // Update state
+      setHealthData(prev => ({
+        ...prev,
+        healthEvents: events,
+        vaccinationSchedule: vaccinations
+      }));
+      
+      // Update dashboard with fresh data
+      await loadDashboardData(events, vaccinations);
+      
+      // Close modal
+      setIsEditEventOpen(false);
+    } catch (err) {
+      console.error('Error updating health event:', err);
+      alert('Failed to update health event. Please try again.');
+    }
+  };
+
+  // Show delete confirmation
+const handleDeleteConfirmation = (event) => {
+  setEventToDelete(event);
+  setIsDeleteConfirmOpen(true);
+};
+
+// Handle actual deletion
+const handleDeleteEvent = async () => {
+  if (!eventToDelete) return;
   
+  try {
+    await deleteHealthEvent(eventToDelete.id);
+    
+    // Refresh health events list and vaccination schedule
+    const events = await fetchHealthEvents();
+    const vaccinations = await fetchVaccinationSchedule();
+    
+    // Update state
+    setHealthData(prev => ({
+      ...prev,
+      healthEvents: events,
+      vaccinationSchedule: vaccinations
+    }));
+    
+    // Update dashboard with fresh data
+    await loadDashboardData(events, vaccinations);
+    
+    // Close modal and reset
+    setIsDeleteConfirmOpen(false);
+    setEventToDelete(null);
+  } catch (err) {
+    console.error('Error deleting health event:', err);
+    alert('Failed to delete health event. Please try again.');
+  }
+};
+
   // Prepare chart data for health issues
   const healthIssuesData = healthData.healthStats.commonIssues;
   const COLORS = ['#2E7D32', '#1565C0', '#FFA000', '#6D4C41', '#9E9E9E'];
@@ -283,7 +436,7 @@ const HealthManagement = () => {
                     </div>
                   </div>
                   <div className="mt-2 text-xs text-red-600 flex items-center">
-                    <span>Requires attention</span>
+                    <span>{healthData.healthStats.activeCases > 0 ? 'Requires attention' : 'No active cases'}</span>
                   </div>
                 </div>
               </div>
@@ -301,7 +454,11 @@ const HealthManagement = () => {
                     </div>
                   </div>
                   <div className="mt-2 text-xs text-green-600 flex items-center">
-                    <span>Next: Today at 2:00 PM</span>
+                    <span>
+                      {dashboardStats.upcomingTasks && dashboardStats.upcomingTasks.length > 0 
+                        ? `Next: ${dashboardStats.upcomingTasks[0]?.date || 'Coming soon'}` 
+                        : 'No upcoming checkups'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -320,9 +477,20 @@ const HealthManagement = () => {
                   </div>
                   <div className="mt-2 text-xs text-amber-600 flex items-center">
                     <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                      <path 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round" 
+                        strokeWidth={2} 
+                        d={dashboardStats.healthTrend.direction === 'decrease' 
+                            ? "M5 10l7-7m0 0l7 7m-7-7v18" 
+                            : "M19 14l-7 7m0 0l-7-7m7 7V3"}
+                      />
                     </svg>
-                    <span>25% decrease from last month</span>
+                    <span>
+                      {dashboardStats.healthTrend.percentage > 0 
+                        ? `${dashboardStats.healthTrend.percentage}% ${dashboardStats.healthTrend.direction} from last month` 
+                        : 'No change from last month'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -340,7 +508,7 @@ const HealthManagement = () => {
                     </div>
                   </div>
                   <div className="mt-2 text-xs text-blue-600 flex items-center">
-                    <span>Herd immunity: Good</span>
+                    <span>Herd immunity: {healthData.healthStats.totalVaccinations > 50 ? 'Good' : 'Needs attention'}</span>
                   </div>
                 </div>
               </div>
@@ -529,10 +697,10 @@ const HealthManagement = () => {
                   </select>
                 </div>
                 
-                <button className="flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300">
+                {/* <button className="flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300">
                   <Download size={16} className="mr-2" />
                   Export
-                </button>
+                </button> */}
               </div>
             </div>
             
@@ -593,12 +761,26 @@ const HealthManagement = () => {
                         {event.followUp ? formatDate(event.followUp) : '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button 
-                          onClick={() => handleViewEvent(event)}
-                          className="text-green-600 hover:text-green-900 transition-colors duration-200"
-                        >
-                          View
-                        </button>
+                        <div className="flex justify-end space-x-2">
+                          <button 
+                            onClick={() => handleViewEvent(event)}
+                            className="text-blue-600 hover:text-blue-900 transition-colors duration-200"
+                          >
+                            View
+                          </button>
+                          <button 
+                            onClick={() => handleEditEvent(event)}
+                            className="text-green-600 hover:text-green-900 transition-colors duration-200"
+                          >
+                            Edit
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteConfirmation(event)}
+                            className="text-red-600 hover:text-red-900 transition-colors duration-200"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -673,6 +855,25 @@ const HealthManagement = () => {
         <ViewHealthEventModal
           event={selectedEvent}
           onClose={() => setIsViewEventModalOpen(false)}
+        />
+      )}
+      
+      {isEditEventOpen && selectedEvent && (
+        <EditHealthEventModal
+          event={selectedEvent}
+          onClose={() => setIsEditEventOpen(false)}
+          onUpdate={handleUpdateEvent}
+        />
+      )}
+      
+      {isDeleteConfirmOpen && eventToDelete && (
+        <DeleteConfirmationModal
+          event={eventToDelete}
+          onClose={() => {
+            setIsDeleteConfirmOpen(false);
+            setEventToDelete(null);
+          }}
+          onConfirm={handleDeleteEvent}
         />
       )}
     </div>
@@ -2017,6 +2218,434 @@ const ViewHealthEventModal = ({ event, onClose }) => {
             className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300"
           >
             Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const EditHealthEventModal = ({ event, onClose, onUpdate }) => {
+  const [formData, setFormData] = useState({
+    cowId: event.cowId || '',
+    eventType: event.eventType || 'Examination',
+    eventDate: event.eventDate || new Date().toISOString().split('T')[0],
+    description: event.description || '',
+    performedBy: event.performedBy || '',
+    medications: Array.isArray(event.medications) && event.medications.length > 0 ? 
+      event.medications : [{ name: '', dosage: '', method: '' }],
+    notes: event.notes || '',
+    followUp: event.followUp || '',
+    status: event.status || 'Completed'
+  });
+  const [cows, setCows] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  
+  // Load cows for selection (same as AddHealthEventModal)
+  useEffect(() => {
+    const loadCows = async () => {
+      try {
+        const cowsList = await fetchCowsForSelection();
+        setCows(cowsList);
+      } catch (err) {
+        console.error('Error loading cows:', err);
+        setError('Failed to load cow list');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadCows();
+  }, []);
+  
+  // Handle form field changes (same as AddHealthEventModal)
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
+  };
+  
+  // Handle medication field changes (same as AddHealthEventModal)
+  const handleMedicationChange = (index, field, value) => {
+    const updatedMeds = [...formData.medications];
+    updatedMeds[index][field] = value;
+    
+    setFormData({
+      ...formData,
+      medications: updatedMeds
+    });
+  };
+  
+  // Add a new medication field (same as AddHealthEventModal)
+  const addMedication = () => {
+    setFormData({
+      ...formData,
+      medications: [...formData.medications, { name: '', dosage: '', method: '' }]
+    });
+  };
+  
+  // Remove a medication field (same as AddHealthEventModal)
+  const removeMedication = (index) => {
+    const updatedMeds = [...formData.medications];
+    updatedMeds.splice(index, 1);
+    
+    setFormData({
+      ...formData,
+      medications: updatedMeds
+    });
+  };
+  
+  // Handle form submission
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    try {
+      setIsSubmitting(true);
+      await onUpdate(event.id, formData);
+      onClose();
+    } catch (err) {
+      setError('Failed to update health event');
+      setIsSubmitting(false);
+    }
+  };
+  
+  // Return the same modal structure as AddHealthEventModal but with different title
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto border border-gray-100">
+        <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Edit Health Event</h3>
+          <button 
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-500 transition-colors duration-200"
+            disabled={isSubmitting}
+          >
+            <X size={20} />
+          </button>
+        </div>
+        
+        {error && (
+          <div className="mx-6 mt-4 p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg">
+            {error}
+          </div>
+        )}
+        
+        <form onSubmit={handleSubmit}>
+          {/* Form fields are identical to AddHealthEventModal */}
+          <div className="px-6 py-4 space-y-6">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div>
+                <label htmlFor="cowId" className="block text-sm font-medium text-gray-700 mb-1">
+                  Cow *
+                </label>
+                {isLoading ? (
+                  <div className="animate-pulse h-10 bg-gray-200 rounded-lg"></div>
+                ) : (
+                  <select
+                    id="cowId"
+                    name="cowId"
+                    value={formData.cowId}
+                    onChange={handleChange}
+                    required
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  >
+                    <option value="">Select a cow</option>
+                    {cows.map(cow => (
+                      <option key={cow.id} value={cow.id}>
+                        {cow.name} ({cow.tag_number})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              
+              <div>
+                <label htmlFor="eventType" className="block text-sm font-medium text-gray-700 mb-1">
+                  Event Type *
+                </label>
+                <select
+                  id="eventType"
+                  name="eventType"
+                  value={formData.eventType}
+                  onChange={handleChange}
+                  required
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                >
+                  <option value="Examination">Examination</option>
+                  <option value="Vaccination">Vaccination</option>
+                  <option value="Treatment">Treatment</option>
+                  <option value="Surgery">Surgery</option>
+                  <option value="Hoof Trimming">Hoof Trimming</option>
+                  <option value="Regular Checkup">Regular Checkup</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div>
+                <label htmlFor="eventDate" className="block text-sm font-medium text-gray-700 mb-1">
+                  Date *
+                </label>
+                <input
+                  type="date"
+                  id="eventDate"
+                  name="eventDate"
+                  value={formData.eventDate}
+                  onChange={handleChange}
+                  required
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                />
+              </div>
+              
+              <div>
+                <label htmlFor="performedBy" className="block text-sm font-medium text-gray-700 mb-1">
+                  Performed By *
+                </label>
+                <select
+                  id="performedBy"
+                  name="performedBy"
+                  value={formData.performedBy}
+                  onChange={handleChange}
+                  required
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                >
+                  <option value="">Select a person</option>
+                  <option value="Dr. Smith">Dr. Smith</option>
+                  <option value="Dr. Johnson">Dr. Johnson</option>
+                  <option value="Mike Peterson">Mike Peterson</option>
+                  <option value="Farm Staff">Farm Staff</option>
+                </select>
+              </div>
+            </div>
+            
+            <div>
+              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+                Description *
+              </label>
+              <input
+                type="text"
+                id="description"
+                name="description"
+                value={formData.description}
+                onChange={handleChange}
+                required
+                className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                placeholder="Brief description of the health event"
+              />
+            </div>
+            
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Medications Used
+                </label>
+                <button
+                  type="button"
+                  onClick={addMedication}
+                  className="inline-flex items-center text-sm text-green-600 hover:text-green-500"
+                >
+                  <Plus size={16} className="mr-1" />
+                  Add Medication
+                </button>
+              </div>
+              
+              {formData.medications.map((med, index) => (
+                <div key={index} className="grid grid-cols-3 gap-4 mb-4 border-b pb-4 last:border-0">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">
+                      Medication Name
+                    </label>
+                    <input
+                      type="text"
+                      value={med.name}
+                      onChange={(e) => handleMedicationChange(index, 'name', e.target.value)}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                      placeholder="e.g. Antibiotic"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">
+                      Dosage
+                    </label>
+                    <input
+                      type="text"
+                      value={med.dosage}
+                      onChange={(e) => handleMedicationChange(index, 'dosage', e.target.value)}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                      placeholder="e.g. 10ml"
+                    />
+                  </div>
+                  
+                  <div className="flex items-end">
+                    <div className="flex-grow">
+                      <label className="block text-xs text-gray-500 mb-1">
+                        Administration Method
+                      </label>
+                      <select
+                        value={med.method}
+                        onChange={(e) => handleMedicationChange(index, 'method', e.target.value)}
+                        className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                      >
+                        <option value="">Select method</option>
+                        <option value="Injection">Injection</option>
+                        <option value="Oral">Oral</option>
+                        <option value="Topical">Topical</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    
+                    {formData.medications.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeMedication(index)}
+                        className="ml-2 p-2 text-red-500 hover:text-red-700 focus:outline-none"
+                      >
+                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            <div>
+              <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
+                Notes
+              </label>
+              <textarea
+                id="notes"
+                name="notes"
+                rows={3}
+                value={formData.notes}
+                onChange={handleChange}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                placeholder="Any additional information about this health event..."
+              ></textarea>
+            </div>
+            
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div>
+                <label htmlFor="followUp" className="block text-sm font-medium text-gray-700 mb-1">
+                  Follow-up Date
+                </label>
+                <input
+                  type="date"
+                  id="followUp"
+                  name="followUp"
+                  value={formData.followUp}
+                  onChange={handleChange}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                />
+              </div>
+              
+              <div>
+                <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
+                  Status *
+                </label>
+                <select
+                  id="status"
+                  name="status"
+                  value={formData.status}
+                  onChange={handleChange}
+                  required
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                >
+                  <option value="Completed">Completed</option>
+                  <option value="In progress">In progress</option>
+                  <option value="Monitoring">Monitoring</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          
+          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+            <button
+              type="button"
+              onClick={onClose}
+              className="py-2 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300"
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300"
+            >
+              {isSubmitting ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Updating...
+                </>
+              ) : 'Update Event'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// Add this modal component
+const DeleteConfirmationModal = ({ event, onClose, onConfirm }) => {
+  if (!event) return null;
+  
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-gray-100">
+        <div className="h-1 bg-gradient-to-r from-red-400 to-red-500"></div>
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900">Confirm Deletion</h3>
+        </div>
+        
+        <div className="px-6 py-4">
+          <div className="flex items-center justify-center mb-4">
+            <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </div>
+          </div>
+          
+          <p className="text-center text-gray-700 mb-2">
+            Are you sure you want to delete this health event?
+          </p>
+          
+          <p className="text-center text-sm text-gray-500 mb-4">
+            <span className="font-medium">{event.eventType}</span> for <span className="font-medium">{event.cowName}</span> on {formatDate(event.eventDate)}
+          </p>
+          
+          <p className="text-center text-sm text-red-600 font-medium mb-2">
+            This action cannot be undone.
+          </p>
+        </div>
+        
+        <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+          <button
+            type="button"
+            onClick={onClose}
+            className="py-2 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-300"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-red-600 to-red-700 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all duration-300"
+          >
+            Delete
           </button>
         </div>
       </div>
