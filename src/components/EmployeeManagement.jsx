@@ -21,7 +21,8 @@ import {
   deletePerformanceReview,
   getEmployeePerformanceReviews
 } from './services/employeeService';
-import emp from './emp.jpg';
+import emp from '../assets/images/emp.jpg';
+import LoadingSpinner from './LoadingSpinner';
 
 // Status badge colors - unchanged
 const statusColors = {
@@ -404,14 +405,7 @@ const EmployeeManagement = () => {
   
   // Display loading state
   if (isLoading && !selectedEmployee && employees.length === 0) {
-    return (
-      <div className="h-full bg-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading employees...</p>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner message="Loading Employees" />;
   }
   
   // Display error state
@@ -433,7 +427,7 @@ const EmployeeManagement = () => {
   }
   
   return (
-    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
+    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30 overflow-y-auto">
       {selectedEmployee ? (
         <EmployeeProfile 
           employee={selectedEmployee} 
@@ -443,7 +437,7 @@ const EmployeeManagement = () => {
           isLoading={isLoading}
         />
       ) : (
-        <div className="px-6 py-6">
+        <div className="px-4 sm:px-6 py-4 sm:py-6">
           {/* Header with gradient text */}
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Employee Management</h1>
@@ -457,8 +451,8 @@ const EmployeeManagement = () => {
           </div>
 
           {/* Tabs with consistent styling */}
-          <div className="mb-6">
-            <nav className="flex space-x-4 border-b border-gray-200 overflow-x-auto">
+          <div className="mb-6 overflow-x-auto">
+            <nav className="flex space-x-4 border-b border-gray-200 min-w-[500px]">
               <button
                 onClick={() => setActiveTab('employees')}
                 className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap transition-all duration-300 ${
@@ -531,8 +525,8 @@ const EmployeeManagement = () => {
           {activeTab === 'employees' && (
             <div>
               {/* Search and Filters */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 mb-6">
+                <div className="col-span-1">
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                       <Search className="h-5 w-5 text-gray-400" />
@@ -547,7 +541,7 @@ const EmployeeManagement = () => {
                   </div>
                 </div>
 
-                <div>
+                <div className="col-span-1">
                   <select
                     className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm"
                     value={filters.department}
@@ -560,7 +554,7 @@ const EmployeeManagement = () => {
                   </select>
                 </div>
 
-                <div>
+                <div className="col-span-1">
                   <select
                     className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm"
                     value={filters.status}
@@ -585,7 +579,7 @@ const EmployeeManagement = () => {
                   <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-green-500"></div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 mb-6">
                   {currentEmployees.length > 0 ? (
                     currentEmployees.map(employee => (
                       <EmployeeCard 
@@ -611,34 +605,52 @@ const EmployeeManagement = () => {
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="flex justify-center mt-6">
-                  <div className="flex space-x-2">
+                <div className="flex justify-center mt-6 overflow-x-auto py-2">
+                  <div className="flex space-x-2 min-w-max">
                     <button
                       onClick={() => setCurrentPage(currentPage - 1)}
                       disabled={currentPage === 1}
-                      className={`w-10 h-10 flex items-center justify-center rounded-md transition-all duration-300 ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 shadow'}`}
+                      className={`w-9 h-9 flex items-center justify-center rounded-md transition-all duration-300 ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 shadow'}`}
                     >
                       <ChevronLeft size={16} />
                     </button>
                     
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                      <button
-                        key={page}
-                        onClick={() => setCurrentPage(page)}
-                        className={`w-10 h-10 flex items-center justify-center rounded-md transition-all duration-300 ${
-                          currentPage === page 
-                            ? 'bg-gradient-to-r from-green-500 to-blue-600 text-white shadow-md' 
-                            : 'bg-white text-gray-700 hover:bg-gray-50 shadow'
-                        }`}
-                      >
-                        {page}
-                      </button>
-                    ))}
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      // Show first page, last page, current page and neighbors
+                      let pageToShow;
+                      if (totalPages <= 5) {
+                        // If 5 or fewer pages, show all
+                        pageToShow = i + 1;
+                      } else if (currentPage <= 3) {
+                        // Near start, show first 5
+                        pageToShow = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        // Near end, show last 5
+                        pageToShow = totalPages - 4 + i;
+                      } else {
+                        // In middle, show current and neighbors
+                        pageToShow = currentPage - 2 + i;
+                      }
+                      
+                      return (
+                        <button
+                          key={pageToShow}
+                          onClick={() => setCurrentPage(pageToShow)}
+                          className={`w-9 h-9 flex items-center justify-center rounded-md transition-all duration-300 ${
+                            currentPage === pageToShow 
+                              ? 'bg-gradient-to-r from-green-500 to-blue-600 text-white shadow-md' 
+                              : 'bg-white text-gray-700 hover:bg-gray-50 shadow'
+                          }`}
+                        >
+                          {pageToShow}
+                        </button>
+                      );
+                    })}
                     
                     <button
                       onClick={() => setCurrentPage(currentPage + 1)}
                       disabled={currentPage === totalPages}
-                      className={`w-10 h-10 flex items-center justify-center rounded-md transition-all duration-300 ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 shadow'}`}
+                      className={`w-9 h-9 flex items-center justify-center rounded-md transition-all duration-300 ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 shadow'}`}
                     >
                       <ChevronRight size={16} />
                     </button>
@@ -740,38 +752,38 @@ const EmployeeCard = ({ employee, onClick, onRecordAttendance }) => {
           <img 
             src={employee.image} 
             alt={employee.name} 
-            className="w-16 h-16 object-cover rounded-full bg-gray-200 border-2 border-blue-100"
+            className="w-16 h-16 object-cover rounded-full bg-gray-200 border-2 border-blue-100 flex-shrink-0"
           />
-          <div className="ml-4">
-            <h3 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">{employee.name}</h3>
-            <p className="text-sm text-gray-600">{employee.jobTitle}</p>
+          <div className="ml-4 overflow-hidden">
+            <h3 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 truncate">{employee.name}</h3>
+            <p className="text-sm text-gray-600 truncate">{employee.jobTitle}</p>
           </div>
         </div>
         
         <div className="border-t pt-3">
-          <div className="flex items-center mb-2">
-            <Briefcase size={16} className="text-gray-400 mr-2" />
-            <span className="text-sm text-gray-600">{employee.department}</span>
+          <div className="flex items-center mb-2 overflow-hidden">
+            <Briefcase size={16} className="text-gray-400 mr-2 flex-shrink-0" />
+            <span className="text-sm text-gray-600 truncate">{employee.department}</span>
           </div>
-          <div className="flex items-center mb-2">
-            <Mail size={16} className="text-gray-400 mr-2" />
-            <span className="text-sm text-gray-600">{employee.email}</span>
+          <div className="flex items-center mb-2 overflow-hidden">
+            <Mail size={16} className="text-gray-400 mr-2 flex-shrink-0" />
+            <span className="text-sm text-gray-600 truncate">{employee.email}</span>
           </div>
-          <div className="flex items-center">
-            <Phone size={16} className="text-gray-400 mr-2" />
-            <span className="text-sm text-gray-600">{employee.phone}</span>
+          <div className="flex items-center overflow-hidden">
+            <Phone size={16} className="text-gray-400 mr-2 flex-shrink-0" />
+            <span className="text-sm text-gray-600 truncate">{employee.phone}</span>
           </div>
         </div>
         
-        <div className="mt-3 pt-3 border-t flex justify-between items-center">
+        <div className="mt-3 pt-3 border-t flex flex-wrap justify-between items-center gap-2">
           <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusColors[employee.status]}`}>
             {employee.status}
           </span>
-          <span className="text-sm text-gray-500">
+          <span className="text-sm text-gray-500 truncate">
             Since {formatDate(employee.dateJoined)}
           </span>
         </div>
-        <div className="mt-4 pt-2 border-t flex justify-end space-x-4" onClick={(e) => e.stopPropagation()}>
+        <div className="mt-4 pt-2 border-t flex justify-end" onClick={(e) => e.stopPropagation()}>
           <button 
             className="p-1 text-green-600 hover:text-green-900 transition-colors duration-200 hover:bg-green-50 rounded-full flex items-center"
             onClick={(e) => {
@@ -793,18 +805,14 @@ const EmployeeProfile = ({ employee, onClose, onEdit, onRecordAttendance, isLoad
   const [activeTab, setActiveTab] = useState('overview');
 
   if (isLoading) {
-    return (
-      <div className="h-full bg-white flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
-      </div>
-    );
+    return <LoadingSpinner message={`Loading ${employee.name}'s Profile`} />;
   }
   
   return (
-    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
+    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30 overflow-y-auto">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-100">
-        <div className="container mx-auto px-6 py-4">
+      <div className="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-10">
+        <div className="container mx-auto px-4 md:px-6 py-4">
           <div className="flex items-center">
             <button 
               onClick={onClose}
@@ -812,8 +820,8 @@ const EmployeeProfile = ({ employee, onClose, onEdit, onRecordAttendance, isLoad
             >
               <ChevronLeft size={24} className="text-gray-600" />
             </button>
-            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">{employee.name}</h1>
-            <span className="ml-4 px-3 py-1 bg-gradient-to-r from-green-100 to-blue-100 text-green-800 rounded-full text-sm font-medium">
+            <h1 className="text-lg md:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700 truncate">{employee.name}</h1>
+            <span className="ml-2 md:ml-4 px-2 md:px-3 py-1 bg-gradient-to-r from-green-100 to-blue-100 text-green-800 rounded-full text-xs md:text-sm font-medium whitespace-nowrap">
               {employee.job_title}
             </span>
           </div>
@@ -821,44 +829,44 @@ const EmployeeProfile = ({ employee, onClose, onEdit, onRecordAttendance, isLoad
       </div>
       
       {/* Body */}
-      <div className="container mx-auto px-6 py-8">
+      <div className="container mx-auto px-4 md:px-6 py-4 md:py-8">
         <div className="flex flex-col lg:flex-row">
           {/* Left Column - Basic Info */}
-          <div className="lg:w-1/3 mb-8 lg:mb-0 lg:pr-8">
+          <div className="lg:w-1/3 mb-6 lg:mb-0 lg:pr-6">
             <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
               <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-              <div className="p-6 flex flex-col items-center">
+              <div className="p-4 md:p-6 flex flex-col items-center">
                 <img 
                   src={emp} 
                   alt={employee.name} 
-                  className="w-32 h-32 object-cover rounded-full bg-gray-200 mb-4 border-4 border-green-100"
+                  className="w-24 md:w-32 h-24 md:h-32 object-cover rounded-full bg-gray-200 mb-4 border-4 border-green-100"
                 />
-                <h2 className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">{employee.name}</h2>
-                <p className="text-gray-600">{employee.job_title}</p>
+                <h2 className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 text-center">{employee.name}</h2>
+                <p className="text-gray-600 text-center">{employee.job_title}</p>
                 <span className={`mt-2 px-3 py-1 text-xs font-semibold rounded-full ${statusColors[employee.status]}`}>
                   {employee.status}
                 </span>
                 
                 <div className="w-full mt-6 space-y-3">
-                  <div className="flex items-center">
-                    <Briefcase size={16} className="text-gray-400 mr-3" />
-                    <span className="text-gray-600">{employee.department}</span>
+                  <div className="flex items-start">
+                    <Briefcase size={16} className="text-gray-400 mr-3 mt-0.5 flex-shrink-0" />
+                    <span className="text-gray-600 break-words">{employee.department}</span>
                   </div>
-                  <div className="flex items-center">
-                    <Mail size={16} className="text-gray-400 mr-3" />
-                    <span className="text-gray-600">{employee.email}</span>
+                  <div className="flex items-start">
+                    <Mail size={16} className="text-gray-400 mr-3 mt-0.5 flex-shrink-0" />
+                    <span className="text-gray-600 break-words">{employee.email}</span>
                   </div>
-                  <div className="flex items-center">
-                    <Phone size={16} className="text-gray-400 mr-3" />
-                    <span className="text-gray-600">{employee.phone}</span>
+                  <div className="flex items-start">
+                    <Phone size={16} className="text-gray-400 mr-3 mt-0.5 flex-shrink-0" />
+                    <span className="text-gray-600 break-words">{employee.phone}</span>
                   </div>
-                  <div className="flex items-center">
-                    <MapPin size={16} className="text-gray-400 mr-3" />
-                    <span className="text-gray-600">{employee.address || 'No address provided'}</span>
+                  <div className="flex items-start">
+                    <MapPin size={16} className="text-gray-400 mr-3 mt-0.5 flex-shrink-0" />
+                    <span className="text-gray-600 break-words">{employee.address || 'No address provided'}</span>
                   </div>
-                  <div className="flex items-center">
-                    <Calendar size={16} className="text-gray-400 mr-3" />
-                    <span className="text-gray-600">Joined: {formatDate(employee.date_joined)}</span>
+                  <div className="flex items-start">
+                    <Calendar size={16} className="text-gray-400 mr-3 mt-0.5 flex-shrink-0" />
+                    <span className="text-gray-600 break-words">Joined: {formatDate(employee.date_joined)}</span>
                   </div>
                 </div>
                 
@@ -886,7 +894,7 @@ const EmployeeProfile = ({ employee, onClose, onEdit, onRecordAttendance, isLoad
             <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
               <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
               <div className="border-b border-gray-200 overflow-x-auto">
-                <nav className="flex -mb-px space-x-8 px-6">
+                <nav className="flex -mb-px px-4 md:px-6 space-x-4 md:space-x-8 min-w-[400px]">
                   <button
                     onClick={() => setActiveTab('overview')}
                     className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-300 ${
@@ -931,7 +939,7 @@ const EmployeeProfile = ({ employee, onClose, onEdit, onRecordAttendance, isLoad
               </div>
               
               {/* Tab Content */}
-              <div className="p-6">
+              <div className="p-4 md:p-6 overflow-x-auto">
                 {activeTab === 'overview' && (
                   <OverviewTab employee={employee} />
                 )}
@@ -1353,11 +1361,7 @@ const AttendanceDetailsTab = ({ employee }) => {
   const metrics = calculateAttendanceMetrics();
   
   if (isLoading) {
-    return (
-      <div className="flex justify-center py-12">
-        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-green-500"></div>
-      </div>
-    );
+    <LoadingSpinner message="Loading Attendance Data" />
   }
   
   if (error) {
@@ -1407,7 +1411,7 @@ const AttendanceDetailsTab = ({ employee }) => {
       
       {/* Attendance History Table */}
       <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
           <h3 className="text-lg font-medium text-gray-800">Attendance History</h3>
         </div>
         
@@ -1556,11 +1560,7 @@ const PerformanceDetailsTab = ({ employee }) => {
   };
   
   if (isLoading) {
-    return (
-      <div className="flex justify-center py-12">
-        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-green-500"></div>
-      </div>
-    );
+    <LoadingSpinner message="Loading Performance Data" />
   }
   
   if (error) {
@@ -4385,14 +4385,14 @@ const PerformanceTab = ({
       
       {/* Delete Confirmation Dialog */}
       {confirmDeleteOpen && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 my-8 mx-auto">
             <div className="h-1 bg-gradient-to-r from-red-400 to-red-500 -mt-6 mb-4"></div>
             <h3 className="text-lg font-medium text-gray-900 mb-4">Cancel Performance Review</h3>
             <p className="text-sm text-gray-500 mb-4">
               Are you sure you want to cancel this performance review? This action cannot be undone.
             </p>
-            <div className="flex justify-end space-x-3">
+            <div className="flex flex-wrap justify-end gap-3">
               <button
                 onClick={handleCancelDelete}
                 className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-all duration-300"
@@ -4469,10 +4469,10 @@ const AddEmployeeModal = ({ onClose, onSubmit, isLoading }) => {
   };
   
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-100">
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-100 my-8 mx-auto">
         <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
           <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Add New Employee</h3>
           <button 
             onClick={onClose}
@@ -4803,12 +4803,12 @@ const AddEmployeeModal = ({ onClose, onSubmit, isLoading }) => {
                 </div>
               )}
               
-              <div className="mt-8 flex justify-between">
+              <div className="px-4 sm:px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3 sticky bottom-0 bg-white z-10">
                 {currentStep > 1 ? (
                   <button
                     type="button"
                     onClick={prevStep}
-                    className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                    className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"
                   >
                     Back
                   </button>
@@ -4816,7 +4816,7 @@ const AddEmployeeModal = ({ onClose, onSubmit, isLoading }) => {
                   <button
                     type="button"
                     onClick={onClose}
-                    className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                    className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"
                   >
                     Cancel
                   </button>
@@ -4826,7 +4826,7 @@ const AddEmployeeModal = ({ onClose, onSubmit, isLoading }) => {
                   <button
                     type="button"
                     onClick={nextStep}
-                    className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                    className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none"
                   >
                     Next
                   </button>
@@ -4834,7 +4834,7 @@ const AddEmployeeModal = ({ onClose, onSubmit, isLoading }) => {
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className={`py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${isLoading ? 'opacity-75 cursor-not-allowed' : ''}`}
+                    className={`py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none ${isLoading ? 'opacity-75 cursor-not-allowed' : ''}`}
                   >
                     {isLoading ? (
                       <>
@@ -4889,19 +4889,17 @@ const EditEmployeeModal = ({ employee, onClose, onSave }) => {
   };
   
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-screen overflow-y-auto">
-        <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-blue-50 flex justify-between items-center">
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto my-8 mx-auto">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-blue-50 flex justify-between items-center sticky top-0 z-10">
           <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-700">Edit Employee</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <X size={20} className="h-6 w-6" />
           </button>
         </div>
         
         <form onSubmit={handleSubmit}>
-          <div className="px-6 py-4 space-y-6">
+          <div className="px-4 sm:px-6 py-4 space-y-6">
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div>
                 <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
@@ -5067,17 +5065,17 @@ const EditEmployeeModal = ({ employee, onClose, onSave }) => {
             </div>
           </div>
           
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+          <div className="px-4 sm:px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3 sticky bottom-0 bg-white z-10">
             <button
               type="button"
               onClick={onClose}
-              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none transition-all duration-300"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 focus:outline-none transition-all duration-300"
             >
               Save Changes
             </button>
@@ -5163,19 +5161,17 @@ const RecordAttendanceModal = ({ employee, onClose, onSave }) => {
   };
   
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full">
-        <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-blue-50 flex justify-between items-center">
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full my-8 mx-auto">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-blue-50 flex justify-between items-center">
           <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-700">Record Attendance</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <X size={20} className="h-6 w-6" />
           </button>
         </div>
         
-        <form onSubmit={handleSubmit}>
-          <div className="px-6 py-4 space-y-4">
+        <form onSubmit={handleSubmit} className="overflow-y-auto max-h-[70vh]">
+          <div className="px-4 sm:px-6 py-4 space-y-4">
             <div className="flex items-center">
               <div className="flex-shrink-0 h-12 w-12">
                 <img className="h-12 w-12 rounded-full" src={emp} alt={employee.name} />
@@ -5288,17 +5284,17 @@ const RecordAttendanceModal = ({ employee, onClose, onSave }) => {
             </div>
           </div>
           
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+          <div className="px-4 sm:px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 focus:outline-none"
             >
               Save Attendance
             </button>
@@ -5426,10 +5422,10 @@ const PerformanceReviewModal = ({
   if (!isOpen) return null;
   
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md my-8 mx-auto">
         <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
           <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">
             {isEditing ? 'Edit Performance Review' : 'Schedule Performance Review'}
           </h3>
@@ -5438,8 +5434,8 @@ const PerformanceReviewModal = ({
           </button>
         </div>
         
-        <form onSubmit={handleSubmit}>
-          <div className="px-6 py-4 space-y-4">
+        <form onSubmit={handleSubmit} className="overflow-y-auto max-h-[70vh]">
+          <div className="px-4 sm:px-6 py-4 space-y-4">
             <div>
               <label htmlFor="employee_id" className="block text-sm font-medium text-gray-700 mb-1">
                 Employee *
@@ -5591,7 +5587,7 @@ const PerformanceReviewModal = ({
             </div>
           </div>
           
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+          <div className="px-4 sm:px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3 sticky bottom-0 bg-white z-10">
             <button
               type="button"
               onClick={onClose}

@@ -12,6 +12,7 @@ import FinancesManagement from './components/FinanceManagement';
 import InventoryManagement from './components/InventoryManagement';
 import SettingsScreen from './components/Settings';
 import ResetPasswordPage from '../src/pages/ResetPasswordPage';
+import ToastContainer from './components/utils/ToastContainer';
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -96,6 +97,7 @@ const App = () => {
   return (
     <div className="h-screen bg-gray-100 flex">
       <Toaster position="top-right" />
+      <ToastContainer></ToastContainer>
       {/* Sidebar */}
       <div className={`bg-white shadow-md z-20 transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-20'} flex flex-col`}>
         <div className="p-4 flex items-center justify-between border-b">

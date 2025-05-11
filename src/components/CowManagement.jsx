@@ -3,9 +3,11 @@ import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Calendar
 import { fetchCows, addCow, updateCow, deleteCow, recordHealthEvent, recordMilkProduction, recordBreedingEvent,
   fetchRecentActivity,fetchBreedingEvents,fetchHealthHistory,fetchReproductiveStatus
  } from './services/cowService';
-import cowSample from './cow.jpg';
+import cowSample from '../assets/images/cow.jpg';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area } from 'recharts';
 import { supabase } from '../lib/supabase';
+import LoadingSpinner from './LoadingSpinner';
+import {toast} from './utils/ToastContainer';
 
 // Status badge colors
 const statusColors = {
@@ -368,26 +370,26 @@ const CowManagement = () => {
   };
 
   if (loading && cows.length === 0) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500 mx-auto"></div>
-          <p className="mt-4 text-gray-700">Loading cow data...</p>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner message="Loading Cows" />;
   }
 
   if (error && cows.length === 0) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
-        <div className="text-center p-6 bg-white rounded-lg shadow-md">
-          <div className="text-red-500 text-5xl mb-4">⚠️</div>
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">Error Loading Data</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
+      <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
+        <div className="bg-white rounded-xl shadow-xl p-8 max-w-md mx-auto border border-red-100 relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-500 to-orange-500"></div>
+          <div className="flex items-center justify-center mb-4">
+            <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center">
+              <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+          </div>
+          <h2 className="text-xl font-semibold text-center text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-orange-600 mb-2">Unable to Load Data</h2>
+          <p className="text-gray-600 text-center mb-6">{error}</p>
           <button 
             onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-lg hover:opacity-90 transition-opacity"
+            className="w-full px-4 py-2.5 bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-lg hover:from-red-600 hover:to-orange-600 transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 shadow-md"
           >
             Try Again
           </button>
@@ -397,7 +399,8 @@ const CowManagement = () => {
   }
 
   return (
-    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
+    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30 overflow-y-auto">
+      {/* Success and error messages */}
       {successMessage && (
         <div className="fixed top-6 right-6 bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-md shadow-lg z-50 animate-fadeIn">
           <p>{successMessage}</p>
@@ -411,7 +414,7 @@ const CowManagement = () => {
       )}
       
       {selectedCow ? (
-       <CowProfile 
+      <CowProfile 
           cow={selectedCow} 
           onClose={closeCowProfile} 
           onEdit={() => toggleEditModal(selectedCow)}
@@ -420,7 +423,7 @@ const CowManagement = () => {
           toggleRecordBreedingEventModal={toggleRecordBreedingEventModal}
         />
       ) : (
-        <div className="px-6 py-6">
+        <div className="px-4 py-6 sm:px-6 max-w-[1500px] mx-auto">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Cow Management</h1>
             <button 
@@ -441,53 +444,55 @@ const CowManagement = () => {
                 <input
                   type="text"
                   className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
-                  placeholder="Search by name, tag number or breed..."
+                  placeholder="Search by name, tag or breed..."
                   value={searchQuery}
                   onChange={handleSearch}
                 />
               </div>
             </div>
 
-            <div>
-              <select
-                className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
-                value={filters.status}
-                onChange={(e) => handleFilterChange('status', e.target.value)}
+            <div className="grid grid-cols-3 gap-3 md:gap-4 col-span-3 md:grid-cols-3">
+              <div>
+                <select
+                  className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                  value={filters.status}
+                  onChange={(e) => handleFilterChange('status', e.target.value)}
                 >
-                <option value="All">All Status</option>
-                <option value="Calf">Calf</option>
-                <option value="Heifer">Heifer</option>
-                <option value="Active">Active</option>
-                <option value="Dry">Dry</option>
-                <option value="Sold">Sold</option>
-                <option value="Deceased">Deceased</option>
-              </select>
-            </div>
+                  <option value="All">All Status</option>
+                  <option value="Calf">Calf</option>
+                  <option value="Heifer">Heifer</option>
+                  <option value="Active">Active</option>
+                  <option value="Dry">Dry</option>
+                  <option value="Sold">Sold</option>
+                  <option value="Deceased">Deceased</option>
+                </select>
+              </div>
 
-            <div>
-              <select
-                className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
-                value={filters.healthStatus}
-                onChange={(e) => handleFilterChange('healthStatus', e.target.value)}
-              >
-                <option value="All">All Health Status</option>
-                <option value="Healthy">Healthy</option>
-                <option value="Monitored">Monitored</option>
-                <option value="Under treatment">Under treatment</option>
-              </select>
-            </div>
+              <div>
+                <select
+                  className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                  value={filters.healthStatus}
+                  onChange={(e) => handleFilterChange('healthStatus', e.target.value)}
+                >
+                  <option value="All">All Health</option>
+                  <option value="Healthy">Healthy</option>
+                  <option value="Monitored">Monitored</option>
+                  <option value="Under treatment">Treatment</option>
+                </select>
+              </div>
 
-            <div>
-              <select
-                className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
-                value={filters.breed}
-                onChange={(e) => handleFilterChange('breed', e.target.value)}
-              >
-                <option value="All">All Breeds</option>
-                {uniqueBreeds.map(breed => (
-                  <option key={breed} value={breed}>{breed}</option>
-                ))}
-              </select>
+              <div>
+                <select
+                  className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                  value={filters.breed}
+                  onChange={(e) => handleFilterChange('breed', e.target.value)}
+                >
+                  <option value="All">All Breeds</option>
+                  {uniqueBreeds.map(breed => (
+                    <option key={breed} value={breed}>{breed}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
@@ -528,7 +533,7 @@ const CowManagement = () => {
               ))}
             </div>
           ) : (
-            <div className="bg-white shadow-lg rounded-lg overflow-hidden transition-all duration-300 hover:shadow-xl border border-gray-100">
+            <div className="overflow-x-auto bg-white shadow-lg rounded-lg border border-gray-100">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
                   <tr>
@@ -727,9 +732,9 @@ const CowCard = ({ cow, onClick, onEdit, onDelete }) => {
       
       <div className="p-4">
         <div className="flex justify-between items-start">
-          <div className="mb-3">
-            <h3 className="text-lg font-semibold text-gray-800 bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">{cow?.name}</h3>
-            <p className="text-sm text-gray-500">Tag: {cow?.tagNumber}</p>
+          <div className="mb-3 max-w-[70%]">
+            <h3 className="text-lg font-semibold text-gray-800 bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 truncate">{cow?.name}</h3>
+            <p className="text-sm text-gray-500 truncate">Tag: {cow?.tagNumber}</p>
           </div>
           <span className={`px-2 py-1 text-xs font-semibold rounded-full ${healthStatusColors[cow?.healthStatus] || 'bg-gray-100 text-gray-800'}`}>
             {cow?.healthStatus}
@@ -740,23 +745,23 @@ const CowCard = ({ cow, onClick, onEdit, onDelete }) => {
           <img 
             src={cowSample}  
             alt={cow?.name}
-            className="w-16 h-16 object-cover rounded-full bg-gray-200 border-2 border-green-100"
+            className="w-16 h-16 object-cover rounded-full bg-gray-200 border-2 border-green-100 flex-shrink-0"
           />
-          <div className="ml-4">
-            <p className="text-sm text-gray-600">{cow?.breed}</p>
+          <div className="ml-4 min-w-0">
+            <p className="text-sm text-gray-600 truncate">{cow?.breed}</p>
             <p className="text-sm text-gray-600">{cow?.age}</p>
           </div>
         </div>
         
         <div className="border-t pt-3">
           <div className="flex items-center justify-between text-sm">
-            <div className="flex items-center text-blue-600">
-              <Droplet size={16} className="mr-1" />
-              <span>{getLatestMilkProduction()}</span>
+            <div className="flex items-center text-blue-600 min-w-0">
+              <Droplet size={16} className="mr-1 flex-shrink-0" />
+              <span className="truncate">{getLatestMilkProduction()}</span>
             </div>
-            <div className="flex items-center text-gray-500">
-              <Calendar size={16} className="mr-1" />
-              <span>Last check: {getLastHealthCheckDate()}</span>
+            <div className="flex items-center text-gray-500 min-w-0 ml-2">
+              <Calendar size={16} className="mr-1 flex-shrink-0" />
+              <span className="truncate">Last: {getLastHealthCheckDate()}</span>
             </div>
           </div>
           
@@ -765,7 +770,7 @@ const CowCard = ({ cow, onClick, onEdit, onDelete }) => {
               <svg className="h-4 w-4 mr-1 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
-              <span>{alerts[0]}</span>
+              <span className="line-clamp-1">{alerts[0]}</span>
             </div>
           )}
         </div>
@@ -954,7 +959,7 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
     <div className="bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30 min-h-full">
       {/* Header bar with gradient */}
       <div className="bg-gradient-to-r from-green-600 to-blue-600 text-white">
-        <div className="container mx-auto px-6 py-4">
+        <div className="container mx-auto px-4 sm:px-6 py-4">
           <div className="flex items-center">
             <button 
               onClick={onClose}
@@ -962,7 +967,7 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
             >
               <ChevronLeft size={24} />
             </button>
-            <h1 className="text-2xl font-semibold">
+            <h1 className="text-xl sm:text-2xl font-semibold truncate">
               {cow.name}
               {isCalf && <span className="ml-2 px-2 py-0.5 bg-purple-200 text-purple-800 rounded-full text-sm">Calf</span>}
               {isHeifer && <span className="ml-2 px-2 py-0.5 bg-pink-200 text-pink-800 rounded-full text-sm">Heifer</span>}
@@ -971,8 +976,8 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
         </div>
       </div>
       
-      <div className="container mx-auto px-6 py-8">
-        <div className="flex flex-col lg:flex-row">
+      <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <div className="flex flex-col lg:flex-row gap-8">
           <div className="lg:w-1/3 mb-8 lg:mb-0 lg:pr-8">
             <div className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
               <div className="p-6 flex flex-col items-center">
@@ -1068,8 +1073,8 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
           <div className="lg:w-2/3">
             <div className="bg-white shadow-lg rounded-xl overflow-hidden border border-gray-100">
               <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-              <div className="border-b border-gray-200">
-                <nav className="flex -mb-px space-x-8 px-6">
+              <div className="border-b border-gray-200 overflow-x-auto">
+                <nav className="flex -mb-px space-x-4 px-6 whitespace-nowrap">
                   <button
                     onClick={() => setActiveTab('overview')}
                     className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-300 ${
@@ -1103,7 +1108,7 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                           : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                       }`}
                     >
-                      Growth & Development
+                      Growth
                     </button>
                   )}
                   <button
@@ -1132,8 +1137,7 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                 </nav>
               </div>
               
-              <div className="py-6 px-6">
-                {/* Overview tab remains mostly the same */}
+              <div className="py-6 px-4 sm:px-6 overflow-x-auto">
                 {activeTab === 'overview' && (
                   <div>
                     {/* Customized metrics based on cow status */}
@@ -1370,15 +1374,15 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                       )}
                     </div>
                     
-                    <div className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
-                      <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                      <div className="px-6 py-4 border-b border-gray-200 flex flex-wrap justify-between items-center gap-3">
                         <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-600">Production Records</h3>
                         <button className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gradient-to-r from-blue-500 to-blue-600 hover:opacity-90 transition-opacity shadow-sm"
                         onClick={toggleRecordMilkModal}>
                           Record New
                         </button>
                       </div>
-                      <table className="min-w-full divide-y divide-gray-200">
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
                           <tr>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1662,13 +1666,14 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                   </div>
                   
                   <div className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition-all duration-300">
-                    <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                    <div className="px-6 py-4 border-b border-gray-200 flex flex-wrap justify-between items-center gap-3">
                       <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-700 to-blue-700">Breeding Events</h3>
                       <button className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105"
                       onClick={toggleRecordBreedingEventModal}>
                         Record New Event
                       </button>
                     </div>
+                    <div className="overflow-x-auto">  
                     {loading.breeding ? (
                       <div className="flex justify-center items-center p-8">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
@@ -1723,6 +1728,7 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                         No breeding events recorded for this cow.
                       </div>
                     )}
+                  </div>
                   </div>
                 </div>
               )}
@@ -1813,15 +1819,15 @@ const TransitionModal = ({ cow, isCalf, onClose, onTransition }) => {
   };
   
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-auto my-8">
         <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50 flex justify-between items-center">
-          <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-purple-700 to-pink-700">
+          <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-purple-700 to-pink-700 break-words">
             {isCalf ? "Transition to Heifer" : "Transition to Milking"}
           </h3>
           <button 
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-500 transition-colors duration-200"
+            className="text-gray-400 hover:text-gray-500 transition-colors duration-200 flex-shrink-0"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1829,7 +1835,7 @@ const TransitionModal = ({ cow, isCalf, onClose, onTransition }) => {
           </button>
         </div>
         
-        <form onSubmit={handleSubmit} className="p-6">
+        <form onSubmit={handleSubmit} className="p-6 overflow-auto max-h-[60vh]">
           <div className="space-y-4">
             <div>
               <label htmlFor="transitionDate" className="block text-sm font-medium text-gray-700 mb-1">
@@ -1901,7 +1907,7 @@ const TransitionModal = ({ cow, isCalf, onClose, onTransition }) => {
             </div>
           </div>
           
-          <div className="mt-6 flex justify-end space-x-3">
+          <div className="mt-6 flex flex-wrap justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
@@ -2182,13 +2188,13 @@ const AddCowModal = ({ onClose, onAdd }) => {
   };
   
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-screen overflow-y-auto">
-        <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-blue-50 flex justify-between items-center">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full my-8 max-h-[90vh] flex flex-col">
+        <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-blue-50 flex justify-between items-center flex-shrink-0">
           <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-700 to-blue-700">Add New Cow</h3>
           <button 
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-500 transition-colors duration-200"
+            className="text-gray-400 hover:text-gray-500 transition-colors duration-200 flex-shrink-0"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -2196,9 +2202,9 @@ const AddCowModal = ({ onClose, onAdd }) => {
           </button>
         </div>
         
-        <div className="px-6 py-4">
+        <div className="overflow-y-auto flex-grow">
           {/* Progress Steps */}
-          <div className="mb-8">
+          <div className="px-6 pt-4 mb-8">
             <div className="flex items-center">
               <div className="flex items-center relative">
                 <div className={`rounded-full transition duration-500 ease-in-out h-12 w-12 py-3 border-2 ${currentStep >= 1 ? 'bg-gradient-to-r from-green-600 to-green-700 border-green-600 text-white' : 'border-gray-300 text-gray-500'} flex items-center justify-center`}>
@@ -2229,7 +2235,7 @@ const AddCowModal = ({ onClose, onAdd }) => {
             </div>
           </div>
           
-          <form onSubmit={handleSubmit} className="animate-fadeIn">
+          <form onSubmit={handleSubmit} className="px-6 pb-6 animate-fadeIn">
             {/* Step 1: Basic Info */}
             {currentStep === 1 && (
               <div className="space-y-6 animate-fadeIn">
@@ -2619,7 +2625,7 @@ const AddCowModal = ({ onClose, onAdd }) => {
               </div>
             )}
             
-            <div className="mt-8 flex justify-between">
+            <div className="mt-8 flex flex-wrap justify-between gap-3">
               {currentStep > 1 ? (
                 <button
                   type="button"
@@ -2821,13 +2827,13 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
   };
   
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-screen overflow-y-auto">
-        <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-blue-50 flex justify-between items-center">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-auto my-8 flex flex-col max-h-[90vh]">
+        <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-blue-50 flex justify-between items-center flex-shrink-0">
           <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-700 to-blue-700">Edit Cow</h3>
           <button 
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-500 transition-colors duration-200"
+            className="text-gray-400 hover:text-gray-500 transition-colors duration-200 flex-shrink-0"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -2835,8 +2841,8 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
           </button>
         </div>
         
-        <form onSubmit={handleSubmit}>
-          <div className="px-6 py-4 space-y-6">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-grow">
+          <div className="px-6 py-4 space-y-6 overflow-y-auto flex-grow">
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div>
                 <label htmlFor="tagNumber" className="block text-sm font-medium text-gray-700 mb-1">
@@ -3093,7 +3099,7 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
             </div>
           </div>
           
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+          <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3 flex-shrink-0">
             <button
               type="button"
               onClick={onClose}
@@ -3117,7 +3123,6 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
 // DeleteConfirmationModal Component
 const DeleteConfirmationModal = ({ cow, onClose, onDelete }) => {
   const handleDelete = () => {
-    // Here you would make an API call to delete the cow
     console.log('Deleting cow:', cow.id);
     
     if (onDelete) {
@@ -3127,8 +3132,8 @@ const DeleteConfirmationModal = ({ cow, onClose, onDelete }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-auto my-8">
         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
           <h3 className="text-lg font-medium text-gray-800">Confirm Deletion</h3>
           <button 
@@ -3148,7 +3153,7 @@ const DeleteConfirmationModal = ({ cow, onClose, onDelete }) => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
             </div>
-            <h4 className="ml-3 text-lg font-medium text-gray-900">Delete {cow.name} ({cow.tagNumber})</h4>
+            <h4 className="ml-3 text-lg font-medium text-gray-900 break-words">Delete {cow.name} ({cow.tagNumber})</h4>
           </div>
           <p className="text-gray-600 mb-6">
             Are you sure you want to delete this cow? This action cannot be undone and all associated data will be permanently removed.
@@ -3240,9 +3245,9 @@ const RecordHealthEventModal = ({ cow, onClose, onSubmit }) => {
   };
   
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-screen overflow-y-auto">
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-auto my-8 max-h-[90vh] flex flex-col">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
           <h3 className="text-lg font-medium text-gray-800">Record Health Event for {cow.name} ({cow.tagNumber})</h3>
           <button 
             onClick={onClose}
@@ -3254,7 +3259,7 @@ const RecordHealthEventModal = ({ cow, onClose, onSubmit }) => {
           </button>
         </div>
         
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="overflow-y-auto">
           <div className="px-6 py-4 space-y-6">
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div>
@@ -3461,7 +3466,7 @@ const RecordHealthEventModal = ({ cow, onClose, onSubmit }) => {
             </div>
           </div>
           
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 flex-shrink-0">
             <button
               type="button"
               onClick={onClose}
@@ -3574,7 +3579,7 @@ const RecordMilkProductionModal = ({ cow, onClose, onSubmit }) => {
       }
     }
 
-    alert(formData.sendWhatsAppNotification 
+    toast.success(formData.sendWhatsAppNotification 
       ? 'Milk record added and notification sent!'
       : 'Milk record added successfully!');
 
@@ -3582,13 +3587,13 @@ const RecordMilkProductionModal = ({ cow, onClose, onSubmit }) => {
   };
   
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-auto my-8">
         <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-green-50 flex justify-between items-center">
-          <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-green-700">Record Milk Production</h3>
+          <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-green-700 break-words">Record Milk Production</h3>
           <button 
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-500 transition-colors duration-200"
+            className="text-gray-400 hover:text-gray-500 transition-colors duration-200 flex-shrink-0"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -3596,7 +3601,7 @@ const RecordMilkProductionModal = ({ cow, onClose, onSubmit }) => {
           </button>
         </div>
         
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="overflow-auto max-h-[70vh]">
           <div className="px-6 py-4 space-y-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
@@ -3684,20 +3689,20 @@ const RecordMilkProductionModal = ({ cow, onClose, onSubmit }) => {
             </div>
           </div>
           <div className="flex items-center px-6 py-4">
-              <input
-                id="sendWhatsAppNotification"
-                name="sendWhatsAppNotification"
-                type="checkbox"
-                checked={formData.sendWhatsAppNotification}
-                onChange={handleCheckboxChange}
-                className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
-              />
-              <label htmlFor="sendWhatsAppNotification" className="ml-2 block text-sm text-gray-700">
-                Send WhatsApp notification to cow owner
-              </label>
-            </div>
+            <input
+              id="sendWhatsAppNotification"
+              name="sendWhatsAppNotification"
+              type="checkbox"
+              checked={formData.sendWhatsAppNotification}
+              onChange={handleCheckboxChange}
+              className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+            />
+            <label htmlFor="sendWhatsAppNotification" className="ml-2 block text-sm text-gray-700">
+              Send WhatsApp notification to cow owner
+            </label>
+          </div>
           
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+          <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3">
             <button
               type="button"
               onClick={onClose}

@@ -53,6 +53,7 @@ import {
   fetchInventoryStats
 } from './services/inventoryService';
 import { supabase } from '../lib/supabase';
+import LoadingSpinner from './LoadingSpinner';
 
 // Status colors for consistency
 const statusColors = {
@@ -752,24 +753,17 @@ const handleSupplierSubmit = async (supplierData) => {
 };
   // Loading state
   if (isLoading && !inventoryData.items.length) {
-    return (
-      <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30 flex justify-center items-center">
-        <div className="flex flex-col items-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-green-500"></div>
-          <p className="mt-4 text-gray-600">Loading inventory data...</p>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner message='Loading inventory data...'></LoadingSpinner>;
   }
   
 return (
-    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
-        <div className="px-6 py-6">
-        <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">
+    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30 overflow-y-auto">
+        <div className="px-4 sm:px-6 py-4 sm:py-6 max-w-[1500px] mx-auto">
+        <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
+            <h1 className="text-xl sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">
             Inventory Management
             </h1>
-            <div className="flex space-x-2">
+            <div className="flex flex-wrap gap-2">
             <button 
                 onClick={toggleAddItemModal}
                 className="flex items-center px-4 py-2 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm"
@@ -779,7 +773,7 @@ return (
             </button>
             <button 
                 onClick={togglePlaceOrderModal}
-                className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-green-600 rounded-lg hover:opacity-90 transition-all shadow-sm"
+                className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-green-600 rounded-lg hover:opacity-90 transition-all shadow-sm flex items-center"
             >
                 <ShoppingCart size={12} className="mr-2" />
                 Place Order
@@ -787,16 +781,16 @@ return (
             </div>
         </div>
         
-        <div className="mb-6">
-            <nav className="flex space-x-4 border-b border-gray-200 overflow-x-auto">
-            <button
+        <div className="mb-6 overflow-x-auto">
+            <nav className="flex space-x-4 border-b border-gray-200 min-w-[500px]">
+                <button
                 onClick={() => setActiveTab('dashboard')}
                 className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap transition-all duration-300 ${
-                activeTab === 'dashboard'
+                    activeTab === 'dashboard'
                     ? 'border-green-500 text-green-600 bg-gradient-to-b from-white to-green-50'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
-            >
+                >
                 Dashboard
             </button>
             <button
@@ -843,17 +837,18 @@ return (
         </div>
         
         {(activeTab === 'items' || activeTab === 'orders') && (
-            <div className="mb-6 flex flex-wrap gap-2">
-            <button
+            <div className="mb-6 overflow-x-auto">
+            <div className="flex gap-2 min-w-[500px]">
+              <button
                 onClick={() => setActiveDepartment('feed')}
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-300 ${
-                activeDepartment === 'feed' 
+                  activeDepartment === 'feed' 
                     ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-md'
                     : 'bg-white text-gray-700 hover:bg-gray-50 shadow-sm'
                 }`}
-            >
+              >
                 Feed Department
-            </button>
+              </button>
             <button
                 onClick={() => setActiveDepartment('milking')}
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-300 ${
@@ -885,6 +880,7 @@ return (
                 Health Department
             </button>
             </div>
+            </div>
         )}
         
         {error && (
@@ -913,7 +909,7 @@ return (
         
         {activeTab === 'dashboard' && (
             <div>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
                 <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
                 <div className="h-2 bg-gradient-to-r from-green-500 to-green-600"></div>
                 <div className="p-5">
@@ -1008,7 +1004,7 @@ return (
                     <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">
                     Stock Value by Department
                     </h2>
-                    <div className="h-72">
+                    <div className="h-60 sm:h-72 md:h-80">
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart
                         data={chartData.valueByDepartment}
@@ -1054,7 +1050,7 @@ return (
                     <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">
                     Orders by Month
                     </h2>
-                    <div className="h-72">
+                    <div className="h-60 sm:h-72 md:h-80">
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart
                         data={chartData.ordersByMonth}
@@ -1118,7 +1114,7 @@ return (
                     <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">
                     Items by Department
                     </h2>
-                    <div className="h-64">
+                    <div className="h-60 sm:h-72 md:h-80">
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                         <Pie
@@ -1262,48 +1258,48 @@ return (
         {activeTab === 'items' && (
             <div>
             <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0 md:space-x-4 mb-6">
-                <div className="relative flex-grow">
+            <div className="relative flex-grow">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Search className="h-5 w-5 text-gray-400" />
+                <Search className="h-5 w-5 text-gray-400" />
                 </div>
                 <input
-                    type="text"
-                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
-                    placeholder="Search by name, description or category..."
-                    value={searchQuery}
-                    onChange={handleSearch}
+                type="text"
+                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                placeholder="Search by name, description or category..."
+                value={searchQuery}
+                onChange={handleSearch}
                 />
-                </div>
-                
-                <div className="flex items-center space-x-4">
-                <div className="flex items-center">
-                    <Filter className="h-5 w-5 text-gray-400 mr-2" />
-                    <select
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center w-full sm:w-auto">
+                <Filter className="h-5 w-5 text-gray-400 mr-2 flex-shrink-0" />
+                <select
                     value={filterStatus}
                     onChange={(e) => setFilterStatus(e.target.value)}
-                    className="appearance-none bg-white border border-gray-200 rounded-lg pl-3 pr-10 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-300 shadow-sm hover:shadow-md transition-all duration-200"
-                    >
+                    className="appearance-none bg-white border border-gray-200 rounded-lg pl-3 pr-10 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-300 shadow-sm hover:shadow-md transition-all duration-200 w-full sm:w-auto"
+                >
                     <option value="All">All Status</option>
                     <option value="In Stock">In Stock</option>
                     <option value="Low Stock">Low Stock</option>
                     <option value="Out of Stock">Out of Stock</option>
-                    </select>
+                </select>
                 </div>
                 
                 <button 
-                    onClick={() => handleDownload(filteredItems, `inventory-${activeDepartment}-${new Date().toISOString().split('T')[0]}.csv`, 'csv')}
-                    className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 transition-opacity shadow-sm"
+                onClick={() => handleDownload(filteredItems, `inventory-${activeDepartment}-${new Date().toISOString().split('T')[0]}.csv`, 'csv')}
+                className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 transition-opacity shadow-sm whitespace-nowrap"
                 >
-                    <Download size={16} className="mr-2" />
-                    Export
+                <Download size={16} className="mr-2" />
+                Export
                 </button>
-                </div>
+            </div>
             </div>
             
             <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 mb-6">
                 <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
                 <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
+                    <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
                     <tr>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1642,13 +1638,13 @@ return (
                         >
                             <div className="h-2 bg-gradient-to-r from-green-400 to-blue-500"></div>
                             <div className="p-6">
-                            <div className="flex justify-between">
-                                <h3 className="text-lg font-medium text-gray-900">{supplier.name}</h3>
+                                <div className="flex flex-wrap justify-between gap-2 mb-3">
+                                <h3 className="text-lg font-medium text-gray-900 break-words pr-2">{supplier.name}</h3>
                                 <span className="bg-blue-100 text-blue-800 text-xs px-2.5 py-0.5 rounded-full font-medium">
-                                {supplier.category}
+                                    {supplier.category}
                                 </span>
-                            </div>
-                            <div className="mt-4 space-y-3">
+                                </div>
+                                <div className="mt-4 space-y-3">
                                 <div className="flex items-start">
                                 <span className="text-gray-500 w-28 flex-shrink-0">Contact Person</span>
                                 <span className="text-gray-900">{supplier.contact_person || 'N/A'}</span>
@@ -1672,7 +1668,7 @@ return (
                                 </div>
                                 )}
                             </div>
-                            <div className="mt-6 flex justify-end space-x-3">
+                            <div className="mt-6 flex flex-wrap justify-end gap-3">
                                 <button
                                 onClick={() => {
                                     setActiveTab('orders');
@@ -1710,7 +1706,7 @@ return (
                     </h2>
                     </div>
                     <div className="p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                         <div className="border border-gray-200 rounded-lg p-5 hover:shadow-md transition-all duration-200">
                         <h3 className="font-medium text-lg text-gray-900 mb-2">Stock Level Report</h3>
                         <p className="text-gray-600 text-sm mb-4">
@@ -1936,8 +1932,8 @@ return (
             )}
             {/* Delete Order Modal */}
             {isDeleteOrderModalOpen && selectedOrder && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 overflow-y-auto">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-md my-8 mx-auto">
                 <div className="flex justify-between items-center border-b px-6 py-4">
                     <h3 className="text-lg font-medium">Delete Order</h3>
                     <button onClick={() => setIsDeleteOrderModalOpen(false)} className="text-gray-400 hover:text-gray-500">
@@ -2042,8 +2038,8 @@ const AddItemModal = ({ onClose, onSubmit, isLoading, departments, activeDepartm
     };
     
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 overflow-y-auto">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-md my-8 mx-auto max-h-[80vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b px-6 py-4">
             <h3 className="text-lg font-medium">Add New Inventory Item</h3>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
@@ -2239,16 +2235,17 @@ const SupplierModal = ({ supplier, onClose, onSubmit, isLoading }) => {
   };
   
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl">
-        <div className="flex justify-between items-center border-b px-6 py-4">
-          <h3 className="text-lg font-medium">{supplier ? 'Edit Supplier' : 'Add New Supplier'}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 overflow-y-auto">
+    <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl my-8 mx-auto max-h-[80vh] flex flex-col">
+        <div className="flex justify-between items-center border-b px-6 py-4 flex-shrink-0">
+            <h3 className="text-lg font-medium">{supplier ? 'Edit Supplier' : 'Add New Supplier'}</h3>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
             <X size={24} />
-          </button>
+        </button>
         </div>
-        <form onSubmit={handleSubmit}>
-          <div className="px-6 py-4 max-h-[70vh] overflow-y-auto space-y-4">
+        
+        <form onSubmit={handleSubmit} className="flex flex-col flex-grow">
+        <div className="px-6 py-4 space-y-4 overflow-y-auto">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Name</label>
               <input
@@ -2384,7 +2381,7 @@ const SupplierModal = ({ supplier, onClose, onSubmit, isLoading }) => {
               />
             </div>
           </div>
-          <div className="px-6 py-4 border-t flex justify-end space-x-3">
+          <div className="px-6 py-4 border-t flex justify-end space-x-3 flex-shrink-0">
             <button
               type="button"
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
@@ -2519,17 +2516,17 @@ const PlaceOrderModal = ({
     const filteredItems = inventoryItems.filter(item => item.department === formData.department);
     
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl border border-gray-100">
-          <div className="flex justify-between items-center border-b px-6 py-4 bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 overflow-y-auto">
+        <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl border border-gray-100 my-8 mx-auto max-h-[85vh] flex flex-col">
+            <div className="flex justify-between items-center border-b px-6 py-4 bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30 flex-shrink-0">
             <h3 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-green-600">Place New Order</h3>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-500 transition-colors">
-              <X size={24} />
+                <X size={24} />
             </button>
-          </div>
-          <form onSubmit={handleSubmit}>
-            <div className="px-6 py-4 max-h-[70vh] overflow-y-auto space-y-6">
-              <div className="grid grid-cols-2 gap-6">
+            </div>
+            <form onSubmit={handleSubmit} className="flex flex-col flex-grow overflow-hidden">
+                <div className="px-6 py-4 space-y-6 overflow-y-auto">
+                    <div className="grid grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Supplier</label>
                   <select
@@ -2593,10 +2590,11 @@ const PlaceOrderModal = ({
               
               <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                 <label className="block text-sm font-medium text-gray-700 mb-3">Order Items</label>
-                <div className="space-y-4">
-                  {formData.items.map((item, index) => (
-                    <div key={index} className="grid grid-cols-12 gap-3 items-end bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
-                      <div className="col-span-5">
+                <div className="space-y-4 overflow-x-auto">
+                    <div className="min-w-[650px]"> {/* Minimum width to ensure it doesn't get too squished */}
+                    {formData.items.map((item, index) => (
+                        <div key={index} className="grid grid-cols-12 gap-3 items-end bg-white p-3 rounded-lg border border-gray-200 shadow-sm mb-3">
+                        <div className="col-span-5">
                         <label className="block text-xs text-gray-500 mb-1">Item</label>
                         <select
                           value={item.item_id}
@@ -2660,15 +2658,16 @@ const PlaceOrderModal = ({
                     </div>
                   ))}
                 </div>
+                </div>
                 <button
-                  type="button"
-                  onClick={addItemRow}
-                  className="mt-3 flex items-center text-sm text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg transition-all"
+                    type="button"
+                    onClick={addItemRow}
+                    className="mt-3 flex items-center text-sm text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg transition-all"
                 >
-                  <Plus size={16} className="mr-2" />
-                  Add Another Item
+                    <Plus size={16} className="mr-2" />
+                    Add Another Item
                 </button>
-              </div>
+                </div>
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
@@ -2697,7 +2696,7 @@ const PlaceOrderModal = ({
               </div>
             </div>
             
-            <div className="px-6 py-4 border-t flex justify-end space-x-3 bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
+            <div className="px-6 py-4 border-t flex justify-end space-x-3 bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30 flex-shrink-0">
               <button
                 type="button"
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all shadow-sm"
@@ -2733,8 +2732,8 @@ const PlaceOrderModal = ({
 
 const DeleteItemModal = ({ item, onClose, onConfirm, isLoading }) => {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 overflow-y-auto">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-md my-8 mx-auto max-h-[80vh] overflow-y-auto">
         <div className="flex justify-between items-center border-b px-6 py-4">
           <h3 className="text-lg font-medium">Delete Item</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
@@ -2791,8 +2790,8 @@ const DeleteItemModal = ({ item, onClose, onConfirm, isLoading }) => {
 };
 const ViewItemModal = ({ item, onClose, onEdit, formatCurrency, formatDate }) => {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 overflow-y-auto">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-md my-8 mx-auto max-h-[80vh] overflow-y-auto">
         <div className="flex justify-between items-center border-b px-6 py-4">
           <h3 className="text-lg font-medium">{item.name}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
@@ -2920,8 +2919,8 @@ const EditItemModal = ({ item, onClose, onSubmit, isLoading, departments }) => {
   };
   
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 overflow-y-auto">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-md my-8 mx-auto max-h-[80vh] overflow-y-auto">
         <div className="flex justify-between items-center border-b px-6 py-4">
           <h3 className="text-lg font-medium">Edit {item.name}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
@@ -3104,28 +3103,28 @@ const OrderDetailsModal = ({ order, onClose, onUpdateStatus }) => {
   };
   
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl">
-        <div className="flex justify-between items-center border-b px-6 py-4">
-          <h3 className="text-lg font-medium">Order Details</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 overflow-y-auto">
+    <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl my-8 mx-auto max-h-[80vh] overflow-hidden flex flex-col">
+        <div className="flex justify-between items-center border-b px-6 py-4 flex-shrink-0">
+        <h3 className="text-lg font-medium">Order Details</h3>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
             <X size={24} />
-          </button>
+        </button>
         </div>
         
-        <div className="p-6">
-          <div className="flex justify-between mb-6">
+        <div className="p-6 overflow-y-auto">
+        <div className="flex flex-col sm:flex-row sm:justify-between mb-6 gap-4">
             <div>
-              <p className="text-sm font-medium text-gray-500">Order Number</p>
-              <p className="text-lg font-medium">{order.order_number}</p>
+            <p className="text-sm font-medium text-gray-500">Order Number</p>
+            <p className="text-lg font-medium break-all">{order.order_number}</p>
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-500">Status</p>
-              <div className="flex items-center mt-1">
+            <p className="text-sm font-medium text-gray-500">Status</p>
+            <div className="flex items-center mt-1">
                 <select
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value)}
-                  className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md"
                 >
                   <option value="Pending">Pending</option>
                   <option value="Ordered">Ordered</option>
@@ -3134,19 +3133,19 @@ const OrderDetailsModal = ({ order, onClose, onUpdateStatus }) => {
                   <option value="Completed">Completed</option>
                 </select>
                 {status !== order.status && (
-                  <button 
+                <button 
                     onClick={handleStatusChange}
-                    className="ml-2 px-3 py-1.5 bg-green-600 text-white rounded-md text-sm"
+                    className="ml-2 px-3 py-1.5 bg-green-600 text-white rounded-md text-sm whitespace-nowrap"
                     disabled={isUpdating}
-                  >
+                >
                     {isUpdating ? 'Updating...' : 'Update'}
-                  </button>
+                </button>
                 )}
-              </div>
             </div>
-          </div>
+            </div>
+        </div>
           
-          <div className="grid grid-cols-2 gap-6 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
             <div>
               <p className="text-sm font-medium text-gray-500">Supplier</p>
               <p className="text-base mt-1">{order.supplier_name}</p>
@@ -3168,7 +3167,8 @@ const OrderDetailsModal = ({ order, onClose, onUpdateStatus }) => {
           <div className="mb-6">
             <h4 className="font-medium mb-3">Order Items</h4>
             <div className="bg-gray-50 rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
+            <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-100">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item</th>
@@ -3205,6 +3205,7 @@ const OrderDetailsModal = ({ order, onClose, onUpdateStatus }) => {
                 </tfoot>
               </table>
             </div>
+            </div>
           </div>
           
           {order.notes && (
@@ -3215,8 +3216,8 @@ const OrderDetailsModal = ({ order, onClose, onUpdateStatus }) => {
           )}
         </div>
         
-        <div className="px-6 py-4 border-t flex justify-end space-x-3">
-          <button
+        <div className="px-6 py-4 border-t flex justify-end space-x-3 flex-shrink-0">
+        <button
             type="button"
             className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
             onClick={onClose}

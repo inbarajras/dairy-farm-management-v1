@@ -13,6 +13,8 @@ import {
   addMedication
 } from './services/healthService';
 import { supabase } from '../lib/supabase';
+import LoadingSpinner from './LoadingSpinner';
+import {toast} from './utils/ToastContainer';
 
 // Status badge colors - no change
 const statusColors = {
@@ -235,9 +237,10 @@ const HealthManagement = () => {
       
       // Close modal
       setIsAddEventOpen(false);
+      toast.success('Health Event Added Successfully!');
     } catch (err) {
       console.error('Error adding health event:', err);
-      alert('Failed to add health event. Please try again.');
+      toast.error('Failed to add health event. Please try again.');
     }
   };
 
@@ -271,9 +274,10 @@ const HealthManagement = () => {
       
       // Close modal
       setIsEditEventOpen(false);
+      toast.success('Health Event Updated..')
     } catch (err) {
       console.error('Error updating health event:', err);
-      alert('Failed to update health event. Please try again.');
+      toast.error('Failed to update health event. Please try again.');
     }
   };
 
@@ -307,9 +311,10 @@ const handleDeleteEvent = async () => {
     // Close modal and reset
     setIsDeleteConfirmOpen(false);
     setEventToDelete(null);
+    toast.success('Deleted Health Event..')
   } catch (err) {
     console.error('Error deleting health event:', err);
-    alert('Failed to delete health event. Please try again.');
+    toast.error('Failed to delete health event. Please try again.');
   }
 };
 
@@ -319,14 +324,7 @@ const handleDeleteEvent = async () => {
   
   // Show loading state
   if (isLoading) {
-    return (
-      <div className="h-full bg-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading health data...</p>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner message='Loading health data...'></LoadingSpinner>;
   }
   
   // Show error state
@@ -351,10 +349,10 @@ const handleDeleteEvent = async () => {
   }
   
   return (
-    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
-      <div className="px-6 py-6">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Health Management</h1>
+    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30 overflow-y-auto">
+      <div className="px-4 sm:px-6 py-4 sm:py-6 max-w-[1600px] mx-auto">
+        <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
+          <h1 className="text-xl sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Health Management</h1>
           <button 
             onClick={toggleAddEvent}
             className="flex items-center px-4 py-2 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-lg hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 shadow-sm transition-all duration-300">
@@ -364,8 +362,8 @@ const handleDeleteEvent = async () => {
         </div>
         
         {/* Updated tab navigation with consistent styling */}
-        <div className="mb-6">
-          <nav className="flex space-x-4 border-b border-gray-200">
+        <div className="mb-6 overflow-x-auto">
+          <nav className="flex space-x-4 border-b border-gray-200 min-w-[500px]">
             <button
               onClick={() => setActiveTab('dashboard')}
               className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px transition-all duration-300 ${
@@ -396,7 +394,7 @@ const handleDeleteEvent = async () => {
             >
               Vaccinations
             </button>
-            <button
+            {/* <button
               onClick={() => setActiveTab('medications')}
               className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px transition-all duration-300 ${
                 activeTab === 'medications'
@@ -415,7 +413,7 @@ const handleDeleteEvent = async () => {
               }`}
             >
               Reports
-            </button>
+            </button> */}
           </nav>
         </div>
         
@@ -423,7 +421,7 @@ const handleDeleteEvent = async () => {
         {activeTab === 'dashboard' && (
           <div>
             {/* Updated KPI cards with gradient styling */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 mb-8">
               <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
                 <div className="h-2 bg-gradient-to-r from-red-500 to-red-600"></div>
                 <div className="p-5">
@@ -521,7 +519,7 @@ const handleDeleteEvent = async () => {
                 <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
                 <div className="p-6">
                   <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">Treatment History</h2>
-                  <div className="h-72">
+                  <div className="h-60 sm:h-72">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
                         data={healthData.healthStats.monthlyData}
@@ -708,9 +706,10 @@ const handleDeleteEvent = async () => {
             {/* Health events table with updated styling */}
             <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 mb-6">
               <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
-                  <tr>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
+                    <tr>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Cow
                     </th>
@@ -787,6 +786,7 @@ const handleDeleteEvent = async () => {
                   ))}
                 </tbody>
               </table>
+            </div>
             </div>
             
             {/* Pagination */}
@@ -954,10 +954,10 @@ const VaccinationsTab = ({ vaccinationSchedule }) => {
         prevVacs.filter(v => v.id !== vac.id)
       );
       
-      alert('Vaccination marked as complete');
+      toast.success('Vaccination marked as complete');
     } catch (error) {
       console.error('Error completing vaccination:', error);
-      alert('Failed to complete vaccination. Please try again.');
+      toast.error('Failed to complete vaccination. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -1009,10 +1009,10 @@ const VaccinationsTab = ({ vaccinationSchedule }) => {
         prevVacs.map(vac => vac.id === vacId ? {...vac, dueDate: newDate, status: 'Rescheduled'} : vac)
       );
       
-      alert('Vaccination rescheduled successfully');
+      toast.success('Vaccination rescheduled successfully');
     } catch (error) {
       console.error('Error rescheduling vaccination:', error);
-      alert('Failed to reschedule vaccination. Please try again.');
+      toast.error('Failed to reschedule vaccination. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -1104,11 +1104,11 @@ const VaccinationsTab = ({ vaccinationSchedule }) => {
       setIsAddVaccineModalOpen(false);
       
       // Show success message
-      alert('Vaccination scheduled successfully');
+      toast.success('Vaccination scheduled successfully');
     } catch (error) {
       console.error('Error scheduling vaccination:', error);
       // Explicitly show the error message
-      alert(`Failed to schedule vaccination: ${error.message || 'Unknown error'}`);
+      toast.error(`Failed to schedule vaccination: ${error.message || 'Unknown error'}`);
     } finally {
       setIsLoading(false);
     }
@@ -1118,16 +1118,16 @@ const VaccinationsTab = ({ vaccinationSchedule }) => {
     <div>
       <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 mb-6">
         <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-        <div className="p-6">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6">
-            <div className="flex items-center mb-4 sm:mb-0">
+          <div className='p-6'>
+          <div className="flex flex-col sm:flex-row sm:items-center mb-6 space-y-4 sm:space-y-0">
+            <div className="flex items-center mb-4 sm:mb-0 overflow-x-auto pb-2">
               <button
                 onClick={() => setView('calendar')}
                 className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-300 ${
                   view === 'calendar' 
                     ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-sm'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                } whitespace-nowrap`}
               >
                 Calendar
               </button>
@@ -1137,7 +1137,7 @@ const VaccinationsTab = ({ vaccinationSchedule }) => {
                   view === 'upcoming' 
                     ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-sm'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                } whitespace-nowrap`}
               >
                 Upcoming
               </button>
@@ -1147,20 +1147,20 @@ const VaccinationsTab = ({ vaccinationSchedule }) => {
                   view === 'overdue' 
                     ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-sm'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                } whitespace-nowrap`}
               >
                 Overdue
               </button>
             </div>
             
-            <div className="flex items-center">
+            <div className="flex items-center sm:ml-auto">
               <button 
                 onClick={handlePrevMonth}
                 className="p-1 rounded-full hover:bg-gray-100 transition-colors duration-200"
               >
                 <ChevronLeft size={18} className="text-gray-500" />
               </button>
-              <span className="mx-4 text-sm font-medium text-gray-700">
+              <span className="mx-4 text-sm font-medium text-gray-700 whitespace-nowrap">
                 {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
               </span>
               <button 
@@ -1171,7 +1171,7 @@ const VaccinationsTab = ({ vaccinationSchedule }) => {
               </button>
               <button 
                 onClick={handleToday}
-                className="ml-4 px-3 py-1.5 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors duration-200"
+                className="ml-4 px-3 py-1.5 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors duration-200 whitespace-nowrap"
               >
                 Today
               </button>
@@ -1179,8 +1179,8 @@ const VaccinationsTab = ({ vaccinationSchedule }) => {
           </div>
           
           {view === 'calendar' && (
-            <div>
-              <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-lg overflow-hidden">
+            <div className="overflow-x-auto pb-4">
+              <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-lg overflow-hidden min-w-[700px]">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
                   <div key={index} className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30 py-2 text-center text-xs font-medium text-gray-500">
                     {day}
@@ -1322,7 +1322,7 @@ const VaccinationsTab = ({ vaccinationSchedule }) => {
                                     if (newDate && /^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
                                       handleRescheduleVaccination(vac.id, newDate);
                                     } else if (newDate) {
-                                      alert('Please use format YYYY-MM-DD');
+                                      toast.warning('Please use format YYYY-MM-DD');
                                     }
                                   }}
                                   disabled={isLoading}
@@ -1383,7 +1383,7 @@ const VaccinationsTab = ({ vaccinationSchedule }) => {
                               if (newDate && /^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
                                 handleRescheduleVaccination(vac.id, newDate);
                               } else if (newDate) {
-                                alert('Please use format YYYY-MM-DD');
+                                toast.warning('Please use format YYYY-MM-DD');
                               }
                             }}
                             disabled={isLoading}
@@ -1487,14 +1487,14 @@ const AddVaccinationModal = ({ onClose, onSubmit, isLoading }) => {
   };
   
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-100">
-        <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Schedule New Vaccination</h3>
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto border border-gray-100 my-4 mx-auto">
+        <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 sticky top-0 z-10"></div>
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-1 bg-white z-10">
+          <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 break-words pr-8">Schedule New Vaccination</h3>
           <button 
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-500 transition-colors duration-200"
+            className="text-gray-400 hover:text-gray-500 transition-colors duration-200 flex-shrink-0"
             disabled={isLoading}
           >
             <X size={20} />
@@ -1608,7 +1608,7 @@ const AddVaccinationModal = ({ onClose, onSubmit, isLoading }) => {
             </div>
           </div>
           
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+          <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3 bg-gray-50 sticky bottom-0">
             <button
               type="button"
               onClick={onClose}
@@ -1802,15 +1802,15 @@ const MedicationsTab = ({ medications }) => {
           <input
             type="text"
             className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
-            placeholder="Search medications by name or supplier..."
+            placeholder="Search medications..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
         
-        <div className="flex items-center space-x-4">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center">
-            <Filter className="h-5 w-5 text-gray-400 mr-2" />
+            <Filter className="h-5 w-5 text-gray-400 mr-2 flex-shrink-0" />
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
@@ -1825,9 +1825,9 @@ const MedicationsTab = ({ medications }) => {
           
           <button 
             onClick={toggleAddModal}
-            className="flex items-center px-4 py-2 text-white rounded-lg bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 shadow-sm"
+            className="flex items-center px-4 py-2 text-white rounded-lg bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 shadow-sm whitespace-nowrap"
           >
-            <Plus size={16} className="mr-2" />
+            <Plus size={16} className="mr-2 flex-shrink-0" />
             Add Medication
           </button>
         </div>
@@ -1899,7 +1899,8 @@ const MedicationsTab = ({ medications }) => {
             View All Orders
           </button>
         </div>
-        <table className="min-w-full divide-y divide-gray-200">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
             <tr>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1992,6 +1993,7 @@ const MedicationsTab = ({ medications }) => {
           </tbody>
         </table>
       </div>
+      </div>
       
       {/* Add Medication Modal */}
       {isAddModalOpen && (
@@ -2017,7 +2019,7 @@ const ReportsTab = ({ healthData }) => {
     // Simulate API call with timeout
     setTimeout(() => {
       setIsGenerating(false);
-      alert('Report generated successfully!');
+      toast.success('Report generated successfully!');
     }, 1500);
   };
   
@@ -2357,14 +2359,14 @@ const AddHealthEventModal = ({ onClose, onSubmit }) => {
   };
   
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto border border-gray-100">
-        <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Record Health Event</h3>
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full flex flex-col max-h-[85vh] border border-gray-100 my-4 mx-auto">
+        <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 sticky top-0 z-10"></div>
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-1 bg-white z-10 flex-shrink-0">
+          <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 break-words pr-8">Record Health Event</h3>
           <button 
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-500 transition-colors duration-200"
+            className="text-gray-400 hover:text-gray-500 transition-colors duration-200 flex-shrink-0"
             disabled={isSubmitting}
           >
             <X size={20} />
@@ -2377,8 +2379,8 @@ const AddHealthEventModal = ({ onClose, onSubmit }) => {
           </div>
         )}
         
-        <form onSubmit={handleSubmit}>
-          <div className="px-6 py-4 space-y-6">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-grow overflow-hidden">
+          <div className="px-6 py-4 space-y-6 overflow-y-auto flex-grow">
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div>
                 <label htmlFor="cowId" className="block text-sm font-medium text-gray-700 mb-1">
@@ -2496,66 +2498,69 @@ const AddHealthEventModal = ({ onClose, onSubmit }) => {
                 </button>
               </div>
               
-              {formData.medications.map((med, index) => (
-                <div key={index} className="grid grid-cols-3 gap-4 mb-4 border-b pb-4 last:border-0">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">
-                      Medication Name
-                    </label>
-                    <input
-                      type="text"
-                      value={med.name}
-                      onChange={(e) => handleMedicationChange(index, 'name', e.target.value)}
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                      placeholder="e.g. Antibiotic"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">
-                      Dosage
-                    </label>
-                    <input
-                      type="text"
-                      value={med.dosage}
-                      onChange={(e) => handleMedicationChange(index, 'dosage', e.target.value)}
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                      placeholder="e.g. 10ml"
-                    />
-                  </div>
-                  
-                  <div className="flex items-end">
-                    <div className="flex-grow">
+              {/* Make medication fields responsive with horizontal scrolling on small screens */}
+              <div className="overflow-x-auto pb-2">
+                {formData.medications.map((med, index) => (
+                  <div key={index} className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4 border-b pb-4 last:border-0 min-w-[600px]">
+                    <div>
                       <label className="block text-xs text-gray-500 mb-1">
-                        Administration Method
+                        Medication Name
                       </label>
-                      <select
-                        value={med.method}
-                        onChange={(e) => handleMedicationChange(index, 'method', e.target.value)}
+                      <input
+                        type="text"
+                        value={med.name}
+                        onChange={(e) => handleMedicationChange(index, 'name', e.target.value)}
                         className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                      >
-                        <option value="">Select method</option>
-                        <option value="Injection">Injection</option>
-                        <option value="Oral">Oral</option>
-                        <option value="Topical">Topical</option>
-                        <option value="Other">Other</option>
-                      </select>
+                        placeholder="e.g. Antibiotic"
+                      />
                     </div>
                     
-                    {formData.medications.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeMedication(index)}
-                        className="ml-2 p-2 text-red-500 hover:text-red-700 focus:outline-none"
-                      >
-                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    )}
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">
+                        Dosage
+                      </label>
+                      <input
+                        type="text"
+                        value={med.dosage}
+                        onChange={(e) => handleMedicationChange(index, 'dosage', e.target.value)}
+                        className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                        placeholder="e.g. 10ml"
+                      />
+                    </div>
+                    
+                    <div className="flex items-end">
+                      <div className="flex-grow">
+                        <label className="block text-xs text-gray-500 mb-1">
+                          Administration Method
+                        </label>
+                        <select
+                          value={med.method}
+                          onChange={(e) => handleMedicationChange(index, 'method', e.target.value)}
+                          className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                        >
+                          <option value="">Select method</option>
+                          <option value="Injection">Injection</option>
+                          <option value="Oral">Oral</option>
+                          <option value="Topical">Topical</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
+                      
+                      {formData.medications.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeMedication(index)}
+                          className="ml-2 p-2 text-red-500 hover:text-red-700 focus:outline-none"
+                        >
+                          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
             
             <div>
@@ -2608,7 +2613,7 @@ const AddHealthEventModal = ({ onClose, onSubmit }) => {
             </div>
           </div>
           
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+          <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3 bg-gray-50 flex-shrink-0">
             <button
               type="button"
               onClick={onClose}
@@ -2643,14 +2648,14 @@ const ViewHealthEventModal = ({ event, onClose }) => {
   if (!event) return null;
   const medications = Array.isArray(event.medications) ? event.medications : [];
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto border border-gray-100">
-        <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Health Event Details</h3>
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[85vh] overflow-y-auto border border-gray-100 my-4 mx-auto">
+        <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 sticky top-0 z-10"></div>
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-1 bg-white z-10">
+          <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 break-words pr-8">Health Event Details</h3>
           <button 
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-500 transition-colors duration-200"
+            className="text-gray-400 hover:text-gray-500 transition-colors duration-200 flex-shrink-0"
           >
             <X size={20} />
           </button>
@@ -2735,7 +2740,7 @@ const ViewHealthEventModal = ({ event, onClose }) => {
           )}
         </div>
         
-        <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+        <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50 sticky bottom-0">
           <button
             onClick={onClose}
             className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300"
@@ -2838,14 +2843,14 @@ const EditHealthEventModal = ({ event, onClose, onUpdate }) => {
   
   // Return the same modal structure as AddHealthEventModal but with different title
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto border border-gray-100">
-        <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Edit Health Event</h3>
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[85vh] flex flex-col border border-gray-100 my-4 mx-auto">
+        <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 sticky top-0 z-10"></div>
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-1 bg-white z-10 flex-shrink-0">
+          <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 break-words pr-8">Edit Health Event</h3>
           <button 
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-500 transition-colors duration-200"
+            className="text-gray-400 hover:text-gray-500 transition-colors duration-200 flex-shrink-0"
             disabled={isSubmitting}
           >
             <X size={20} />
@@ -2858,9 +2863,8 @@ const EditHealthEventModal = ({ event, onClose, onUpdate }) => {
           </div>
         )}
         
-        <form onSubmit={handleSubmit}>
-          {/* Form fields are identical to AddHealthEventModal */}
-          <div className="px-6 py-4 space-y-6">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-grow overflow-hidden">
+          <div className="px-6 py-4 space-y-6 overflow-y-auto flex-grow">
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div>
                 <label htmlFor="cowId" className="block text-sm font-medium text-gray-700 mb-1">
@@ -3090,7 +3094,7 @@ const EditHealthEventModal = ({ event, onClose, onUpdate }) => {
             </div>
           </div>
           
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+          <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3 bg-gray-50 flex-shrink-0">
             <button
               type="button"
               onClick={onClose}
@@ -3126,8 +3130,8 @@ const DeleteConfirmationModal = ({ event, onClose, onConfirm }) => {
   if (!event) return null;
   
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-gray-100">
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-gray-100 my-4 mx-auto">
         <div className="h-1 bg-gradient-to-r from-red-400 to-red-500"></div>
         <div className="px-6 py-4 border-b border-gray-200">
           <h3 className="text-lg font-medium text-gray-900">Confirm Deletion</h3>
@@ -3146,7 +3150,7 @@ const DeleteConfirmationModal = ({ event, onClose, onConfirm }) => {
             Are you sure you want to delete this health event?
           </p>
           
-          <p className="text-center text-sm text-gray-500 mb-4">
+          <p className="text-center text-sm text-gray-500 mb-4 break-words">
             <span className="font-medium">{event.eventType}</span> for <span className="font-medium">{event.cowName}</span> on {formatDate(event.eventDate)}
           </p>
           
@@ -3155,7 +3159,7 @@ const DeleteConfirmationModal = ({ event, onClose, onConfirm }) => {
           </p>
         </div>
         
-        <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+        <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3 bg-gray-50">
           <button
             type="button"
             onClick={onClose}
@@ -3210,14 +3214,14 @@ const AddMedicationModal = ({ onClose }) => {
   };
   
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-100">
-        <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Add New Medication</h3>
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto border border-gray-100 my-4 mx-auto">
+        <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 sticky top-0 z-10"></div>
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-1 bg-white z-10">
+          <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 break-words pr-8">Add New Medication</h3>
           <button 
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-500 transition-colors duration-200"
+            className="text-gray-400 hover:text-gray-500 transition-colors duration-200 flex-shrink-0"
             disabled={isSubmitting}
           >
             <X size={20} />
@@ -3362,7 +3366,7 @@ const AddMedicationModal = ({ onClose }) => {
             </div>
           </div>
           
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+          <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3 bg-gray-50 sticky bottom-0">
             <button
               type="button"
               onClick={onClose}

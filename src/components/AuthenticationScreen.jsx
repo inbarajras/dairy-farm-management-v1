@@ -287,18 +287,18 @@ const AuthenticationScreen = ({ onAuthenticate }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-end bg-cover bg-center" 
+    <div className="min-h-screen flex flex-col md:flex-row items-center justify-center md:justify-end bg-cover bg-center overflow-y-auto py-8 px-4 sm:px-6" 
       style={{ backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url(${loginBgImage})`  }}>
       <AnimatePresence mode="wait">
         {authSuccess ? (
           <motion.div 
             key="success" 
-            className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50"
+            className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50 p-4"
             initial="hidden"
             animate="visible"
             variants={successVariants}
           >
-            <div className="bg-white rounded-xl p-8 flex flex-col items-center max-w-sm mx-auto">
+            <div className="bg-white rounded-xl p-6 sm:p-8 flex flex-col items-center max-w-sm mx-auto w-full">
               <div className="w-20 h-20 rounded-full bg-gradient-to-r from-blue-50 to-blue-100 flex items-center justify-center mb-4">
                 <svg className="w-12 h-12 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -314,7 +314,7 @@ const AuthenticationScreen = ({ onAuthenticate }) => {
         ) : (
           <motion.div 
             key="auth-card"
-            className="w-full max-w-md px-6 py-8 sm:px-0"
+            className="w-full max-w-md px-4 py-6 sm:py-8 md:px-0 mx-auto md:mx-8"
             initial="hidden"
             animate="visible"
             exit="exit"
@@ -445,11 +445,11 @@ const AuthenticationScreen = ({ onAuthenticate }) => {
                         </div>
                       )}
 
-                      <div className="flex items-center justify-between mt-8">
+                      <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-3 mt-8">
                         <button
                           type="button"
                           onClick={handleBack}
-                          className="flex items-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all"
+                          className="flex items-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all w-full sm:w-auto"
                           disabled={isLoading}
                         >
                           <ArrowLeft size={16} className="mr-1" />
@@ -458,11 +458,11 @@ const AuthenticationScreen = ({ onAuthenticate }) => {
                         {!resetEmailSent && (
                           <button
                             type="submit"
-                            className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300"
+                            className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300 w-full sm:w-auto"
                             disabled={isLoading}
                           >
                             {isLoading ? (
-                              <div className="flex items-center">
+                              <div className="flex items-center justify-center">
                                 <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -488,7 +488,7 @@ const AuthenticationScreen = ({ onAuthenticate }) => {
                         <label htmlFor="otp" className="block text-sm font-medium text-white drop-shadow-sm mb-2">
                           One-Time Verification Code
                         </label>
-                        <div className="flex justify-between items-center gap-2">
+                        <div className="flex justify-between items-center gap-1 sm:gap-2">
                           {formData.otp.map((digit, index) => (
                             <motion.input
                               key={index}
@@ -499,7 +499,7 @@ const AuthenticationScreen = ({ onAuthenticate }) => {
                               onChange={(e) => handleOtpChange(e, index)}
                               onKeyDown={(e) => handleOtpKeyDown(e, index)}
                               onPaste={index === 0 ? handlePaste : undefined}
-                              className="block w-12 h-12 text-center text-xl font-semibold border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                              className="block w-9 h-12 sm:w-12 text-center text-xl font-semibold border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                               initial={{ opacity: 0, y: 10 }}
                               animate={{ opacity: 1, y: 0 }}
                               transition={{ delay: 0.1 * index }}
@@ -699,7 +699,7 @@ const AuthenticationScreen = ({ onAuthenticate }) => {
       
       {/* Left side welcome information */}
       <motion.div 
-        className="hidden lg:flex items-center justify-center w-1/2 h-full pl-12 pb-20"
+        className="hidden lg:flex items-center justify-center w-1/2 h-full p-8 pb-20 overflow-y-auto"
         initial={{ opacity: 0, x: -50 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ delay: 0.3, duration: 0.8 }}

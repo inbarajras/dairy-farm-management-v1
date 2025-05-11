@@ -19,6 +19,8 @@ import {
   initReportsTable, fetchReports, generateReport, deleteReport,
   getReportById, downloadReport
 } from './services/reportService';
+import LoadingSpinner from './LoadingSpinner';
+import {toast} from './utils/ToastContainer';
 
 
 
@@ -401,11 +403,7 @@ useEffect(() => {
   };
   
   if (isLoading && filteredData.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-full p-8">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
-      </div>
-    );
+    return <LoadingSpinner></LoadingSpinner>
   }
 
   if (error && filteredData.length === 0) {
@@ -552,10 +550,10 @@ useEffect(() => {
   };
 
   return (
-    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
-      <div className="px-6 py-6">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Milk Production</h1>
+    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30 overflow-y-auto">
+      <div className="px-4 sm:px-6 py-6 max-w-[1600px] mx-auto">
+        <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
+          <h1 className="text-xl sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Milk Production</h1>
           <button 
             onClick={toggleAddModal}
             className="flex items-center px-4 py-2 text-white rounded-lg bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 shadow-sm"
@@ -565,9 +563,9 @@ useEffect(() => {
           </button>
         </div>
         
-        {/* Tabs */}
-        <div className="mb-6">
-          <nav className="flex space-x-4 border-b border-gray-200">
+        {/* Tabs - Now in scrollable container */}
+        <div className="mb-6 overflow-x-auto">
+          <nav className="flex space-x-4 border-b border-gray-200 min-w-[400px]">
             <button
               onClick={() => setActiveTab('dashboard')}
               className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px transition-all duration-300 ${
@@ -612,7 +610,7 @@ useEffect(() => {
         </div>
         
         {/* Date Range Filter */}
-        <div className="mb-6 flex items-center space-x-4">
+        <div className="mb-6 flex flex-wrap items-center gap-3">
           <span className="text-sm text-gray-600">Date Range:</span>
           <select
             value={dateRange}
@@ -621,21 +619,21 @@ useEffect(() => {
               // Reset to today when changing date range
               setCurrentDate(new Date());
             }}
-            className="appearance-none bg-white border border-gray-200 rounded-lg pl-3 pr-10 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-300 shadow-sm hover:shadow-md transition-all duration-200"
+            className="appearance-none bg-white border border-gray-200 rounded-lg pl-3 pr-10 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-300 shadow-sm hover:shadow-md transition-all duration-200 min-w-[120px]"
           >
             <option value="today">Today</option>
             <option value="week">Last 7 days</option>
             <option value="month">Last 30 days</option>
           </select>
           
-          <div className="flex items-center ml-4 bg-white rounded-lg shadow-sm border border-gray-200 px-2 hover:shadow-md transition-shadow duration-200">
+          <div className="flex items-center bg-white rounded-lg shadow-sm border border-gray-200 px-2 hover:shadow-md transition-shadow duration-200">
             <button 
               onClick={() => navigateDate('prev')}
               className="p-1.5 text-gray-500 hover:text-gray-700"
             >
               <ChevronLeft size={18} className="text-gray-500" />
             </button>
-            <span className="mx-2 text-sm font-medium text-gray-700">
+            <span className="mx-2 text-sm font-medium text-gray-700 truncate max-w-[180px]">
               {dateRange === 'today' 
                 ? formatShortDate(currentDate) 
                 : dateRange === 'week'
@@ -671,7 +669,7 @@ useEffect(() => {
           {activeTab === 'dashboard' && (
           <div>
             {/* KPI Cards - updated to use actual quality parameters from database */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
               <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300 border border-gray-100">
                 <div className="h-2 bg-gradient-to-r from-blue-500 to-cyan-400"></div>
                 <div className="p-5">
@@ -741,7 +739,7 @@ useEffect(() => {
             <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 mb-6">
               <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
               <div className="p-6">
-                <div className="flex justify-between items-center mb-4">
+                <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
                   <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Daily Milk Production</h2>
                   <button 
                     onClick={() => handleDownload(chartData, `milk-collections-${new Date().toISOString().slice(0, 10)}.csv`, 'csv')}
@@ -751,7 +749,7 @@ useEffect(() => {
                     Export
                   </button>
                 </div>
-                <div className="h-80">
+                <div className="h-60 sm:h-80">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartData}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -772,7 +770,7 @@ useEffect(() => {
                 </div>
                 
                 {/* Production summary below chart */}
-                <div className="grid grid-cols-3 gap-3 mt-4">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3 mt-4">
                   <div className="text-center p-2 rounded-lg bg-gradient-to-b from-blue-50 to-blue-100 border border-blue-200">
                     <p className="text-xs text-gray-500">Average</p>
                     <p className="text-lg font-bold text-blue-600">
@@ -804,15 +802,15 @@ useEffect(() => {
               <div className="px-6 py-4 border-b border-gray-200">
                 <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Recent Collections</h2>
               </div>
-              <div className="divide-y divide-gray-200">
+              <div className="divide-y divide-gray-200 overflow-x-auto">
                 {milkData.dailyCollections.length > 0 ? (
                   milkData.dailyCollections.slice(0, 4).map(collection => (
                     <div key={collection.id} className="px-6 py-4 hover:bg-gray-50 transition-colors duration-200">
-                      <div className="flex justify-between items-start">
+                      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 sm:gap-0">
                         <div>
                           <div className="flex items-center">
-                            <Droplet size={16} className="text-blue-500 mr-2" />
-                            <h3 className="text-sm font-medium text-gray-800">
+                            <Droplet size={16} className="text-blue-500 mr-2 flex-shrink-0" />
+                            <h3 className="text-sm font-medium text-gray-800 break-words">
                               {collection.shift} Collection - {formatDate(collection.date)}
                             </h3>
                           </div>
@@ -822,7 +820,7 @@ useEffect(() => {
                         </div>
                         <div className="text-right">
                           <p className="text-lg font-semibold text-gray-800">{collection.totalQuantity} L</p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-gray-500 whitespace-nowrap">
                             Fat: {collection.qualityParameters?.fat || 'N/A'}% | 
                             Protein: {collection.qualityParameters?.protein || 'N/A'}%
                           </p>
@@ -964,9 +962,10 @@ useEffect(() => {
         
         setCollectionsList(updatedCollectionsList);
         setIsEditModalOpen(false);
+        toast.success('Collection Updated..')
       } catch (error) {
         console.error('Error updating collection:', error);
-        alert('Failed to update collection. Please try again.');
+        toast.error('Failed to update collection. Please try again.');
       } finally {
         setIsLoading(false);
       }
@@ -985,9 +984,10 @@ useEffect(() => {
         );
         setCollectionsList(updatedCollectionsList);
         setIsDeleteModalOpen(false);
+        toast.success('Collection Data Deleted..')
       } catch (error) {
         console.error('Error deleting collection:', error);
-        alert('Failed to delete collection. Please try again.');
+        toast.error('Failed to delete collection. Please try again.');
       } finally {
         setIsLoading(false);
       }
@@ -1037,9 +1037,10 @@ useEffect(() => {
         {/* Collections Table */}
         <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
           <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
-              <tr>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
+                <tr>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   ID
                 </th>
@@ -1128,6 +1129,7 @@ useEffect(() => {
             </tbody>
           </table>
         </div>
+        </div>
         
         {/* Pagination */}
         {totalPages > 1 && (
@@ -1198,12 +1200,12 @@ useEffect(() => {
   // Delete Confirmation Modal with updated UI
   const DeleteConfirmationModal = ({ collection, onClose, onConfirm, isLoading }) => {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
-        <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden border border-gray-100">
+      <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+        <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-auto my-6 overflow-hidden border border-gray-100">
           <div className="h-1 bg-gradient-to-r from-red-400 to-red-500"></div>
           <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
             <h3 className="text-lg font-medium text-gray-800">Delete Collection</h3>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-500 transition-colors duration-200" disabled={isLoading}>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-500 transition-colors duration-200 flex-shrink-0" disabled={isLoading}>
               <X size={20} />
             </button>
           </div>
@@ -1226,7 +1228,7 @@ useEffect(() => {
             </div>
           </div>
           
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+          <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3 bg-gray-50">
             <button
               onClick={onClose}
               disabled={isLoading}
@@ -1264,20 +1266,20 @@ useEffect(() => {
     const qualityParams = collection.qualityParameters || {};
     
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
-        <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full overflow-hidden border border-gray-100">
-          <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-            <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">
+      <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+        <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto mx-auto my-6 border border-gray-100">
+          <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 sticky top-0 z-10"></div>
+          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-1 bg-white z-10">
+            <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 break-words pr-6">
               Collection Details - {collection.id}
             </h3>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-500 transition-colors duration-200">
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-500 transition-colors duration-200 flex-shrink-0">
               <X size={20} />
             </button>
           </div>
           
           <div className="px-6 py-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <p className="text-sm font-medium text-gray-500">Date</p>
                 <p className="mt-1 text-sm text-gray-900">{formatDate(collection.date)}</p>
@@ -1294,9 +1296,9 @@ useEffect(() => {
                 <p className="text-sm font-medium text-gray-500">Collected By</p>
                 <p className="mt-1 text-sm text-gray-900">{collection.collectedBy}</p>
               </div>
-              <div className="col-span-2">
+              <div className="col-span-1 sm:col-span-2">
                 <p className="text-sm font-medium text-gray-500">Quality Parameters</p>
-                <div className="mt-2 grid grid-cols-3 gap-2">
+                <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
                   <div className="p-2 bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30 rounded-lg">
                     <p className="text-xs text-gray-500">Fat</p>
                     <p className="text-sm font-medium text-gray-900">{qualityParams.fat || 'N/A'}%</p>
@@ -1312,15 +1314,15 @@ useEffect(() => {
                 </div>
               </div>
               {collection.notes && (
-                <div className="col-span-2">
+                <div className="col-span-1 sm:col-span-2">
                   <p className="text-sm font-medium text-gray-500">Notes</p>
-                  <p className="mt-1 text-sm text-gray-900 p-2 bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30 rounded-lg">{collection.notes}</p>
+                  <p className="mt-1 text-sm text-gray-900 p-2 bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30 rounded-lg break-words">{collection.notes}</p>
                 </div>
               )}
             </div>
           </div>
           
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end bg-gray-50">
+          <div className="px-6 py-4 border-t border-gray-200 flex justify-end bg-gray-50 sticky bottom-0">
             <button
               onClick={onClose}
               className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
@@ -1423,14 +1425,14 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
   };
       
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
-        <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-screen overflow-y-auto border border-gray-100">
-          <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-            <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">
+      <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+        <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto mx-auto my-6 border border-gray-100">
+          <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 sticky top-0 z-10"></div>
+          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-1 bg-white z-10">
+            <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 break-words pr-6">
               Edit Collection - {collection.id}
             </h3>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-500 transition-colors duration-200">
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-500 transition-colors duration-200 flex-shrink-0">
               <X size={20} />
             </button>
           </div>
@@ -1611,7 +1613,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
               </div>
             </div>
             
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+            <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3 bg-gray-50 sticky bottom-0">
               <button
                 type="button"
                 onClick={onClose}
@@ -1855,7 +1857,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
         <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 mb-6">
           <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
           <div className="p-6">
-            <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between">
+            <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-2 sm:mb-0">Milk Quality Analysis</h2>
               <div className="flex flex-wrap gap-2">
                 <button
@@ -2029,8 +2031,8 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
             <div className="mt-6 pt-6 border-t border-gray-200">
               <h3 className="text-sm font-medium text-gray-700 mb-3">
                 {selectedParameter === 'somatic' ? 'Somatic Cell Count Details' :
-                 selectedParameter === 'bacteria' ? 'Bacteria Count Details' :
-                 `${selectedParameter.charAt(0).toUpperCase() + selectedParameter.slice(1)} Content Details`}
+                selectedParameter === 'bacteria' ? 'Bacteria Count Details' :
+                `${selectedParameter.charAt(0).toUpperCase() + selectedParameter.slice(1)} Content Details`}
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="bg-gradient-to-b from-blue-50 to-blue-100 p-4 rounded-lg border border-blue-200">
@@ -2064,7 +2066,8 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
           <div className="px-6 py-4 border-b border-gray-200">
             <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Quality Summary</h2>
           </div>
-          <table className="min-w-full divide-y divide-gray-200">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
               <tr>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -2163,6 +2166,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
               </tr>
             </tbody>
           </table>
+        </div>
         </div>
       </div>
     );
@@ -2302,7 +2306,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
             console.log('Report downloaded with filename:', result.fileName);
             
             // Show success message
-            alert('Report generated and downloaded successfully!');
+            toast.success('Report generated and downloaded successfully!');
           } else {
             throw new Error('Generated report is missing file data');
           }
@@ -2337,13 +2341,13 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
           );
           
           // Show success message
-          alert('Report deleted successfully');
+          toast.success('Report deleted successfully');
         } else {
           throw new Error('Failed to delete report');
         }
       } catch (err) {
         console.error('Error deleting report:', err);
-        alert(`Failed to delete report: ${err.message}`);
+        toast.error(`Failed to delete report: ${err.message}`);
       } finally {
         setIsLoading(false);
       }
@@ -2449,12 +2453,13 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
           // Download the report
           downloadReport(result.fileData, fileName, report.format);
           console.log('Report downloaded:', fileName);
+          toast.success('Report downloaded:', fileName);
         } else {
           throw new Error('Failed to generate report file');
         }
       } catch (err) {
         console.error('Error downloading report:', err);
-        alert(`Failed to download report: ${err.message}`);
+        toast.error(`Failed to download report: ${err.message}`);
       } finally {
         setIsLoading(false);
       }
@@ -2587,11 +2592,11 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                 </>
               )}
               
-              <div className="md:col-span-2">
+              <div className="md:col-span-2 overflow-x-auto">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Output Format
                 </label>
-                <div className="mt-1 flex items-center space-x-4">
+                <div className="mt-1 flex items-center space-x-4 flex-wrap gap-y-2">
                   <div className="flex items-center">
                     <input
                       id="pdf"
@@ -2635,10 +2640,13 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
               </div>
             </div>
             
-            {/* Add report preview component */}
+            {/* Report Preview with scrollbar for long content */}
+          <div className="mt-4 p-4 border border-gray-200 rounded-lg bg-gray-50 max-h-[300px] overflow-y-auto">
             <ReportPreview reportType={reportType} />
-            
-            <div className="mt-6">
+          </div>
+          
+          {/* Button placed in full width container */}
+            <div className="mt-6 flex justify-center sm:justify-start">
               <button
                 onClick={handleGenerateReport}
                 disabled={isGenerating}
@@ -2850,14 +2858,14 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
     };
     
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
-        <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-100">
-          <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+      <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+        <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full my-6 mx-auto max-h-[90vh] overflow-y-auto border border-gray-100">
+          <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 sticky top-0 z-10"></div>
+          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-1 bg-white z-10">
             <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Record Milk Collection</h3>
             <button 
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-500 transition-colors duration-200"
+              className="text-gray-400 hover:text-gray-500 transition-colors duration-200 flex-shrink-0"
               disabled={isSubmitting}
             >
               <X size={20} />
@@ -3083,7 +3091,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
               </div>
             </div>
             
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+            <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3 bg-gray-50 sticky bottom-0">
               <button
                 type="button"
                 onClick={onClose}

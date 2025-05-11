@@ -18,6 +18,8 @@ import {
   Plus
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import emp from '../assets/images/emp.jpg'
+import { toast } from '../components/utils/ToastContainer';
 
 const UserProfile = ({ userData: initialUserData }) => {
   const [activeTab, setActiveTab] = useState('profile');
@@ -107,9 +109,10 @@ const UserProfile = ({ userData: initialUserData }) => {
             
           if (updateError) throw updateError;
         }
+        toast.success('Profile image updated successfully!');
       } catch (error) {
         console.error('Error uploading image:', error);
-        alert('Failed to upload image. Please try again.');
+        toast.error('Failed to upload image. Please try again.');
       }
     }
   };
@@ -183,11 +186,11 @@ const UserProfile = ({ userData: initialUserData }) => {
       if (error) throw error;
       
       setIsEditing(false);
-      alert('Profile updated successfully!');
+      toast.success('Profile updated successfully!');
       
     } catch (err) {
       console.error('Error updating profile:', err);
-      alert('Failed to update profile. Please try again.');
+      toast.error('Failed to update profile. Please try again.');
     }
   };
 
@@ -202,10 +205,10 @@ const UserProfile = ({ userData: initialUserData }) => {
   };
 
   return (
-    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
-      <div className="px-6 py-6">
+    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30 overflow-y-auto">
+      <div className="px-4 sm:px-6 py-4 sm:py-6 max-w-[1500px] mx-auto">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Profile</h1>
+          <h1 className="text-xl sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Profile</h1>
           {/* <div className="flex space-x-2">
             {isEditing ? (
               <>
@@ -234,17 +237,18 @@ const UserProfile = ({ userData: initialUserData }) => {
           </div> */}
         </div>
 
-        <div className="mb-6 flex space-x-4">
-          <button 
-            onClick={() => setActiveTab('profile')} 
-            className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px transition-all duration-300 ${
-              activeTab === 'profile' 
-                ? 'border-green-500 text-green-600 bg-gradient-to-b from-white to-green-50'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            Profile
-          </button>
+        <div className="mb-6 overflow-x-auto">
+          <div className="flex space-x-4 min-w-[300px]">
+            <button 
+              onClick={() => setActiveTab('profile')} 
+              className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px transition-all duration-300 ${
+                activeTab === 'profile' 
+                  ? 'border-green-500 text-green-600 bg-gradient-to-b from-white to-green-50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Profile
+            </button>
           {/* <button 
             onClick={() => setActiveTab('security')} 
             className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px transition-all duration-300 ${
@@ -279,16 +283,16 @@ const UserProfile = ({ userData: initialUserData }) => {
 
         {/* Profile Tab */}
         {activeTab === 'profile' && (
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6">
             <div className="lg:col-span-1">
               <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 p-6">
                 <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 -mx-6 -mt-6 mb-6"></div>
                 <div className="flex flex-col items-center">
                   <div className="relative">
                     <img 
-                      src={userAvatar} 
+                      src={emp} 
                       alt="Profile" 
-                      className="w-32 h-32 rounded-full object-cover border-4 border-white shadow"
+                      className="w-24 h-24 sm:w-32 sm:h-32 rounded-full object-cover border-4 border-white shadow"
                     />
                     {isEditing && (
                       <label htmlFor="avatar-upload" className="absolute bottom-0 right-0 bg-gradient-to-r from-green-600 to-blue-600 text-white p-2 rounded-full cursor-pointer hover:opacity-90 transition-opacity shadow-sm">
@@ -304,37 +308,37 @@ const UserProfile = ({ userData: initialUserData }) => {
                     )}
                   </div>
                   
-                  <h2 className="mt-4 text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">
+                  <h2 className="mt-4 text-lg sm:text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 text-center">
                     {userData.firstName} {userData.lastName}
                   </h2>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-gray-500 text-center">
                     {userData.jobTitle}
                   </p>
                   
                   <div className="mt-6 w-full border-t border-gray-200 pt-4">
-                    <div className="flex items-center mb-3">
-                      <Mail size={16} className="text-gray-400 mr-2" />
-                      <span className="text-sm text-gray-600">{userData.email}</span>
-                    </div>
-                    <div className="flex items-center mb-3">
-                      <Phone size={16} className="text-gray-400 mr-2" />
-                      <span className="text-sm text-gray-600">{userData.phone}</span>
+                    <div className="flex items-start mb-3">
+                      <Mail size={16} className="text-gray-400 mr-2 mt-0.5 flex-shrink-0" />
+                      <span className="text-sm text-gray-600 break-words">{userData.email}</span>
                     </div>
                     <div className="flex items-start mb-3">
-                      <MapPin size={16} className="text-gray-400 mr-2 mt-1" />
-                      <span className="text-sm text-gray-600">{userData.address}</span>
+                      <Phone size={16} className="text-gray-400 mr-2 mt-0.5 flex-shrink-0" />
+                      <span className="text-sm text-gray-600 break-words">{userData.phone}</span>
                     </div>
-                    <div className="flex items-center mb-3">
-                      <Briefcase size={16} className="text-gray-400 mr-2" />
-                      <span className="text-sm text-gray-600">{userData.department}</span>
+                    <div className="flex items-start mb-3">
+                      <MapPin size={16} className="text-gray-400 mr-2 mt-1 flex-shrink-0" />
+                      <span className="text-sm text-gray-600 break-words">{userData.address}</span>
                     </div>
-                    <div className="flex items-center mb-3">
-                      <Clock size={16} className="text-gray-400 mr-2" />
-                      <span className="text-sm text-gray-600">{userData.workSchedule}</span>
+                    <div className="flex items-start mb-3">
+                      <Briefcase size={16} className="text-gray-400 mr-2 mt-0.5 flex-shrink-0" />
+                      <span className="text-sm text-gray-600 break-words">{userData.department}</span>
                     </div>
-                    <div className="flex items-center">
-                      <Calendar size={16} className="text-gray-400 mr-2" />
-                      <span className="text-sm text-gray-600">Joined {formatDate(userData.dateJoined)}</span>
+                    <div className="flex items-start mb-3">
+                      <Clock size={16} className="text-gray-400 mr-2 mt-0.5 flex-shrink-0" />
+                      <span className="text-sm text-gray-600 break-words">{userData.workSchedule}</span>
+                    </div>
+                    <div className="flex items-start">
+                      <Calendar size={16} className="text-gray-400 mr-2 mt-0.5 flex-shrink-0" />
+                      <span className="text-sm text-gray-600 break-words">Joined {formatDate(userData.dateJoined)}</span>
                     </div>
                   </div>
                 </div>
@@ -563,12 +567,12 @@ const UserProfile = ({ userData: initialUserData }) => {
                   
                   <div className="flex flex-wrap gap-2 mb-2">
                     {userData.skills.map((skill, index) => (
-                      <div key={index} className="flex items-center bg-gradient-to-r from-green-50 to-blue-50 text-green-800 px-3 py-1 rounded-full text-sm">
-                        {skill}
+                      <div key={index} className="flex items-center bg-gradient-to-r from-green-50 to-blue-50 text-green-800 px-3 py-1 rounded-full text-sm mb-1">
+                        <span className="break-words">{skill}</span>
                         {isEditing && (
                           <button 
                             onClick={() => handleSkillChange('remove', index)}
-                            className="ml-1 text-green-600 hover:text-green-900"
+                            className="ml-1 text-green-600 hover:text-green-900 p-0.5"
                           >
                             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -609,10 +613,10 @@ const UserProfile = ({ userData: initialUserData }) => {
                   
                   <div className="space-y-4">
                     {userData.certifications.map((cert, index) => (
-                      <div key={index} className={`p-3 ${isEditing ? 'border border-gray-200 rounded-lg' : ''}`}>
+                      <div key={index} className={`p-3 ${isEditing ? 'border border-gray-200 rounded-lg' : ''} overflow-hidden`}>
                         {isEditing ? (
-                          <div className="grid grid-cols-12 gap-2">
-                            <div className="col-span-7">
+                          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                            <div className="sm:col-span-7">
                               <input
                                 type="text"
                                 value={cert.name}
@@ -621,7 +625,7 @@ const UserProfile = ({ userData: initialUserData }) => {
                                 placeholder="Certification name"
                               />
                             </div>
-                            <div className="col-span-4">
+                            <div className="sm:col-span-4">
                               <input
                                 type="date"
                                 value={cert.expiry}
@@ -629,23 +633,23 @@ const UserProfile = ({ userData: initialUserData }) => {
                                 className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
                               />
                             </div>
-                            <div className="col-span-1 flex items-center justify-center">
+                            <div className="sm:col-span-1 flex items-center justify-center mt-2 sm:mt-0">
                               <button
                                 type="button"
                                 onClick={() => handleCertChange('remove', index)}
-                                className="text-red-600 hover:text-red-900 transition-colors"
+                                className="text-red-600 hover:text-red-900 transition-colors p-1" // Added padding for better touch target
                               >
                                 <Trash2 size={16} />
                               </button>
                             </div>
                           </div>
                         ) : (
-                          <div className="flex justify-between">
+                          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                             <div>
-                              <p className="text-sm font-medium text-gray-800">{cert.name}</p>
+                              <p className="text-sm font-medium text-gray-800 break-words">{cert.name}</p>
                             </div>
-                            <div>
-                              <span className="text-xs bg-gradient-to-r from-blue-50 to-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                            <div className="mt-1 sm:mt-0">
+                              <span className="text-xs bg-gradient-to-r from-blue-50 to-blue-100 text-blue-800 px-2 py-1 rounded-full whitespace-nowrap">
                                 Expires: {formatDate(cert.expiry)}
                               </span>
                             </div>
@@ -688,7 +692,7 @@ const UserProfile = ({ userData: initialUserData }) => {
                   </label>
                   <input
                     type="password"
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                    className="block w-full px-3 py-2.5 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                     placeholder="Enter your current password"
                   />
                 </div>
@@ -718,7 +722,7 @@ const UserProfile = ({ userData: initialUserData }) => {
                 <div>
                   <button
                     type="button"
-                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300"
+                    className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2.5 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300"
                   >
                     Update Password
                   </button>
@@ -740,7 +744,7 @@ const UserProfile = ({ userData: initialUserData }) => {
                 
                 <button
                   type="button"
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
                 >
                   Enable Two-Factor Authentication
                 </button>
@@ -748,13 +752,13 @@ const UserProfile = ({ userData: initialUserData }) => {
               
               <h4 className="text-sm font-medium text-gray-700 mb-2">Login Activity</h4>
               <div className="bg-gray-50 rounded-md p-4">
-                <div className="space-y-3">
-                  <div className="flex justify-between">
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                     <div>
                       <p className="text-sm font-medium text-gray-800">Rural County, USA</p>
                       <p className="text-xs text-gray-500">April 26, 2023 - 08:45 AM</p>
                     </div>
-                    <div>
+                    <div className="mt-1 sm:mt-0">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                         Current Session
                       </span>
@@ -1096,6 +1100,7 @@ const UserProfile = ({ userData: initialUserData }) => {
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Download
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, Pie } from 'recharts';
 import { getFinancialDashboardData, addCustomer, addExpense, addInvoice, processPayroll,updateExpense, deleteExpense, getExpensesByPage,getEmployeePayrollHistory,updateEmployeePayrollInfo,getPayrollDetails,voidPayrollPayment,getInvoices, getInvoiceById, updateInvoiceStatus, deleteInvoice,getInvoiceAgingSummary,generateInvoiceNumber,getCustomers,updateCustomer,deleteCustomer } from './services/financialService';
 import { supabase } from '../lib/supabase';
+import LoadingSpinner from './LoadingSpinner';
 
 
 const statusColors = {
@@ -755,14 +756,7 @@ const FinancesManagement = () => {
   
   // Loading state
   if (isLoading && !financialData) {
-    return (
-      <div className="h-full bg-gray-100 flex justify-center items-center">
-        <div className="flex flex-col items-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500 mb-4"></div>
-          <p className="text-gray-600">Loading financial data...</p>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner message='Loading financial data...'/>;
   }
 
   const handleExpenseSearch = (e) => {
@@ -1933,11 +1927,11 @@ const FinancesManagement = () => {
   }
   
   return (
-    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
-      <div className="px-6 py-6">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Financial Management</h1>
-          <div className="flex space-x-3">
+    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30 overflow-y-auto">
+      <div className="px-4 sm:px-6 py-4 sm:py-6 max-w-[1500px] mx-auto">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
+          <h1 className="text-xl sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Financial Management</h1>
+          <div className="flex flex-wrap gap-2">
             <button 
               onClick={toggleAddExpenseModal}
               className="flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm"
@@ -1955,8 +1949,8 @@ const FinancesManagement = () => {
           </div>
         </div>
         
-        <div className="mb-6">
-          <nav className="flex space-x-4 border-b border-gray-200 overflow-x-auto">
+        <div className="mb-6 overflow-x-auto">
+          <nav className="flex space-x-4 border-b border-gray-200 min-w-[600px]">
             <button
               onClick={() => setActiveTab('dashboard')}
               className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap transition-all duration-300 ${
@@ -2021,7 +2015,7 @@ const FinancesManagement = () => {
         </div>
         
         {/* Date Range Filter */}
-        <div className="mb-6 flex items-center space-x-4">
+        <div className="mb-6 flex flex-wrap items-center gap-3">
           <span className="text-sm text-gray-600">Date Range:</span>
           <select
             value={expenseDateRange}
@@ -2035,7 +2029,7 @@ const FinancesManagement = () => {
           </select>
           
           {expenseDateRange === 'custom' && (
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
               <input
                 type="date"
                 value={customDateRange.startDate}
@@ -2063,9 +2057,9 @@ const FinancesManagement = () => {
         {activeTab === 'dashboard' && (
           <div>
             {/* Financial KPIs */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
-                  <div className="h-2 bg-gradient-to-r from-green-500 to-green-600"></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
+              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
+                <div className="h-2 bg-gradient-to-r from-green-500 to-green-600"></div>
                   <div className="p-5">
                     <div className="flex justify-between items-start">
                       <div>
@@ -2206,8 +2200,9 @@ const FinancesManagement = () => {
                     <option>Yearly</option>
                   </select>
                 </div>
-                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div className="h-80 overflow-x-auto">
+                  <div className="min-w-[400px] h-full">
+                    <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={financialData?.revenue?.monthly}
                       margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
@@ -2227,6 +2222,7 @@ const FinancesManagement = () => {
                   </ResponsiveContainer>
                 </div>
               </div>
+            </div>
             </div>
             
             <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
@@ -2713,14 +2709,15 @@ const FinancesManagement = () => {
         {activeTab === 'invoices' && renderInvoicesTab()}
         
         {/* Reports Tab */}
-                {activeTab === 'reports' && (
+        {activeTab === 'reports' && (
           <div className="space-y-6">
-            {/* Report Generation Panel */}
-            <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
-              <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-              <div className="px-6 py-6">
-                <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">Generate Financial Reports</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Report Generation Panel */}
+          <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
+            <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+            <div className="px-6 py-6">
+              <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">Generate Financial Reports</h2>
+              <div className="grid grid-cols-1 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label htmlFor="reportType" className="block text-sm font-medium text-gray-700 mb-1">
                       Report Type
@@ -2755,57 +2752,58 @@ const FinancesManagement = () => {
                       <option value="custom">Custom Range...</option>
                     </select>
                   </div>
-                  
-                  <div className="md:col-span-2">
-                    <label htmlFor="format" className="block text-sm font-medium text-gray-700 mb-1">
-                      Output Format
-                    </label>
-                    <div className="mt-1 flex items-center space-x-4">
-                      <div className="flex items-center">
-                        <input
-                          id="pdf"
-                          name="format"
-                          type="radio"
-                          defaultChecked
-                          className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
-                        />
-                        <label htmlFor="pdf" className="ml-2 block text-sm text-gray-700">
-                          PDF
-                        </label>
-                      </div>
-                      <div className="flex items-center">
-                        <input
-                          id="excel"
-                          name="format"
-                          type="radio"
-                          className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
-                        />
-                        <label htmlFor="excel" className="ml-2 block text-sm text-gray-700">
-                          Excel
-                        </label>
-                      </div>
-                      <div className="flex items-center">
-                        <input
-                          id="csv"
-                          name="format"
-                          type="radio"
-                          className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
-                        />
-                        <label htmlFor="csv" className="ml-2 block text-sm text-gray-700">
-                          CSV
-                        </label>
-                      </div>
+                </div>
+                
+                <div>
+                  <label htmlFor="format" className="block text-sm font-medium text-gray-700 mb-1">
+                    Output Format
+                  </label>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <div className="flex items-center">
+                      <input
+                        id="pdf"
+                        name="format"
+                        type="radio"
+                        defaultChecked
+                        className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
+                      />
+                      <label htmlFor="pdf" className="ml-2 block text-sm text-gray-700">
+                        PDF
+                      </label>
+                    </div>
+                    <div className="flex items-center">
+                      <input
+                        id="excel"
+                        name="format"
+                        type="radio"
+                        className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
+                      />
+                      <label htmlFor="excel" className="ml-2 block text-sm text-gray-700">
+                        Excel
+                      </label>
+                    </div>
+                    <div className="flex items-center">
+                      <input
+                        id="csv"
+                        name="format"
+                        type="radio"
+                        className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
+                      />
+                      <label htmlFor="csv" className="ml-2 block text-sm text-gray-700">
+                        CSV
+                      </label>
                     </div>
                   </div>
                 </div>
-                
-                <div className="mt-6">
-                  <button className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 transition-opacity">
-                    Generate Report
-                  </button>
-                </div>
+              </div>
+              
+              <div className="mt-6">
+                <button className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 transition-opacity">
+                  Generate Report
+                </button>
               </div>
             </div>
+          </div>
             
             {/* Financial Metrics Summary */}
             <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
@@ -2918,28 +2916,29 @@ const FinancesManagement = () => {
                 </div>
                 
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
-                      <tr>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Report Name
-                        </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Frequency
-                        </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Recipients
-                        </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Next Delivery
-                        </th>
-                        <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      <tr className="hover:bg-gray-50 transition-colors duration-200">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
+                        <tr>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Report Name
+                          </th>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Frequency
+                          </th>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Recipients
+                          </th>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Next Delivery
+                          </th>
+                          <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        <tr className="hover:bg-gray-50 transition-colors duration-200">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           Monthly Financial Summary
                         </td>
@@ -2998,6 +2997,7 @@ const FinancesManagement = () => {
                 </div>
               </div>
             </div>
+            </div>
             
             {/* Report Templates */}
             <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
@@ -3011,9 +3011,9 @@ const FinancesManagement = () => {
                   </button>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all duration-200">
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center flex-wrap gap-2">
                       <h3 className="text-sm font-medium text-gray-900">Monthly Financial Summary</h3>
                       <div className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-md">Default</div>
                     </div>
@@ -3147,10 +3147,10 @@ const FinancesManagement = () => {
 // View Payroll History Modal
 const ViewPayrollHistoryModal = ({ employee, payrollHistory, isLoading, onClose }) => {
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-screen overflow-y-auto border border-gray-100">
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[85vh] overflow-y-auto border border-gray-100 my-8 mx-auto">
         <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
           <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">
             Payroll History - {employee.name}
           </h3>
@@ -3163,9 +3163,7 @@ const ViewPayrollHistoryModal = ({ employee, payrollHistory, isLoading, onClose 
         </div>
         
         {isLoading ? (
-          <div className="px-6 py-12 flex justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-500"></div>
-          </div>
+          <LoadingSpinner message='Loading Data...'/>
         ) : (
           <div className="px-6 py-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -3194,13 +3192,14 @@ const ViewPayrollHistoryModal = ({ employee, payrollHistory, isLoading, onClose 
                   <p className="text-md font-semibold text-gray-800">{formatDate(employee.lastPaid)}</p>
                 </div>
               </div>
-            </div>
+              </div>
             
             <h4 className="text-md font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">Payment History</h4>
             {payrollHistory.length > 0 ? (
               <div className="border rounded-xl overflow-hidden shadow-md">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
                     <tr>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Date
@@ -3258,7 +3257,8 @@ const ViewPayrollHistoryModal = ({ employee, payrollHistory, isLoading, onClose 
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                  </table>
+                </div>
               </div>
             ) : (
               <div className="text-center py-8 text-gray-500 bg-gray-50/50 rounded-xl border border-gray-100">
@@ -3537,9 +3537,7 @@ const PayrollDetailsModal = ({ payrollData, isLoading, onClose, onVoid }) => {
         </div>
         
         {isLoading ? (
-          <div className="px-6 py-12 flex justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-500"></div>
-          </div>
+          <LoadingSpinner message='Loading Data...'/>
         ) : (
           <div className="px-6 py-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -3674,8 +3672,8 @@ const PayrollDetailsModal = ({ payrollData, isLoading, onClose, onVoid }) => {
 // Report Item Component
 const ReportItem = ({ title, type, date, format, size }) => {
   return (
-    <li className="px-6 py-4 hover:bg-gray-50">
-      <div className="flex items-center justify-between">
+    <li className="px-4 sm:px-6 py-4 hover:bg-gray-50">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-start">
           <div className="flex-shrink-0">
             {format === 'PDF' ? (
@@ -3692,18 +3690,18 @@ const ReportItem = ({ title, type, date, format, size }) => {
               </div>
             )}
           </div>
-          <div className="ml-4">
-            <h3 className="text-sm font-medium text-gray-800">{title}</h3>
-            <div className="mt-1 flex items-center text-xs text-gray-500">
+          <div className="ml-4 overflow-hidden">
+            <h3 className="text-sm font-medium text-gray-800 break-words">{title}</h3>
+            <div className="mt-1 flex flex-wrap items-center text-xs text-gray-500 gap-x-1">
               <span>{type}</span>
-              <span className="mx-1">•</span>
+              <span className="hidden sm:inline">•</span>
               <span>{formatDate(date)}</span>
-              <span className="mx-1">•</span>
+              <span className="hidden sm:inline">•</span>
               <span>{size}</span>
             </div>
           </div>
         </div>
-        <div>
+        <div className="ml-auto">
           <button className="p-2 text-gray-400 hover:text-gray-600 rounded-full">
             <Download size={16} />
           </button>
@@ -3997,17 +3995,15 @@ const AddExpenseModal = ({ onClose, onSubmit }) => {
   };
   
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full my-8 mx-auto max-h-[85vh] overflow-y-auto">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
           <h3 className="text-lg font-medium text-gray-800">Add Expense</h3>
           <button 
             onClick={onClose}
             className="text-gray-400 hover:text-gray-500"
           >
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <X size={20} />
           </button>
         </div>
         
@@ -4195,7 +4191,7 @@ const AddExpenseModal = ({ onClose, onSubmit }) => {
           </div>
           </div>
           
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+          <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3 sticky bottom-0 bg-white z-10">
             <button
               type="button"
               onClick={onClose}
@@ -4639,10 +4635,10 @@ const ProcessPayrollModal = ({ onClose, onSubmit, employees }) => {
   };
   
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-screen overflow-y-auto border border-gray-100">
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[85vh] overflow-y-auto border border-gray-100 my-8 mx-auto">
         <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
           <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">
             Process Payroll
           </h3>
@@ -4740,8 +4736,9 @@ const ProcessPayrollModal = ({ onClose, onSubmit, employees }) => {
             <div>
               <h4 className="text-sm font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-2">Employee Payments</h4>
               <div className="border rounded-xl overflow-hidden shadow-md">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
                     <tr>
                       <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Employee
@@ -4864,10 +4861,11 @@ const ProcessPayrollModal = ({ onClose, onSubmit, employees }) => {
                   </tbody>
                 </table>
               </div>
+              </div>
             </div>
           </div>
           
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+          <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3 sticky bottom-0 bg-white z-10">
             <button
               type="button"
               onClick={onClose}
@@ -5012,24 +5010,22 @@ const AddInvoiceModal = ({ onClose, onSubmit, customers = [], toggleAddCustomerM
   };
   
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-screen overflow-y-auto">
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl my-8 mx-auto max-h-[85vh] overflow-y-auto">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
           <h3 className="text-lg font-medium text-gray-800">Create New Invoice</h3>
           <button 
             onClick={onClose}
             className="text-gray-400 hover:text-gray-500"
           >
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <X size={20} />
           </button>
         </div>
         
         <form onSubmit={handleSubmit}>
           <div className="px-6 py-4 space-y-6">
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            <div>
+              <div>
               <label htmlFor="customer" className="block text-sm font-medium text-gray-700 mb-1">
                 Customer *
               </label>
@@ -5106,8 +5102,9 @@ const AddInvoiceModal = ({ onClose, onSubmit, customers = [], toggleAddCustomerM
               </div>
               
               <div className="border rounded-md overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
                     <tr>
                       <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Description
@@ -5196,6 +5193,7 @@ const AddInvoiceModal = ({ onClose, onSubmit, customers = [], toggleAddCustomerM
                   </tfoot>
                 </table>
               </div>
+              </div>
             </div>
             
             <div>
@@ -5214,7 +5212,7 @@ const AddInvoiceModal = ({ onClose, onSubmit, customers = [], toggleAddCustomerM
             </div>
           </div>
           
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+          <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3 sticky bottom-0 bg-white z-10">
             <button
               type="button"
               onClick={onClose}
@@ -5240,10 +5238,10 @@ const ViewInvoiceModal = ({ invoice, isLoading, onClose, onStatusChange, onDelet
   if (!invoice) return null;
   
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-gray-100">
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[85vh] overflow-y-auto border border-gray-100 my-8 mx-auto">
         <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
           <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">
             Invoice Details - {invoice.invoice_number}
           </h3>
@@ -5256,25 +5254,23 @@ const ViewInvoiceModal = ({ invoice, isLoading, onClose, onStatusChange, onDelet
         </div>
         
         {isLoading ? (
-          <div className="px-6 py-12 flex justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-500"></div>
-          </div>
+          <LoadingSpinner message='Loading Data...'/>
         ) : (
           <div className="px-6 py-4 space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between">
+            <div className="flex flex-col sm:flex-row justify-between gap-4">
               <div>
                 <h4 className="text-lg font-medium text-gray-900">Customer Information</h4>
                 <p className="text-sm text-gray-600 mt-2">{invoice.customers?.name}</p>
                 <p className="text-sm text-gray-600">{invoice.customers?.email}</p>
                 <p className="text-sm text-gray-600">{invoice.customers?.phone}</p>
-                <p className="text-sm text-gray-600">{invoice.customers?.address}</p>
+                <p className="text-sm text-gray-600 break-words max-w-xs">{invoice.customers?.address}</p>
               </div>
               
               <div className="mt-4 sm:mt-0">
                 <h4 className="text-lg font-medium text-gray-900">Invoice Details</h4>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-2">
                   <div className="text-sm text-gray-600">Invoice Number:</div>
-                  <div className="text-sm font-medium text-gray-900">{invoice.invoice_number}</div>
+                  <div className="text-sm font-medium text-gray-900 break-words">{invoice.invoice_number}</div>
                   
                   <div className="text-sm text-gray-600">Date:</div>
                   <div className="text-sm font-medium text-gray-900">{formatDate(invoice.date)}</div>
@@ -5302,8 +5298,9 @@ const ViewInvoiceModal = ({ invoice, isLoading, onClose, onStatusChange, onDelet
             <div>
               <h4 className="text-lg font-medium text-gray-900 mb-3">Invoice Items</h4>
               <div className="border rounded-md overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
                     <tr>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Description
@@ -5350,6 +5347,7 @@ const ViewInvoiceModal = ({ invoice, isLoading, onClose, onStatusChange, onDelet
                 </table>
               </div>
             </div>
+            </div>
             
             {invoice.notes && (
               <div>
@@ -5360,16 +5358,16 @@ const ViewInvoiceModal = ({ invoice, isLoading, onClose, onStatusChange, onDelet
               </div>
             )}
             
-            <div className="flex justify-between border-t border-gray-200 pt-4">
+            <div className="flex flex-col sm:flex-row sm:justify-between gap-4 border-t border-gray-200 pt-4">
               <div>
                 <button
                   onClick={() => onDelete(invoice.id)}
-                  className="px-4 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition-all duration-300"
+                  className="px-4 py-2 w-full sm:w-auto border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition-all duration-300"
                 >
                   Delete Invoice
                 </button>
               </div>
-              <div className="space-x-3">
+              <div className="flex flex-col sm:flex-row gap-3">
                 {invoice.status === 'Pending' && (
                   <button
                     onClick={() => onStatusChange(invoice.id, 'Paid')}

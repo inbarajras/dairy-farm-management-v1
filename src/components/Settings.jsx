@@ -22,6 +22,9 @@ import {
 import { supabase } from '../lib/supabase';
 import { fetchUsers, createUser, updateUser, deleteUser, resetUserPassword,updateUserStatus } from './services/userService';
 import { fetchSystemSettings, updateSystemSettings } from './services/settingsService';
+import emp from '../assets/images/emp.jpg'
+import LoadingSpinner from './LoadingSpinner';
+import {toast} from './utils/ToastContainer';
 
 // Status colors (keep as is)
 const statusColors = {
@@ -198,7 +201,7 @@ const SettingsScreen = () => {
     if (!newPassword) return;
     
     if (newPassword.length < 8) {
-      alert('Password must be at least 8 characters long');
+      toast.warning('Password must be at least 8 characters long');
       return;
     }
     
@@ -206,7 +209,7 @@ const SettingsScreen = () => {
     setError(null);
     try {
       await resetUserPassword(userId, newPassword);
-      alert('Password has been reset successfully');
+      toast.success('Password has been reset successfully');
     } catch (err) {
       console.error('Error resetting password:', err);
       setError('Failed to reset password: ' + (err.message || 'Unknown error'));
@@ -268,10 +271,10 @@ const SettingsScreen = () => {
   };
 
   return (
-    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
-      <div className="px-6 py-6">
+    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30 overflow-y-auto">
+      <div className="px-4 sm:px-6 py-4 sm:py-6 max-w-[1500px] mx-auto">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Settings</h1>
+          <h1 className="text-xl sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Settings</h1>
           <div className="flex space-x-4">
             <button 
               onClick={saveSettings}
@@ -296,21 +299,27 @@ const SettingsScreen = () => {
         {showSaveConfirmation && (
           <div className="mb-6 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-md flex items-start">
             <Check size={20} className="mr-2 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="font-medium">Settings saved successfully!</p>
+            <div className="flex-1 mr-2">
+              <p className="font-medium break-words">Settings saved successfully!</p>
               <p className="text-sm">Your changes have been applied to the system.</p>
             </div>
+            <button 
+              onClick={() => setShowSaveConfirmation(false)}
+              className="text-green-700 hover:text-green-900"
+            >
+              <X size={16} />
+            </button>
           </div>
         )}
         
         <div className="flex flex-col lg:flex-row space-y-6 lg:space-y-0 lg:space-x-6">
-          <div className="lg:w-1/4">
+          <div className="lg:w-1/4 w-full">
             <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100">
               <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
               <div className="p-4 border-b border-gray-200">
                 <h2 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Settings</h2>
               </div>
-              <nav className="p-2">
+              <nav className="p-2 flex flex-row lg:flex-col overflow-x-auto">
                 <SettingsNavItem 
                   icon={<SettingsIcon size={20} />} 
                   label="General Settings" 
@@ -357,9 +366,10 @@ const SettingsScreen = () => {
             </div>
           </div>
 
-          <div className="lg:w-3/4">
-            <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 p-6">
+          <div className="lg:w-3/4 w-full">
+            <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 p-6 overflow-hidden">
               <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 -mx-6 -mt-6 mb-6"></div>
+              <div className="overflow-x-auto">
               {activeTab === 'general' && (
                 <GeneralSettingsTab settings={systemSettings.general} onChange={handleSettingChange} />
               )}
@@ -400,6 +410,7 @@ const SettingsScreen = () => {
             </div>
           </div>
         </div>
+        </div>
       </div>
 
       {isAddUserModalOpen && (
@@ -428,14 +439,14 @@ const SettingsNavItem = ({ icon, label, active, onClick }) => {
   return (
     <button
       onClick={onClick}
-      className={`flex items-center w-full px-4 py-3 rounded-lg text-left mb-1 transition-all duration-200 ${
+      className={`flex items-center min-w-[140px] px-4 py-3 rounded-lg text-left mb-1 lg:mb-1 mr-1 lg:mr-0 transition-all duration-200 ${
         active 
           ? 'bg-gradient-to-r from-green-50 to-blue-50 text-green-600' 
           : 'text-gray-600 hover:bg-gray-50'
       }`}
     >
       <span className={`mr-3 ${active ? 'text-green-600' : 'text-gray-500'}`}>{icon}</span>
-      <span className="font-medium">{label}</span>
+      <span className="font-medium whitespace-nowrap">{label}</span>
     </button>
   );
 };
@@ -443,10 +454,10 @@ const SettingsNavItem = ({ icon, label, active, onClick }) => {
 // General Settings Tab
 const GeneralSettingsTab = ({ settings, onChange }) => {
   return (
-    <div>
+    <div className="min-w-[300px]">
       <h2 className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-6">General Settings</h2>
       
-      <div className="space-y-6">
+      <div className="space-y-6 overflow-x-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label htmlFor="farmName" className="block text-sm font-medium text-gray-700 mb-1">
@@ -718,11 +729,11 @@ const UserManagementTab = ({
   isLoading 
 }) => {
   return (
-    <div>
+    <div className="min-w-[300px]">
       <h2 className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-6">User Management</h2>
       
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0 mb-6">
-        <div className="relative flex-grow max-w-md">
+        <div className="relative flex-grow max-w-md w-full">
           <input
             type="text"
             placeholder="Search users..."
@@ -745,9 +756,7 @@ const UserManagementTab = ({
       </div>
       
       {isLoading ? (
-        <div className="flex justify-center my-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
-        </div>
+        <LoadingSpinner></LoadingSpinner>
       ) : (
         <div className="bg-white rounded-lg overflow-hidden border border-gray-200 shadow-sm">
           {users.length === 0 ? (
@@ -755,37 +764,38 @@ const UserManagementTab = ({
               No users found matching your search criteria.
             </div>
           ) : (
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
-                <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    User
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Role
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Last Login
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    2FA
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {users.map(user => (
-                  <tr key={user.id} className="hover:bg-gray-50 transition-colors duration-200">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      User
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Role
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Last Login
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      2FA
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {users.map(user => (
+                    <tr key={user.id} className="hover:bg-gray-50 transition-colors duration-200">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10">
                           <img 
-                            src={user.profileImage} 
+                            src={emp} 
                             alt={user.name} 
                             className="h-10 w-10 rounded-full object-cover"
                           />
@@ -836,10 +846,11 @@ const UserManagementTab = ({
                         Delete
                       </button>
                     </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}
@@ -1098,7 +1109,7 @@ const BackupTab = ({ settings, onChange, formatDate }) => {
           <div className="px-4 py-5 sm:px-6 bg-gray-50 border-b border-gray-200">
             <h3 className="text-lg leading-6 font-medium text-gray-900">Backup History</h3>
           </div>
-          <div className="px-4 py-5 sm:p-6">
+          <div className="px-4 py-5 sm:p-6 overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -1170,11 +1181,11 @@ const SystemTab = () => {
       <div className="space-y-6">
         <div className="bg-gray-50 p-4 rounded-lg">
           <h3 className="text-sm font-medium text-gray-700 mb-3">System Information</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="bg-white p-3 rounded-md border border-gray-200">
-              <div className="flex items-center">
-                <Database size={16} className="text-gray-400 mr-2" />
-                <span className="text-sm font-medium text-gray-700">Database Size</span>
+              <div className="flex items-center flex-wrap">
+                <Database size={16} className="text-gray-400 mr-2 flex-shrink-0" />
+                <span className="text-sm font-medium text-gray-700 break-words">Database Size</span>
               </div>
               <div className="mt-1 text-sm text-gray-900 pl-6">1.2 GB</div>
             </div>
@@ -1269,7 +1280,7 @@ const SystemTab = () => {
                 <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
               </div>
               <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-              <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full w-full mx-4">
                 <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                   <div className="sm:flex sm:items-start">
                     <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
@@ -1285,7 +1296,7 @@ const SystemTab = () => {
                     </div>
                   </div>
                 </div>
-                <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse gap-3 flex flex-col-reverse">
                   <button 
                     type="button" 
                     className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm"
@@ -1418,9 +1429,9 @@ const AddUserModal = ({ onClose, onSubmit, isLoading }) => {
   };
   
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full my-8 mx-auto max-h-[90vh] overflow-y-auto">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
           <h3 className="text-lg font-medium text-gray-800">Add New User</h3>
           <button 
             onClick={onClose}
@@ -1599,7 +1610,7 @@ const AddUserModal = ({ onClose, onSubmit, isLoading }) => {
             </div>
           </div>
           
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+          <div className="px-6 py-4 border-t border-gray-200 flex justify-end sm:flex-row flex-col gap-3 sticky bottom-0 bg-white z-10">
             <button
               type="button"
               onClick={onClose}
@@ -1614,7 +1625,7 @@ const AddUserModal = ({ onClose, onSubmit, isLoading }) => {
               className={`py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${isLoading ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500`}
             >
               {isLoading ? (
-                <div className="flex items-center">
+                <div className="flex items-center justify-center">
                   <RefreshCw size={16} className="animate-spin mr-2" />
                   Adding...
                 </div>
@@ -1688,9 +1699,9 @@ const EditUserModal = ({ user, onClose, onSubmit, onResetPassword, isLoading }) 
   };
   
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full my-8 mx-auto max-h-[90vh] overflow-y-auto">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
           <h3 className="text-lg font-medium text-gray-800">Edit User</h3>
           <button 
             onClick={onClose}
@@ -1703,15 +1714,15 @@ const EditUserModal = ({ user, onClose, onSubmit, onResetPassword, isLoading }) 
         
         <form onSubmit={handleSubmit}>
           <div className="px-6 py-4 space-y-4">
-            <div className="flex items-center">
+            <div className="flex items-center flex-wrap gap-3">
               <img 
-                src={user.profileImage} 
+                src={emp} 
                 alt={user.name} 
-                className="h-16 w-16 rounded-full mr-4"
+                className="h-16 w-16 rounded-full"
               />
               <div>
-                <h3 className="text-lg font-medium text-gray-900">{user.name}</h3>
-                <p className="text-sm text-gray-500">User ID: {user.id}</p>
+                <h3 className="text-lg font-medium text-gray-900 break-words">{user.name}</h3>
+                <p className="text-sm text-gray-500 break-words">User ID: {user.id}</p>
               </div>
             </div>
             
@@ -1821,7 +1832,7 @@ const EditUserModal = ({ user, onClose, onSubmit, onResetPassword, isLoading }) 
             </div>
           </div>
           
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+          <div className="px-6 py-4 border-t border-gray-200 flex justify-end sm:flex-row flex-col gap-3 sticky bottom-0 bg-white z-10">
             <button
               type="button"
               onClick={onClose}
@@ -1836,7 +1847,7 @@ const EditUserModal = ({ user, onClose, onSubmit, onResetPassword, isLoading }) 
               className={`py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${isLoading ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500`}
             >
               {isLoading ? (
-                <div className="flex items-center">
+                <div className="flex items-center justify-center">
                   <RefreshCw size={16} className="animate-spin mr-2" />
                   Saving...
                 </div>

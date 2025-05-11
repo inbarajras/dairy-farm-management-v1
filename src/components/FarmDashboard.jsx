@@ -34,6 +34,7 @@ import { fetchCurrentUser } from './services/userService';
 import { getFinancialDashboardData } from './services/financialService';
 import { supabase } from '../lib/supabase';
 import UserProfile from './UserProfile';
+import LoadingSpinner from './LoadingSpinner';
 
 // Main farm dashboard component
 const FarmDashboard = () => {
@@ -390,14 +391,7 @@ const FarmDashboard = () => {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-gray-100">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500 mx-auto"></div>
-          <p className="mt-4 text-gray-700">Loading dashboard data...</p>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner message='Loading Data...'/>
   }
 
   if (error) {
@@ -473,18 +467,18 @@ const FarmDashboard = () => {
   };
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-blue-50/60 via-white to-green-50/70">
+    <div className="flex h-screen bg-gradient-to-br from-blue-50/60 via-white to-green-50/70 overflow-hidden">
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top Navigation */}
-        <header className="bg-white shadow-sm z-30 border-b border-gray-100">
-          <div className="flex items-center justify-between p-4">
+      {/* Top Navigation */}
+        <header className="bg-white shadow-sm z-30 border-b border-gray-100 flex-shrink-0">
+          <div className="flex items-center justify-between p-3 sm:p-4">
             <div className="flex items-center">
-              <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-600 via-emerald-500 to-blue-600">
+              <h1 className="text-lg sm:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-600 via-emerald-500 to-blue-600 truncate">
                 Dairy Farm Dashboard
               </h1>
             </div>
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center">
               {/* User Profile Menu */}
               <div className="relative" ref={profileMenuRef}>
                 <button 
@@ -543,10 +537,10 @@ const FarmDashboard = () => {
         </header>
 
         {/* Dashboard Content */}
-        <main className="flex-1 overflow-y-auto p-6 bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
           {/* Date Range Selector */}
-          <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="text-2xl font-bold mb-4 sm:mb-0 bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Farm Overview</h2>
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <h2 className="text-xl sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Farm Overview</h2>
             <div className="flex flex-wrap items-center gap-2">
               <StyledDropdown 
                 value={dateRange} 
@@ -566,7 +560,7 @@ const FarmDashboard = () => {
                 >
                   <ChevronsLeft className="rotate-90" size={16} />
                 </button>
-                <span className="mx-2 text-sm font-medium text-gray-700">{formatDateRangeDisplay()}</span>
+                <span className="mx-2 text-sm font-medium text-gray-700 truncate max-w-[100px] sm:max-w-none">{formatDateRangeDisplay()}</span>
                 <button 
                   className="p-1.5 text-gray-500 hover:text-gray-700"
                   onClick={() => navigateDate(1)}
@@ -862,8 +856,10 @@ const FarmDashboard = () => {
 
       {/* User Profile Modal - Glass morphism design */}
       {showUserProfile && currentUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto">
-          <div className="relative bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden border border-gray-200">
+      <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl mx-auto my-8 border border-gray-200 flex flex-col max-h-[90vh]">
+          <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 flex-shrink-0"></div>
+          <div className="relative flex-grow overflow-y-auto">
             <div className="absolute top-4 right-4 z-10">
               <button 
                 onClick={toggleUserProfile}
@@ -872,13 +868,11 @@ const FarmDashboard = () => {
                 <X size={20} />
               </button>
             </div>
-            <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-            <div className="overflow-y-auto max-h-[90vh]">
-              <UserProfile userData={currentUser} />
-            </div>
+            <UserProfile userData={currentUser} />
           </div>
         </div>
-      )}
+      </div>
+    )}
       
       {/* Modern styled modals for Activities and Add Task */}
       {isActivitiesModalOpen && (
@@ -940,29 +934,29 @@ const KpiCard = ({ title, value, icon, trend, positive = true }) => {
   return (
     <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300 border border-gray-100">
       <div className={`h-2 bg-gradient-to-r ${gradient}`}></div>
-      <div className="p-5">
+      <div className="p-3 sm:p-5">
         <div className="flex justify-between items-start">
-          <div>
-            <h3 className="text-sm font-medium text-gray-500">{title}</h3>
-            <p className={`text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r ${gradient} mt-1 mb-3`}>
+          <div className="min-w-0">
+            <h3 className="text-xs sm:text-sm font-medium text-gray-500 truncate">{title}</h3>
+            <p className={`text-lg sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r ${gradient} mt-1 mb-2 sm:mb-3`}>
               {value}
             </p>
           </div>
-          <div className={`p-2.5 rounded-xl bg-gradient-to-r ${gradient}`}>
-            {React.cloneElement(icon, { className: "text-white" })}
+          <div className={`p-2 sm:p-2.5 rounded-xl bg-gradient-to-r ${gradient} flex-shrink-0 ml-2`}>
+            {React.cloneElement(icon, { className: "text-white", size: window.innerWidth < 640 ? 16 : 20 })}
           </div>
         </div>
-        <div className={`text-xs flex items-center ${positive ? 'text-emerald-600' : 'text-red-500'} mt-2 font-medium`}>
+        <div className={`text-xs flex items-center ${positive ? 'text-emerald-600' : 'text-red-500'} mt-1 sm:mt-2 font-medium`}>
           {positive ? (
-            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
             </svg>
           ) : (
-            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
             </svg>
           )}
-          <span>{trend}</span>
+          <span className="truncate">{trend}</span>
         </div>
       </div>
     </div>
@@ -1048,20 +1042,20 @@ const ExpandedActivityItem = ({ activity }) => {
   return (
     <div className="bg-white rounded-xl shadow-sm hover:shadow transition-shadow duration-200 overflow-hidden border border-gray-100">
       <div className={`h-1 bg-gradient-to-r ${gradientClasses[activity.type] || "from-gray-400 to-gray-500"}`}></div>
-      <div className="p-4">
+      <div className="p-3 sm:p-4">
         <div className="flex items-start">
-          <div className={`p-2.5 rounded-xl bg-gradient-to-r ${gradientClasses[activity.type] || "from-gray-500 to-gray-600"} mr-4 mt-1 shadow-sm`}>
+          <div className={`p-2 sm:p-2.5 rounded-xl bg-gradient-to-r ${gradientClasses[activity.type] || "from-gray-500 to-gray-600"} mr-3 sm:mr-4 mt-1 shadow-sm flex-shrink-0`}>
             {getActivityIcon(activity.type)}
           </div>
-          <div className="flex-1">
-            <div className="flex items-center">
-              <span className={`px-3 py-1 text-xs rounded-full text-white bg-gradient-to-r ${gradientClasses[activity.type] || "from-gray-500 to-gray-600"} mr-2 font-medium`}>
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`px-2 py-0.5 text-xs rounded-full text-white bg-gradient-to-r ${gradientClasses[activity.type] || "from-gray-500 to-gray-600"} font-medium whitespace-nowrap`}>
                 {getActivityTypeLabel(activity.type)}
               </span>
               <p className="text-xs text-gray-500">{activity.time}</p>
             </div>
-            <p className="text-gray-800 font-medium mt-1.5">{activity.text}</p>
-            <p className="text-sm text-gray-600 mt-2">{activity.details}</p>
+            <p className="text-gray-800 font-medium mt-1.5 break-words">{activity.text}</p>
+            <p className="text-sm text-gray-600 mt-2 break-words">{activity.details}</p>
           </div>
         </div>
       </div>
@@ -1165,105 +1159,108 @@ const StyledDropdown = ({ value, onChange, options }) => {
 
 // Activities Modal Component
 const ActivitiesModal = ({ activities, onClose, filter, setFilter }) => {
-  // Filter activities based on selected filter
   const filteredActivities = filter === 'all' 
     ? activities 
     : activities.filter(activity => activity.type === filter);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-full overflow-hidden m-4 border border-gray-100">
-        <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-green-500 to-blue-600 text-white">
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl mx-auto my-8 max-h-[90vh] flex flex-col border border-gray-100">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-500 to-blue-600 text-white flex-shrink-0">
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-bold">Farm Activities</h2>
+            <h2 className="text-lg sm:text-xl font-bold truncate">Farm Activities</h2>
             <button 
               onClick={onClose}
-              className="text-white hover:text-gray-100 focus:outline-none bg-white bg-opacity-20 rounded-full p-1.5 hover:bg-opacity-30 transition-all duration-200"
+              className="text-white hover:text-gray-100 focus:outline-none bg-white bg-opacity-20 rounded-full p-1.5 hover:bg-opacity-30 transition-all duration-200 flex-shrink-0"
             >
               <X size={20} />
             </button>
           </div>
         </div>
         
-        <div className="p-6">
-          {/* Filter Controls */}
-          <div className="flex flex-wrap items-center gap-2 mb-6 pb-2">
-            <span className="text-sm font-medium text-gray-700 min-w-max">Filter by:</span>
-            <button
-              onClick={() => setFilter('all')}
-              className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
-                filter === 'all' 
-                  ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              All Activities
-            </button>
-            <button
-              onClick={() => setFilter('health')}
-              className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
-                filter === 'health' 
-                  ? 'bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Health Events
-            </button>
-            <button
-              onClick={() => setFilter('milk')}
-              className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
-                filter === 'milk' 
-                  ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Milk Production
-            </button>
-            <button
-              onClick={() => setFilter('employee')}
-              className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
-                filter === 'employee' 
-                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Employee Activities
-            </button>
-            <button
-              onClick={() => setFilter('cow')}
-              className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
-                filter === 'cow' 
-                  ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Cow Management
-            </button>
-          </div>
-          
-          {/* Activity List */}
-          <div className="max-h-96 overflow-y-auto pr-2 rounded-xl">
-            <div className="space-y-3">
-              {filteredActivities.length > 0 ? (
-                filteredActivities.map(activity => (
-                  <ExpandedActivityItem key={activity.id} activity={activity} />
-                ))
-              ) : (
-                <div className="text-center py-10">
-                  <p className="text-gray-500">No activities found for this filter.</p>
-                </div>
-              )}
+        <div className="overflow-hidden flex flex-col flex-grow">
+          <div className="p-4 sm:p-6">
+            {/* Filter Controls - Made horizontally scrollable */}
+            <div className="flex items-center gap-2 mb-4 pb-2 overflow-x-auto scrollbar-thin">
+              <span className="text-sm font-medium text-gray-700 whitespace-nowrap">Filter by:</span>
+              <div className="flex gap-2 flex-nowrap">
+                <button
+                  onClick={() => setFilter('all')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all whitespace-nowrap ${
+                    filter === 'all' 
+                      ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  All Activities
+                </button>
+                <button
+                  onClick={() => setFilter('health')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all whitespace-nowrap ${
+                    filter === 'health' 
+                      ? 'bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Health Events
+                </button>
+                <button
+                  onClick={() => setFilter('milk')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all whitespace-nowrap ${
+                    filter === 'milk' 
+                      ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Milk Production
+                </button>
+                <button
+                  onClick={() => setFilter('employee')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all whitespace-nowrap ${
+                    filter === 'employee' 
+                      ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Employee Activities
+                </button>
+                <button
+                  onClick={() => setFilter('cow')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all whitespace-nowrap ${
+                    filter === 'cow' 
+                      ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Cow Management
+                </button>
+              </div>
+            </div>
+            
+            {/* Activity List - With proper height constraints and scrolling */}
+            <div className="overflow-y-auto" style={{ maxHeight: 'calc(60vh - 100px)' }}>
+              <div className="space-y-3 pr-1">
+                {filteredActivities.length > 0 ? (
+                  filteredActivities.map(activity => (
+                    <ExpandedActivityItem key={activity.id} activity={activity} />
+                  ))
+                ) : (
+                  <div className="text-center py-10">
+                    <p className="text-gray-500">No activities found for this filter.</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
         
-        <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 flex justify-between items-center">
+        <div className="border-t border-gray-200 px-4 sm:px-6 py-4 bg-gray-50 flex flex-col sm:flex-row justify-between sm:items-center gap-3 flex-shrink-0">
           <div className="text-sm text-gray-600">
             <span className="font-medium">{filteredActivities.length}</span> activities found
           </div>
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 rounded-lg hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200 shadow-sm"
+            className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 rounded-lg hover:opacity-90 transition-all duration-200 shadow-sm w-full sm:w-auto"
           >
             Close
           </button>
@@ -1499,11 +1496,12 @@ const WeatherConditions = ({ location }) => {
       
       {/* Weather Forecast */}
       {forecast.length > 0 && (
-        <div className="bg-white/40 rounded-xl p-3 backdrop-blur-sm border border-gray-100 shadow-sm">
-          <h3 className="text-sm font-medium text-gray-600 mb-3 px-1">Forecast</h3>
-          <div className="flex justify-between">
+      <div className="bg-white/40 rounded-xl p-3 backdrop-blur-sm border border-gray-100 shadow-sm">
+        <h3 className="text-sm font-medium text-gray-600 mb-3 px-1">Forecast</h3>
+        <div className="overflow-x-auto">
+          <div className="flex justify-between min-w-[300px]">
             {forecast.map((item, index) => (
-              <div key={index} className="text-center">
+              <div key={index} className="text-center px-2">
                 <p className="text-xs text-gray-500">{item.date}</p>
                 <div className="my-1 flex justify-center">
                   {getWeatherIcon(item.icon)}
@@ -1513,7 +1511,8 @@ const WeatherConditions = ({ location }) => {
             ))}
           </div>
         </div>
-      )}
+      </div>
+    )}
     </div>
   );
 };
@@ -1542,27 +1541,27 @@ const AddTaskModal = ({ onClose }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     console.log('Task data:', formData);
-    // Here you would add the task to your tasks list
     onClose();
   };
   
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full m-4 border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-500 to-blue-600 text-white">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-bold">Add New Task</h2>
-            <button 
-              onClick={onClose}
-              className="text-white hover:text-gray-100 focus:outline-none bg-white bg-opacity-20 rounded-full p-1.5 hover:bg-opacity-30 transition-all duration-200"
-            >
-              <X size={20} />
-            </button>
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-auto my-8 border border-gray-100">
+        <form onSubmit={handleSubmit} className="flex flex-col max-h-[90vh]">
+          <div className="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-500 to-blue-600 text-white">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg sm:text-xl font-bold truncate">Add New Task</h2>
+              <button 
+                type="button"
+                onClick={onClose}
+                className="text-white hover:text-gray-100 focus:outline-none bg-white bg-opacity-20 rounded-full p-1.5 hover:bg-opacity-30 transition-all duration-200"
+              >
+                <X size={20} />
+              </button>
+            </div>
           </div>
-        </div>
-        
-        <form onSubmit={handleSubmit}>
-          <div className="p-6 space-y-4">
+          
+          <div className="p-4 sm:p-6 space-y-4 overflow-y-auto" style={{ maxHeight: 'calc(90vh - 140px)' }}>
             <div>
               <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
                 Task Title*
@@ -1594,7 +1593,7 @@ const AddTaskModal = ({ onClose }) => {
               ></textarea>
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="dueDate" className="block text-sm font-medium text-gray-700 mb-1">
                   Due Date*
@@ -1625,7 +1624,7 @@ const AddTaskModal = ({ onClose }) => {
               </div>
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="priority" className="block text-sm font-medium text-gray-700 mb-1">
                   Priority
@@ -1702,19 +1701,19 @@ const AddTaskModal = ({ onClose }) => {
             </div>
           </div>
           
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+          <div className="px-4 sm:px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row-reverse sm:justify-end gap-3 sm:gap-2 bg-gray-50">
+            <button
+              type="submit"
+              className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 border border-transparent rounded-lg shadow-sm hover:opacity-90 transition-all duration-200"
+            >
+              Add Task
+            </button>
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200"
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 transition-all duration-200"
             >
               Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 border border-transparent rounded-lg shadow-sm hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200"
-            >
-              Add Task
             </button>
           </div>
         </form>
@@ -1727,12 +1726,20 @@ const ChartCard = ({ title, children, periodSelector }) => {
   return (
     <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100">
       <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-      <div className="p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold text-gray-800 bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">{title}</h2>
-          {periodSelector}
+      <div className="p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
+          <h2 className="text-lg font-semibold text-gray-800 bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 truncate">
+            {title}
+          </h2>
+          {periodSelector && (
+            <div className="flex-shrink-0">
+              {periodSelector}
+            </div>
+          )}
         </div>
-        {children}
+        <div className="overflow-x-auto">
+          {children}
+        </div>
       </div>
     </div>
   );
