@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Users, Clipboard, Droplet, Thermometer, DollarSign, Settings, LogOut, X, Menu, IndianRupee, Package } from 'lucide-react';
+import { Home, Users, Clipboard, Droplet, Thermometer, DollarSign, Settings, LogOut, X, Menu, IndianRupee, Package, Leaf } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
 
 import AuthenticationScreen from './components/AuthenticationScreen';
@@ -98,17 +98,38 @@ const App = () => {
     <div className="h-screen bg-gray-100 flex">
       <Toaster position="top-right" />
       <ToastContainer></ToastContainer>
-      {/* Sidebar */}
-      <div className={`bg-white shadow-md z-20 transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-20'} flex flex-col`}>
-        <div className="p-4 flex items-center justify-between border-b">
-          <button onClick={toggleSidebar} className={`text-gray-500 hover:text-gray-700 ${!sidebarOpen && 'hidden'}`}>
-            <X size={20} />
-          </button>
-          <button onClick={toggleSidebar} className={`flex flex-col flex-grow p-2 space-y-2 overflow-y-auto ${sidebarOpen && 'hidden'}`}>
-          <Menu size={24} />
+      
+      {/* Improved Sidebar with enhanced styling */}
+      <div className={`bg-white shadow-lg z-20 transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-20'} flex flex-col`}>
+        {/* Enhanced header with better alignment and gradient */}
+        <div className="bg-gradient-to-r from-green-600 via-green-500 to-blue-600 text-white py-4 px-5 flex items-center justify-between shadow-md">
+          {sidebarOpen ? (
+            <div className="flex items-center flex-grow">
+              <svg viewBox="0 0 24 24" className="h-7 w-7 mr-2.5 text-white" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path d="M9 22V12h6v10" />
+              </svg>
+              <div>
+                <span className="font-bold text-lg tracking-wide">DairyFarm Pro</span>
+                <div className="text-xs text-green-100 opacity-90 -mt-0.5"> Dairy Farm Management</div>
+              </div>
+            </div>
+          ) : (
+            <svg viewBox="0 0 24 24" className="h-7 w-7 mx-auto text-white" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+              <path d="M9 22V12h6v10" />
+            </svg>
+          )}
+          <button 
+            onClick={toggleSidebar} 
+            className="text-white hover:text-green-200 transition-colors bg-white/10 hover:bg-white/20 rounded-full p-1.5"
+          >
+            {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
         </div>
-        <div className="flex flex-col flex-grow p-4 space-y-4 overflow-y-auto">
+        
+        {/* Improved navigation area with subtle background */}
+        <div className="flex flex-col flex-grow p-4 space-y-1.5 overflow-y-auto bg-gradient-to-b from-gray-50 to-white">
           <NavItem 
             icon={<Home size={20} />} 
             label="Dashboard" 
@@ -166,12 +187,15 @@ const App = () => {
             onClick={() => setActiveModule('settings')}
           />
         </div>
-        <div className="p-4 border-t">
+
+        {/* Enhanced footer with stronger gradient */}
+        <div className="bg-gradient-to-r from-green-50 to-blue-50 p-4 border-t border-gray-200">
           <NavItem 
             icon={<LogOut size={20} />} 
             label="Logout" 
             collapsed={!sidebarOpen} 
             onClick={handleLogout}
+            special={true}
           />
         </div>
       </div>
@@ -187,16 +211,20 @@ const App = () => {
   );
 };
 
-// Component for navigation item
-const NavItem = ({ icon, label, active = false, collapsed = false, onClick }) => {
+// Enhanced NavItem with improved gradient styling
+const NavItem = ({ icon, label, active = false, collapsed = false, onClick, special = false }) => {
   return (
     <div
-      className={`flex items-center p-2 rounded-lg cursor-pointer transition-colors duration-200 
-      ${active ? 'bg-green-50 text-green-600' : 'text-gray-600 hover:bg-gray-100'}`}
+      className={`flex items-center px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-300 
+      ${active 
+        ? 'bg-gradient-to-r from-green-100 to-blue-50 text-green-700 font-medium shadow-sm border-l-4 border-green-500' 
+        : special
+          ? 'text-red-600 hover:bg-gradient-to-r hover:from-red-50 hover:to-orange-50 hover:text-red-700'
+          : 'text-gray-600 hover:bg-gradient-to-r hover:from-gray-100/80 hover:to-blue-50/50 hover:text-gray-800'}`}
       onClick={onClick}
     >
-      <div className={`${collapsed ? 'mx-auto' : 'mr-3'}`}>{icon}</div>
-      {!collapsed && <span className="font-medium">{label}</span>}
+      <div className={`${collapsed ? 'mx-auto' : 'mr-3'} ${active ? 'text-green-600' : ''}`}>{icon}</div>
+      {!collapsed && <span className={`font-medium ${active ? 'text-green-700' : ''}`}>{label}</span>}
     </div>
   );
 };
