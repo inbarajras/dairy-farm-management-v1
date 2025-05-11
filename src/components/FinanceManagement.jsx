@@ -1,7 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Download, DollarSign, CreditCard, Briefcase, Calendar, ChevronDown, TrendingUp, TrendingDown, PieChart, IndianRupee,X,AlertCircle } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, Pie } from 'recharts';
-import { getFinancialDashboardData, addCustomer, addExpense, addInvoice, processPayroll,updateExpense, deleteExpense, getExpensesByPage,getEmployeePayrollHistory,updateEmployeePayrollInfo,getPayrollDetails,voidPayrollPayment,getInvoices, getInvoiceById, updateInvoiceStatus, deleteInvoice,getInvoiceAgingSummary,generateInvoiceNumber,getCustomers,updateCustomer,deleteCustomer } from './services/financialService';
+import { getFinancialDashboardData, addCustomer, addExpense, addInvoice,
+   processPayroll,updateExpense, deleteExpense, getExpensesByPage,getEmployeePayrollHistory,
+   updateEmployeePayrollInfo,getPayrollDetails,voidPayrollPayment,getInvoices, getInvoiceById, 
+   updateInvoiceStatus, deleteInvoice,getInvoiceAgingSummary,generateInvoiceNumber,getCustomers,updateCustomer,
+  deleteCustomer,getRevenueData,getRevenueCategoriesData,getRevenueSummary,getCustomersWithRevenue } from './services/financialService';
 import { supabase } from '../lib/supabase';
 import LoadingSpinner from './LoadingSpinner';
 
@@ -104,6 +108,32 @@ const FinancesManagement = () => {
   const [isEditCustomerModalOpen, setIsEditCustomerModalOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
+  const [revenueDateRange, setRevenueDateRange] = useState('month');
+  const [revenueData, setRevenueData] = useState([]);
+  const [revenueCategories, setRevenueCategories] = useState([]);
+  const [revenueSummary, setRevenueSummary] = useState({
+    totalYTD: 0,
+    avgMonthly: 0,
+    projectedAnnual: 0
+  });
+  const [topCustomers, setTopCustomers] = useState([]);
+  const [isRevenueLoading, setIsRevenueLoading] = useState(false);
+  const [invoicesSummary, setInvoicesSummary] = useState({
+    outstanding: 0,
+    outstandingCount: 0,
+    overdue: 0,
+    overdueCount: 0,
+    paidThisMonth: 0,
+    paidCountThisMonth: 0,
+    issuedThisMonth: 0,
+    issuedCountThisMonth: 0,
+    revenueCategories: [],
+    invoiceStatusData: [
+      { name: 'Paid', value: 0, color: '#4CAF50' },
+      { name: 'Pending', value: 0, color: '#FFC107' },
+      { name: 'Overdue', value: 0, color: '#F44336' }
+    ]
+  });
 
 
   const toggleViewPayrollHistoryModal = async (employee = null) => {
@@ -603,22 +633,245 @@ const FinancesManagement = () => {
     }
   };
 
+  const fetchInvoicesSummaryData = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Get current date
+      const today = new Date();
+      const currentMonth = today.getMonth();
+      const currentYear = today.getFullYear();
+      
+      // Calculate start of month for filtering
+      const startOfMonth = new Date(currentYear, currentMonth, 1).toISOString().split('T')[0];
+      
+      // Fetch all invoices
+      const { data: allInvoices, error: invoicesError } = await supabase
+        .from('invoices')
+        .select('*, customers(name, type)');
+      
+      if (invoicesError) throw invoicesError;
+      
+      // Calculate various metrics
+      let outstanding = 0;
+      let outstandingCount = 0;
+      let overdue = 0;
+      let overdueCount = 0;
+      let paidThisMonth = 0;
+      let paidCountThisMonth = 0;
+      let issuedThisMonth = 0;
+      let issuedCountThisMonth = 0;
+      
+      // For revenue breakdown by product/service
+      let revenueByProduct = {};
+      
+      // For invoice status chart
+      let paidAmount = 0;
+      let pendingAmount = 0;
+      let overdueAmount = 0;
+      let cancelledAmount = 0;
+      
+      allInvoices.forEach(invoice => {
+        const invoiceDate = new Date(invoice.date);
+        const dueDate = new Date(invoice.due_date);
+        const amount = parseFloat(invoice.amount);
+        
+        // Check if invoice is from current month
+        const isCurrentMonth = invoiceDate.getMonth() === currentMonth && 
+                               invoiceDate.getFullYear() === currentYear;
+        
+        // Calculate metrics based on status and date
+        if (invoice.status === 'Pending') {
+          outstanding += amount;
+          outstandingCount++;
+          pendingAmount += amount;
+          
+          if (dueDate.getTime() < today.getTime()) {
+            overdue += amount;
+            overdueCount++;
+            overdueAmount += amount;
+            pendingAmount -= amount; // Move from pending to overdue
+          }
+        } else if (invoice.status === 'Paid') {
+          paidAmount += amount;
+          if (isCurrentMonth) {
+            paidThisMonth += amount;
+            paidCountThisMonth++;
+          }
+        } else if (invoice.status === 'Overdue') {
+          overdue += amount;
+          overdueCount++;
+          overdueAmount += amount;
+        } else if (invoice.status === 'Cancelled') {
+          cancelledAmount += amount;
+        }
+        
+        // Check if invoice was issued this month
+        if (isCurrentMonth) {
+          issuedThisMonth += amount;
+          issuedCountThisMonth++;
+        }
+        
+        // Process invoice items for revenue breakdown
+        if (invoice.items && Array.isArray(invoice.items)) {
+          invoice.items.forEach(item => {
+            const category = item.category || 'Other';
+            if (!revenueByProduct[category]) {
+              revenueByProduct[category] = 0;
+            }
+            revenueByProduct[category] += parseFloat(item.amount || 0);
+          });
+        }
+      });
+      
+      // Transform revenueByProduct into an array for the chart
+      const revenueCategories = Object.entries(revenueByProduct).map(([name, value], index) => {
+        // Generate a color based on index
+        const colors = ['#4CAF50', '#2196F3', '#FFC107', '#F44336', '#9C27B0', '#00BCD4', '#FF9800'];
+        const color = colors[index % colors.length];
+        
+        return { name, value, color };
+      });
+      
+      // Calculate percentages for chart
+      const totalRevenue = revenueCategories.reduce((sum, item) => sum + item.value, 0);
+      revenueCategories.forEach(item => {
+        item.percentage = totalRevenue > 0 ? (item.value / totalRevenue) * 100 : 0;
+      });
+      
+      // Sort by value in descending order
+      revenueCategories.sort((a, b) => b.value - a.value);
+      
+      // Create invoice status data for pie chart
+      const invoiceStatusData = [
+        { name: 'Paid', value: paidAmount, color: '#4CAF50' },
+        { name: 'Pending', value: pendingAmount, color: '#FFC107' },
+        { name: 'Overdue', value: overdueAmount, color: '#F44336' },
+        { name: 'Cancelled', value: cancelledAmount, color: '#9E9E9E' }
+      ].filter(item => item.value > 0); // Only include non-zero values
+      
+      return {
+        outstanding,
+        outstandingCount,
+        overdue,
+        overdueCount,
+        paidThisMonth,
+        paidCountThisMonth,
+        issuedThisMonth,
+        issuedCountThisMonth,
+        revenueCategories,
+        invoiceStatusData
+      };
+    } catch (error) {
+      console.error('Error fetching invoice summary:', error);
+      return {
+        outstanding: 0,
+        outstandingCount: 0,
+        overdue: 0,
+        overdueCount: 0,
+        paidThisMonth: 0,
+        paidCountThisMonth: 0,
+        issuedThisMonth: 0,
+        issuedCountThisMonth: 0,
+        revenueCategories: [],
+        invoiceStatusData: [
+          { name: 'Paid', value: 0, color: '#4CAF50' },
+          { name: 'Pending', value: 0, color: '#FFC107' },
+          { name: 'Overdue', value: 0, color: '#F44336' }
+        ]
+      };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'expenses') {
       fetchExpenses(expensePage, expenseSearchQuery, expenseDateRange);
       fetchExpenseSummary(expenseDateRange, customDateRange);
       fetchExpenseTrends(expenseDateRange, customDateRange);
     }
-  }, [activeTab, expensePage, expenseSearchQuery]);
+  }, [activeTab, expensePage, expenseSearchQuery, expenseDateRange, customDateRange.startDate, customDateRange.endDate]);
 
   useEffect(() => {
     if (activeTab === 'invoices') {
-      fetchInvoices(invoicesPage, invoiceSearchQuery);
-      fetchAgingSummary();
-      fetchCustomers();
+      const loadInvoiceData = async () => {
+        await fetchInvoices(invoicesPage, invoiceSearchQuery);
+        await fetchAgingSummary();
+        await fetchCustomers();
+        
+        // Fetch summary data for KPI cards
+        const summaryData = await fetchInvoicesSummaryData();
+        setInvoicesSummary(summaryData);
+      };
+      
+      loadInvoiceData();
     }
   }, [activeTab, invoicesPage, invoiceSearchQuery]);
 
+  useEffect(() => {
+    if (activeTab === 'income') {
+      fetchRevenueData(revenueDateRange);
+    }
+  }, [activeTab, revenueDateRange]);
+
+  const fetchRevenueData = async (dateRangeFilter, customDate = null) => {
+    try {
+      setIsRevenueLoading(true);
+      
+      // Use the provided date or current date
+      const effectiveDate = customDate || new Date();
+      
+      // Fetch all necessary data in parallel
+      const [revenueResult, categoriesResult, summaryResult, customersResult] = await Promise.all([
+        getRevenueData(dateRangeFilter, effectiveDate),
+        getRevenueCategoriesData(effectiveDate),
+        getRevenueSummary(effectiveDate),
+        getCustomersWithRevenue(10, effectiveDate)
+      ]);
+      
+      setRevenueData(revenueResult);
+      setRevenueCategories(categoriesResult);
+      setRevenueSummary(summaryResult);
+      setTopCustomers(customersResult);
+    } catch (err) {
+      console.error('Error fetching revenue data:', err);
+      setError('Failed to load revenue data. Please try again.');
+    } finally {
+      setIsRevenueLoading(false);
+    }
+  };
+  
+  // Handle revenue date range change
+  const handleRevenueDateRangeChange = (e) => {
+    const value = e.target.value;
+    setRevenueDateRange(value);
+    fetchRevenueData(value);
+  };
+
+  const revenueByCustomerType = useMemo(() => {
+    // Group customers by type and calculate total revenue for each type
+    const customerTypes = {};
+    let totalRevenue = 0;
+    
+    topCustomers.forEach(customer => {
+      const type = customer.type || 'Other';
+      if (!customerTypes[type]) {
+        customerTypes[type] = 0;
+      }
+      customerTypes[type] += customer.totalPurchases;
+      totalRevenue += customer.totalPurchases;
+    });
+    
+    // Calculate percentages and format for chart
+    return Object.entries(customerTypes)
+      .map(([name, value]) => ({
+        name,
+        value,
+        percentage: totalRevenue > 0 ? Math.round((value / totalRevenue) * 100) : 0
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [topCustomers]);
   // Handle expense submission from modal
   const handleExpenseSubmit = async (expenseData) => {
     try {
@@ -660,6 +913,8 @@ const FinancesManagement = () => {
       setCustomDateRange({ startDate: '', endDate: '' });
       // Fetch expenses with the new date range
       fetchExpenses(1, expenseSearchQuery, value);
+      fetchExpenseSummary(value, { startDate: '', endDate: '' });
+      fetchExpenseTrends(value, { startDate: '', endDate: '' });
     }
   };
   
@@ -670,7 +925,9 @@ const FinancesManagement = () => {
       
       // If both dates are set, fetch data
       if (updated.startDate && updated.endDate) {
-        fetchExpenses(1, expenseSearchQuery, 'custom');
+        fetchExpenses(1, expenseSearchQuery, 'custom', updated);
+        fetchExpenseSummary('custom', updated);
+        fetchExpenseTrends('custom', updated);
       }
       
       return updated;
@@ -834,6 +1091,22 @@ const FinancesManagement = () => {
       setAgingSummary(data);
     } catch (err) {
       console.error('Error fetching aging summary:', err);
+    }
+  };
+
+  const getDateRangeLabel = (range) => {
+    const now = new Date();
+    
+    switch(range) {
+      case 'month':
+        return now.toLocaleString('default', { month: 'long', year: 'numeric' });
+      case 'quarter':
+        const currentQuarter = Math.floor(now.getMonth() / 3) + 1;
+        return `Q${currentQuarter} ${now.getFullYear()}`;
+      case 'year':
+        return now.getFullYear().toString();
+      default:
+        return 'All Time';
     }
   };
   
@@ -1054,10 +1327,10 @@ const FinancesManagement = () => {
                   </div>
                 </div>
                 <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
-                  <div className="h-2 bg-gradient-to-r from-amber-500 to-amber-400"></div>
+                  <div className="h-2 bg-gradient-to-r from-yellow-500 to-yellow-400"></div>
                   <div className="p-4">
                     <p className="text-sm text-gray-500">Projected Annual Expenses</p>
-                    <p className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-amber-500">
+                    <p className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-yellow-600 to-yellow-500">
                       {formatCurrency(expenseSummary.projectedAnnual)}
                     </p>
                   </div>
@@ -1221,357 +1494,377 @@ const FinancesManagement = () => {
   const renderIncomeTab = () => {
     return (
       <div>
-        {/* Revenue Overview */}
-        <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 mb-6">
-          <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-          <div className="px-6 py-6">
-            <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">Revenue Overview</h2>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="col-span-2">
-                <h3 className="text-sm font-medium text-gray-700 mb-3">Monthly Revenue</h3>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart
-                      data={financialData.revenue.monthly}
-                      margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="month" />
-                      <YAxis />
-                      <Tooltip 
-                        formatter={(value) => [formatCurrency(value), '']}
-                        contentStyle={{ background: '#fff', border: '1px solid #f1f1f1', borderRadius: '4px' }}
-                      />
-                      <Legend />
-                      <Line type="monotone" dataKey="income" name="Revenue" stroke="#4CAF50" strokeWidth={2} dot={{ r: 4 }} />
-                      <Line type="monotone" dataKey="profit" name="Profit" stroke="#FFC107" strokeWidth={2} dot={{ r: 4 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-              
+        {isRevenueLoading ? (
+          <div className="flex justify-center py-12">
+            <LoadingSpinner message="Loading revenue data..." />
+          </div>
+        ) : (
+          <>
+            {/* Revenue Overview */}
+            <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 mb-6">
+              <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+              <div className="px-6 py-6">
+                <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">Revenue Overview</h2>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="col-span-2">
+                    <h3 className="text-sm font-medium text-gray-700 mb-3">Monthly Revenue</h3>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={revenueData}
+                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="month" />
+                          <YAxis />
+                          <Tooltip 
+                            formatter={(value) => [formatCurrency(value), '']}
+                            contentStyle={{ background: '#fff', border: '1px solid #f1f1f1', borderRadius: '4px' }}
+                          />
+                          <Legend />
+                          <Line type="monotone" dataKey="income" name="Revenue" stroke="#4CAF50" strokeWidth={2} dot={{ r: 4 }} />
+                          <Line type="monotone" dataKey="profit" name="Profit" stroke="#FFC107" strokeWidth={2} dot={{ r: 4 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                  
               <div>
                 <h3 className="text-sm font-medium text-gray-700 mb-3">Revenue Breakdown</h3>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={financialData.revenue.categories}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="value"
-                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      >
-                        {financialData.revenue.categories.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip 
-                        formatter={(value) => [formatCurrency(value), '']}
-                        contentStyle={{ background: '#fff', border: '1px solid #f1f1f1', borderRadius: '4px' }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
+                <div className="space-y-3">
+                  {invoicesSummary.revenueCategories && invoicesSummary.revenueCategories.length > 0 ? (
+                    invoicesSummary.revenueCategories.map((category, index) => (
+                      <div key={index} className="flex flex-col">
+                        <div className="flex justify-between">
+                          <span className="text-sm font-medium text-gray-700">{category.name}</span>
+                          <span className="text-sm font-medium text-gray-900">{formatCurrency(category.value)}</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2.5 mt-1">
+                          <div 
+                            className="h-2.5 rounded-full bg-gradient-to-r from-blue-500 to-green-500"
+                            style={{ width: `${category.percentage}%`, backgroundColor: category.color }}
+                          ></div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-sm text-gray-500">No revenue data available</div>
+                  )}
+                </div>
+              </div>
+            </div>
+                
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  <h3 className="text-sm font-medium text-gray-700 mb-3">Revenue Statistics</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
+                      <div className="h-2 bg-gradient-to-r from-green-500 to-green-600"></div>
+                      <div className="p-4">
+                        <p className="text-sm text-gray-500">Total Revenue (YTD)</p>
+                        <p className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-green-500">
+                          {formatCurrency(revenueSummary.totalYTD)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
+                      <div className="h-2 bg-gradient-to-r from-blue-500 to-blue-600"></div>
+                      <div className="p-4">
+                        <p className="text-sm text-gray-500">Avg. Monthly Revenue</p>
+                        <p className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-blue-500">
+                          {formatCurrency(revenueSummary.avgMonthly)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
+                      <div className="h-2 bg-gradient-to-r from-yellow-500 to-yellow-400"></div>
+                      <div className="p-4">
+                        <p className="text-sm text-gray-500">Projected Annual Revenue</p>
+                        <p className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-yellow-600 to-yellow-500">
+                          {formatCurrency(revenueSummary.projectedAnnual)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
             
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <h3 className="text-sm font-medium text-gray-700 mb-3">Revenue Statistics</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
-                  <div className="h-2 bg-gradient-to-r from-green-500 to-green-600"></div>
-                  <div className="p-4">
-                    <p className="text-sm text-gray-500">Total Revenue (YTD)</p>
-                    <p className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-green-500">
-                      {formatCurrency(131800)}
-                    </p>
-                  </div>
-                </div>
-                <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
-                  <div className="h-2 bg-gradient-to-r from-blue-500 to-blue-600"></div>
-                  <div className="p-4">
-                    <p className="text-sm text-gray-500">Avg. Monthly Revenue</p>
-                    <p className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-blue-500">
-                      {formatCurrency(32950)}
-                    </p>
-                  </div>
-                </div>
-                <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
-                  <div className="h-2 bg-gradient-to-r from-amber-500 to-amber-400"></div>
-                  <div className="p-4">
-                    <p className="text-sm text-gray-500">Projected Annual Revenue</p>
-                    <p className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-amber-500">
-                      {formatCurrency(395400)}
-                    </p>
-                  </div>
+            {/* Customer Overview */}
+            <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 mb-6">
+              <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+              <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Top Revenue Customers</h2>
+                <button 
+                  onClick={toggleAddCustomerModal}
+                  className="flex items-center px-4 py-2 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm"
+                >
+                  <Plus size={20} className="mr-2" />
+                  Add Customer
+                </button>
+              </div>
+              <div className="p-6">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
+                      <tr>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Customer
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Type
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Total Purchases
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Last Order
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {topCustomers.length > 0 ? (
+                        topCustomers.map(customer => (
+                          <tr key={customer.id} className="hover:bg-gray-50 transition-colors duration-200">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900">{customer.name}</div>
+                              <div className="text-sm text-gray-500">{customer.id.substring(0, 8)}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {customer.type}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {formatCurrency(customer.totalPurchases)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {formatDate(customer.lastOrder)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColors[customer.status]}`}>
+                                {customer.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                              <button 
+                                onClick={() => toggleViewCustomerModal(customer)} 
+                                className="text-green-600 hover:text-green-900 mr-3"
+                              >
+                                View
+                              </button>
+                              <button 
+                                onClick={() => toggleEditCustomerModal(customer)} 
+                                className="text-blue-600 hover:text-blue-900 mr-3"
+                              >
+                                Edit
+                              </button>
+                              <button 
+                                onClick={() => toggleAddInvoiceModal()} 
+                                className="text-indigo-600 hover:text-indigo-900"
+                              >
+                                Invoice
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="6" className="px-6 py-4 text-center text-sm text-gray-500">
+                            No customers found. Add a customer to get started.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-        
-        {/* Customer Overview */}
-        <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 mb-6">
-          <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-            <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Customers</h2>
-            <button 
-              onClick={toggleAddCustomerModal}
-              className="flex items-center px-4 py-2 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm"
-            >
-              <Plus size={20} className="mr-2" />
-              Add Customer
-            </button>
-          </div>
-          <div className="p-6">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
-                  <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Customer
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Type
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Total Purchases
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Last Order
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {financialData.revenue.customers.map(customer => (
-                    <tr key={customer.id} className="hover:bg-gray-50 transition-colors duration-200">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{customer.name}</div>
-                        <div className="text-sm text-gray-500">{customer.id}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {customer.type}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatCurrency(customer.totalPurchases)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatDate(customer.lastOrder)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColors[customer.status]}`}>
-                          {customer.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button 
-                          onClick={() => toggleViewCustomerModal(customer)} 
-                          className="text-green-600 hover:text-green-900 mr-3"
-                        >
-                          View
-                        </button>
-                        <button 
-                          onClick={() => toggleEditCustomerModal(customer)} 
-                          className="text-blue-600 hover:text-blue-900 mr-3"
-                        >
-                          Edit
-                        </button>
-                        <button 
-                          onClick={() => toggleAddInvoiceModal()} 
-                          className="text-indigo-600 hover:text-indigo-900"
-                        >
-                          Invoice
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-        
-        {/* Revenue Trends */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
-            <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-            <div className="p-6">
-              <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">Seasonal Patterns</h2>
-              <div className="h-64 flex items-center justify-center bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30 rounded-lg">
-                <div className="text-center">
-                  <div className="mb-2 text-gray-500">
-                    <Calendar size={32} className="inline-block text-blue-500 mb-2" />
-                  </div>
-                  <p className="text-gray-600">Seasonal revenue pattern visualization</p>
-                  <p className="text-sm text-gray-500 mt-2">Coming soon</p>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
-            <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-            <div className="p-6">
-              <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">Year-over-Year Comparison</h2>
-              <div className="h-64 flex items-center justify-center bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30 rounded-lg">
-                <div className="text-center">
-                  <div className="mb-2 text-gray-500">
-                    <TrendingUp size={32} className="inline-block text-green-500 mb-2" />
-                  </div>
-                  <p className="text-gray-600">Year-over-year revenue comparison</p>
-                  <p className="text-sm text-gray-500 mt-2">Coming soon</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-  
-        {/* Top Revenue Sources */}
-        <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 mt-6">
-          <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Top Revenue Sources</h2>
-          </div>
-          <div className="p-6">
+            
+            {/* Revenue Trends */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h3 className="text-sm font-medium text-gray-700 mb-3">By Product</h3>
-                <ul className="space-y-3">
-                  {[
-                    { name: "Whole Milk", value: 78500, percentage: 60 },
-                    { name: "Cream", value: 32400, percentage: 25 },
-                    { name: "Cheese", value: 13000, percentage: 10 },
-                    { name: "Other Dairy Products", value: 6500, percentage: 5 }
-                  ].map((item, index) => (
-                    <li key={index} className="flex items-center">
-                      <div className="flex-1">
-                        <div className="flex justify-between">
-                          <span className="text-sm font-medium text-gray-700">{item.name}</span>
-                          <span className="text-sm font-medium text-gray-900">{formatCurrency(item.value)}</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
-                          <div 
-                            className="h-2 rounded-full bg-gradient-to-r from-green-500 to-blue-500" 
-                            style={{ width: `${item.percentage}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
+                <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+                <div className="p-6">
+                  <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">Seasonal Patterns</h2>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart
+                        data={revenueData}
+                        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="month" />
+                        <YAxis />
+                        <Tooltip 
+                          formatter={(value) => [formatCurrency(value), '']}
+                          contentStyle={{ background: '#fff', border: '1px solid #f1f1f1', borderRadius: '4px' }}
+                        />
+                        <Line type="monotone" dataKey="income" name="Revenue" stroke="#4CAF50" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-medium text-gray-700 mb-3">By Customer Type</h3>
-                <ul className="space-y-3">
-                  {[
-                    { name: "Wholesalers", value: 65300, percentage: 50 },
-                    { name: "Retailers", value: 39200, percentage: 30 },
-                    { name: "Processors", value: 19600, percentage: 15 },
-                    { name: "Direct Consumers", value: 6500, percentage: 5 }
-                  ].map((item, index) => (
-                    <li key={index} className="flex items-center">
-                      <div className="flex-1">
-                        <div className="flex justify-between">
-                          <span className="text-sm font-medium text-gray-700">{item.name}</span>
-                          <span className="text-sm font-medium text-gray-900">{formatCurrency(item.value)}</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
-                          <div 
-                            className="h-2 rounded-full bg-gradient-to-r from-amber-500 to-orange-500" 
-                            style={{ width: `${item.percentage}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
+                <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+                <div className="p-6">
+                  <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">Revenue vs Expenses</h2>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={revenueData}
+                        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="month" />
+                        <YAxis />
+                        <Tooltip 
+                          formatter={(value) => [formatCurrency(value), '']}
+                          contentStyle={{ background: '#fff', border: '1px solid #f1f1f1', borderRadius: '4px' }}
+                        />
+                        <Legend />
+                        <Bar dataKey="income" name="Revenue" fill="#4CAF50" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="expenses" name="Expenses" fill="#F44336" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
+      
+            {/* Top Revenue Sources */}
+            <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 mt-6">
+              <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Top Revenue Sources</h2>
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-700 mb-3">By Product</h3>
+                    <ul className="space-y-3">
+                      {revenueCategories.map((item, index) => (
+                        <li key={index} className="flex items-center">
+                          <div className="flex-1">
+                            <div className="flex justify-between">
+                              <span className="text-sm font-medium text-gray-700">{item.name}</span>
+                              <span className="text-sm font-medium text-gray-900">{formatCurrency(item.value)}</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
+                              <div 
+                                className="h-2 rounded-full bg-gradient-to-r from-green-500 to-blue-500" 
+                                style={{ width: `${item.percentage}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-700 mb-3">By Customer Type</h3>
+                    <ul className="space-y-3">
+                      {revenueByCustomerType.map((item, index) => (
+                        <li key={index} className="flex items-center">
+                          <div className="flex-1">
+                            <div className="flex justify-between">
+                              <span className="text-sm font-medium text-gray-700">{item.name}</span>
+                              <span className="text-sm font-medium text-gray-900">{formatCurrency(item.value)}</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
+                              <div 
+                                className="h-2 rounded-full bg-gradient-to-r from-yellow-700 to-yellow-500" 
+                                style={{ width: `${item.percentage}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     );
   };
 
     // Update renderInvoicesTab function with consistent styling
   
-  const renderInvoicesTab = () => {
-    return (
-      <div>
-        {/* Invoice Summary */}
-        <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 mb-6">
-          <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-          <div className="px-6 py-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Invoice Summary</h2>
-              <button 
-                onClick={toggleAddInvoiceModal}
-                className="flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm"
-              >
-                <Plus size={20} className="mr-2" />
-                Create Invoice
-              </button>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
-                <div className="h-2 bg-gradient-to-r from-blue-500 to-blue-600"></div>
-                <div className="p-5">
-                  <p className="text-sm font-medium text-gray-500">Total Outstanding</p>
-                  <p className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-blue-500 mt-1">
-                    {formatCurrency(financialData?.invoices?.outstanding || 0)}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">{financialData?.invoices?.unpaidCount || 0} unpaid invoices</p>
+    const renderInvoicesTab = () => {
+      return (
+        <div>
+          {/* Invoice Summary */}
+          <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 mb-6">
+            <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+            <div className="px-6 py-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Invoice Summary</h2>
+                <button 
+                  onClick={toggleAddInvoiceModal}
+                  className="flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm"
+                >
+                  <Plus size={20} className="mr-2" />
+                  Create Invoice
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
+                  <div className="h-2 bg-gradient-to-r from-blue-500 to-blue-600"></div>
+                  <div className="p-5">
+                    <p className="text-sm font-medium text-gray-500">Total Outstanding</p>
+                    <p className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-blue-500 mt-1">
+                      {formatCurrency(invoicesSummary.outstanding)}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">{invoicesSummary.outstandingCount} unpaid invoices</p>
+                  </div>
+                </div>
+                
+                <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
+                  <div className="h-2 bg-gradient-to-r from-red-500 to-red-600"></div>
+                  <div className="p-5">
+                    <p className="text-sm font-medium text-gray-500">Overdue</p>
+                    <p className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-red-600 to-red-500 mt-1">
+                      {formatCurrency(invoicesSummary.overdue)}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">{invoicesSummary.overdueCount} overdue invoices</p>
+                  </div>
+                </div>
+                
+                <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
+                  <div className="h-2 bg-gradient-to-r from-green-500 to-green-600"></div>
+                  <div className="p-5">
+                    <p className="text-sm font-medium text-gray-500">Paid This Month</p>
+                    <p className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-green-500 mt-1">
+                      {formatCurrency(invoicesSummary.paidThisMonth)}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">{invoicesSummary.paidCountThisMonth} paid invoices</p>
+                  </div>
+                </div>
+                
+                <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
+                  <div className="h-2 bg-gradient-to-r from-pink-500 to-pink-400"></div>
+                  <div className="p-5">
+                    <p className="text-sm font-medium text-gray-500">Invoiced This Month</p>
+                    <p className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-pink-600 to-pink-500 mt-1">
+                      {formatCurrency(invoicesSummary.issuedThisMonth)}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">{invoicesSummary.issuedCountThisMonth} invoices</p>
+                  </div>
                 </div>
               </div>
               
-              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
-                <div className="h-2 bg-gradient-to-r from-red-500 to-red-600"></div>
-                <div className="p-5">
-                  <p className="text-sm font-medium text-gray-500">Overdue</p>
-                  <p className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-red-600 to-red-500 mt-1">
-                    {formatCurrency(financialData?.invoices?.overdue || 0)}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">{financialData?.invoices?.overdueCount || 0} overdue invoices</p>
-                </div>
-              </div>
-              
-              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
-                <div className="h-2 bg-gradient-to-r from-green-500 to-green-600"></div>
-                <div className="p-5">
-                  <p className="text-sm font-medium text-gray-500">Paid This Month</p>
-                  <p className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-green-500 mt-1">
-                    {formatCurrency(financialData?.invoices?.paidThisMonth || 0)}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">{financialData?.invoices?.paidCountThisMonth || 0} paid invoices</p>
-                </div>
-              </div>
-              
-              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
-                <div className="h-2 bg-gradient-to-r from-amber-500 to-amber-400"></div>
-                <div className="p-5">
-                  <p className="text-sm font-medium text-gray-500">Invoiced This Month</p>
-                  <p className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-amber-500 mt-1">
-                    {formatCurrency(financialData?.invoices?.issuedThisMonth || 0)}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">{financialData?.invoices?.issuedCountThisMonth || 0} invoices</p>
-                </div>
-              </div>
-            </div>
-              
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h3 className="text-sm font-medium text-gray-700 mb-3">Aging Summary</h3>
-                <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 mb-3">Aging Summary</h3>
+                  <div className="space-y-4">
                   {agingSummary.length > 0 ? (
                     agingSummary.map(period => (
                       <div key={period.id}>
@@ -1605,15 +1898,7 @@ const FinancesManagement = () => {
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={financialData?.invoices ? [
-                          { name: 'Paid', value: financialData.invoices.paid || 0, color: '#4CAF50' },
-                          { name: 'Pending', value: (financialData.invoices.outstanding || 0) - (financialData.invoices.overdue || 0), color: '#FFC107' },
-                          { name: 'Overdue', value: financialData.invoices.overdue || 0, color: '#F44336' }
-                        ] : [
-                          { name: 'Paid', value: 0, color: '#4CAF50' },
-                          { name: 'Pending', value: 0, color: '#FFC107' },
-                          { name: 'Overdue', value: 0, color: '#F44336' }
-                        ]}
+                        data={invoicesSummary.invoiceStatusData || []}
                         cx="50%"
                         cy="50%"
                         labelLine={false}
@@ -1622,9 +1907,9 @@ const FinancesManagement = () => {
                         dataKey="value"
                         label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                       >
-                        <Cell fill="#4CAF50" />
-                        <Cell fill="#FFC107" />
-                        <Cell fill="#F44336" />
+                        {(invoicesSummary.invoiceStatusData || []).map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
                       </Pie>
                       <Tooltip 
                         formatter={(value) => [formatCurrency(value), '']}
@@ -1716,6 +2001,16 @@ const FinancesManagement = () => {
                             className="text-blue-600 hover:text-blue-900 mr-3"
                           >
                             Edit
+                          </button>
+                          <button 
+                            onClick={() => {
+                              // Pre-select this customer when opening the invoice modal
+                              setSelectedCustomer(customer);
+                              toggleAddInvoiceModal();
+                            }}
+                            className="text-indigo-600 hover:text-indigo-900 mr-3"
+                          >
+                            Invoice
                           </button>
                           <button 
                             onClick={() => handleCustomerDelete(customer.id)}
@@ -2015,44 +2310,46 @@ const FinancesManagement = () => {
         </div>
         
         {/* Date Range Filter */}
-        <div className="mb-6 flex flex-wrap items-center gap-3">
-          <span className="text-sm text-gray-600">Date Range:</span>
-          <select
-            value={expenseDateRange}
-            onChange={handleDateRangeChange}
-            className="border border-gray-300 rounded-md py-1 px-3 text-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
-          >
-            <option value="month">This Month</option>
-            <option value="quarter">This Quarter</option>
-            <option value="year">This Year</option>
-            <option value="custom">Custom Range</option>
-          </select>
-          
-          {expenseDateRange === 'custom' && (
-            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
-              <input
-                type="date"
-                value={customDateRange.startDate}
-                onChange={(e) => handleCustomDateChange('startDate', e.target.value)}
-                className="border border-gray-300 rounded-md py-1 px-3 text-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
-              />
-              <span>to</span>
-              <input
-                type="date"
-                value={customDateRange.endDate}
-                onChange={(e) => handleCustomDateChange('endDate', e.target.value)}
-                className="border border-gray-300 rounded-md py-1 px-3 text-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
-              />
-              <button 
-                onClick={() => fetchExpenses(1, expenseSearchQuery, 'custom')}
-                className="px-3 py-1 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
-              >
-                Apply
-              </button>
-            </div>
-          )}
-        </div>
-        
+        {(activeTab === 'expenses' || activeTab === 'income') && (
+          <div className="mb-6 flex flex-wrap items-center gap-3">
+            <span className="text-sm text-gray-600">Date Range:</span>
+            <select
+              value={activeTab === 'income' ? revenueDateRange : expenseDateRange}
+              onChange={activeTab === 'income' ? handleRevenueDateRangeChange : handleDateRangeChange}
+              className="appearance-none bg-white border border-gray-200 rounded-lg pl-3 pr-10 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-300 shadow-sm hover:shadow-md transition-all duration-200 min-w-[120px]"
+            >
+              <option value="month">This Month</option>
+              <option value="quarter">This Quarter</option>
+              <option value="year">This Year</option>
+              {activeTab === 'income' && <option value="all">All Time</option>}
+              {activeTab === 'expenses' && <option value="custom">Custom Range</option>}
+            </select>
+            
+            {activeTab === 'expenses' && expenseDateRange === 'custom' && (
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                <input
+                  type="date"
+                  value={customDateRange.startDate}
+                  onChange={(e) => handleCustomDateChange('startDate', e.target.value)}
+                  className="border border-gray-300 rounded-md py-1 px-3 text-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
+                />
+                <span>to</span>
+                <input
+                  type="date"
+                  value={customDateRange.endDate}
+                  onChange={(e) => handleCustomDateChange('endDate', e.target.value)}
+                  className="border border-gray-300 rounded-md py-1 px-3 text-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
+                />
+                <button 
+                  onClick={() => fetchExpenses(1, expenseSearchQuery, 'custom')}
+                  className="px-3 py-1 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
+                >
+                  Apply
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         {/* Dashboard Tab */}
         {activeTab === 'dashboard' && (
           <div>
@@ -3080,6 +3377,7 @@ const FinancesManagement = () => {
           onSubmit={handleInvoiceSubmit} 
           customers={customers || []}
           toggleAddCustomerModal={toggleAddCustomerModal}
+          selectedCustomer={selectedCustomer}
         />
       )}
       
@@ -4889,7 +5187,7 @@ const ProcessPayrollModal = ({ onClose, onSubmit, employees }) => {
 };
 
 // Add Invoice Modal Component
-const AddInvoiceModal = ({ onClose, onSubmit, customers = [], toggleAddCustomerModal }) => {
+const AddInvoiceModal = ({ onClose, onSubmit, customers = [], toggleAddCustomerModal, selectedCustomer = null }) => {
   const [formData, setFormData] = useState({
     customer: '', // This will store the customer ID, not the name
     date: new Date().toISOString().split('T')[0],

@@ -277,58 +277,87 @@ export const recordAttendance = async (attendanceData) => {
 
 // Get attendance statistics
 export const getAttendanceStatistics = async (month, year) => {
-    try {
-      const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0];
-      const endDate = new Date(year, month, 0).toISOString().split('T')[0];
-      
-      // First, fetch all attendance records for the period
-      const { data, error } = await supabase
-        .from('employee_attendance')
-        .select('status')
-        .gte('date', startDate)
-        .lte('date', endDate);
-      
-      if (error) throw error;
-      
-      // If no data, return default values
-      if (!data || data.length === 0) {
-        return {
-          total: 0,
-          present: 0,
-          absent: 0,
-          late: 0,
-          attendanceRate: 0
-        };
-      }
-      
-      // Count statuses manually in JavaScript
-      const countByStatus = data.reduce((acc, record) => {
-        const status = record.status;
-        if (!acc[status]) acc[status] = 0;
-        acc[status]++;
-        return acc;
-      }, {});
-      
-      // Calculate the statistics
-      const present = countByStatus['Present'] || 0;
-      const absent = countByStatus['Absent'] || 0;
-      const late = countByStatus['Late'] || 0;
-      const totalDays = data.length;
-      
-      const attendanceRate = totalDays ? ((present + late) / totalDays * 100).toFixed(1) : 0;
-      
+  try {
+    const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0];
+    const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+    const today = new Date().toISOString().split('T')[0];
+    
+    // First, fetch all attendance records for the period
+    const { data, error } = await supabase
+      .from('employee_attendance')
+      .select('status, date')
+      .gte('date', startDate)
+      .lte('date', endDate);
+    
+    if (error) throw error;
+    
+    // If no data, return default values
+    if (!data || data.length === 0) {
       return {
-        total: totalDays,
-        present,
-        absent,
-        late,
-        attendanceRate
+        total: 0,
+        present: 0,
+        absent: 0,
+        late: 0,
+        attendanceRate: 0,
+        presentToday: 0,
+        absentToday: 0,
+        lateToday: 0,
+        attendanceRateToday: 0
       };
-    } catch (error) {
-      console.error('Error fetching attendance statistics:', error);
-      throw error;
     }
-  };
+    
+    // Count statuses for all dates
+    const countByStatus = data.reduce((acc, record) => {
+      const status = record.status;
+      if (!acc[status]) acc[status] = 0;
+      acc[status]++;
+      return acc;
+    }, {});
+    
+    // Count statuses for today only
+    const todayRecords = data.filter(record => record.date === today);
+    const todayCountByStatus = todayRecords.reduce((acc, record) => {
+      const status = record.status;
+      if (!acc[status]) acc[status] = 0;
+      acc[status]++;
+      return acc;
+    }, {});
+    
+    // Calculate the statistics for the month
+    const present = countByStatus['Present'] || 0;
+    const absent = countByStatus['Absent'] || 0;
+    const late = countByStatus['Late'] || 0;
+    const totalDays = data.length;
+    
+    const attendanceRate = totalDays ? ((present + late) / totalDays * 100).toFixed(1) : 0;
+    
+    // Calculate today's statistics
+    const presentToday = todayCountByStatus['Present'] || 0;
+    const absentToday = todayCountByStatus['Absent'] || 0;
+    const lateToday = todayCountByStatus['Late'] || 0;
+    const totalToday = todayRecords.length;
+    
+    const attendanceRateToday = totalToday 
+      ? ((presentToday + lateToday) / totalToday * 100).toFixed(1) 
+      : "0.0";
+    
+    return {
+      total: totalDays,
+      present,
+      absent,
+      late,
+      attendanceRate: parseFloat(attendanceRate),
+      presentToday,
+      absentToday,
+      lateToday,
+      totalToday,
+      attendanceRateToday: parseFloat(attendanceRateToday)
+    };
+  } catch (error) {
+    console.error('Error fetching attendance statistics:', error);
+    throw error;
+  }
+};
 
 // Get employee shifts
 export const getEmployeeShifts = async (weekStart) => {

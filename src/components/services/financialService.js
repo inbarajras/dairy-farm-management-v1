@@ -1220,3 +1220,301 @@ export const deleteCustomer = async (customerId) => {
     throw error;
   }
 };
+
+export const getRevenueData = async (dateRange = 'month') => {
+  try {
+    // Calculate date range based on filter
+    let startDate = null;
+    const now = new Date();
+    
+    switch (dateRange) {
+      case 'month':
+        // Current month
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case 'quarter':
+        // Current quarter
+        const currentQuarter = Math.floor(now.getMonth() / 3);
+        startDate = new Date(now.getFullYear(), currentQuarter * 3, 1);
+        break;
+      case 'year':
+        // Current year
+        startDate = new Date(now.getFullYear(), 0, 1);
+        break;
+      default:
+        // Default to last 12 months
+        startDate = new Date(now.getFullYear() - 1, now.getMonth(), 1);
+    }
+    
+    const formattedStartDate = startDate.toISOString().split('T')[0];
+    
+    // Fetch revenue data based on invoices
+    const { data: invoiceData, error: invoiceError } = await supabase
+      .from('invoices')
+      .select('date, amount, status')
+      .gte('date', formattedStartDate)
+      .order('date', { ascending: true });
+    
+    if (invoiceError) throw invoiceError;
+    
+    // Fetch expenses for the same period for profit calculation
+    const { data: expenseData, error: expenseError } = await supabase
+      .from('expenses')
+      .select('date, amount')
+      .gte('date', formattedStartDate)
+      .order('date', { ascending: true });
+    
+    if (expenseError) throw expenseError;
+    
+    // Group by month
+    const monthlyData = {};
+    
+    // Process invoice data (revenue)
+    invoiceData.forEach(invoice => {
+      // Only count paid or completed invoices as revenue
+      if (invoice.status !== 'Paid' && invoice.status !== 'Completed') return;
+      
+      const date = new Date(invoice.date);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = {
+          month: formatMonth(date.getMonth() + 1),
+          year: date.getFullYear(),
+          income: 0,
+          expenses: 0,
+          profit: 0
+        };
+      }
+      
+      monthlyData[monthKey].income += parseFloat(invoice.amount);
+    });
+    
+    // Process expense data
+    expenseData.forEach(expense => {
+      const date = new Date(expense.date);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = {
+          month: formatMonth(date.getMonth() + 1),
+          year: date.getFullYear(),
+          income: 0,
+          expenses: 0,
+          profit: 0
+        };
+      }
+      
+      monthlyData[monthKey].expenses += parseFloat(expense.amount);
+    });
+    
+    // Calculate profit for each month
+    Object.keys(monthlyData).forEach(key => {
+      monthlyData[key].profit = monthlyData[key].income - monthlyData[key].expenses;
+    });
+    
+    // Convert to array and sort by date
+    return Object.values(monthlyData).sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      return a.month.localeCompare(b.month);
+    });
+  } catch (error) {
+    console.error('Error fetching revenue data:', error);
+    return [];
+  }
+};
+
+// Get revenue breakdown by category
+export const getRevenueCategoriesData = async () => {
+  try {
+    // Get current year
+    const currentYear = new Date().getFullYear();
+    const startOfYear = new Date(currentYear, 0, 1).toISOString().split('T')[0];
+    
+    // Fetch all invoices with their items
+    const { data: invoices, error: invoicesError } = await supabase
+      .from('invoices')
+      .select(`
+        id,
+        amount,
+        status,
+        invoice_items (description, amount)
+      `)
+      .eq('status', 'Paid')
+      .gte('date', startOfYear);
+    
+    if (invoicesError) throw invoicesError;
+    
+    // Group by categories based on descriptions (this assumes descriptions contain category information)
+    const categoryMap = {
+      'milk': 'Milk Sales',
+      'dairy': 'Milk Sales',
+      'cattle': 'Cattle Sales',
+      'animal': 'Cattle Sales',
+      'cow': 'Cattle Sales',
+      'manure': 'Manure Sales',
+      'fertilizer': 'Manure Sales'
+    };
+    
+    const categories = {
+      'Milk Sales': 0,
+      'Cattle Sales': 0,
+      'Manure Sales': 0,
+      'Other': 0
+    };
+    
+    let totalRevenue = 0;
+    
+    invoices.forEach(invoice => {
+      if (invoice.invoice_items && invoice.invoice_items.length > 0) {
+        // If we have line items, categorize them
+        invoice.invoice_items.forEach(item => {
+          let categoryFound = false;
+          const description = item.description.toLowerCase();
+          
+          // Try to match description to a category
+          for (const [keyword, category] of Object.entries(categoryMap)) {
+            if (description.includes(keyword)) {
+              categories[category] += parseFloat(item.amount);
+              categoryFound = true;
+              break;
+            }
+          }
+          
+          // If no category match, put in "Other"
+          if (!categoryFound) {
+            categories['Other'] += parseFloat(item.amount);
+          }
+          
+          totalRevenue += parseFloat(item.amount);
+        });
+      } else {
+        // If no line items, just add the full amount to "Other"
+        categories['Other'] += parseFloat(invoice.amount);
+        totalRevenue += parseFloat(invoice.amount);
+      }
+    });
+    
+    // Format the data for charts
+    const categoryColors = {
+      'Milk Sales': '#2E7D32',
+      'Cattle Sales': '#1565C0',
+      'Manure Sales': '#FFA000',
+      'Other': '#6D4C41'
+    };
+    
+    return Object.entries(categories).map(([name, value]) => ({
+      name,
+      value,
+      percentage: totalRevenue > 0 ? Math.round((value / totalRevenue) * 100) : 0,
+      color: categoryColors[name] || '#607D8B'
+    })).sort((a, b) => b.value - a.value);
+  } catch (error) {
+    console.error('Error fetching revenue categories:', error);
+    
+    // Return default values
+    return [
+      { name: 'Milk Sales', value: 0, percentage: 0, color: '#2E7D32' },
+      { name: 'Cattle Sales', value: 0, percentage: 0, color: '#1565C0' },
+      { name: 'Manure Sales', value: 0, percentage: 0, color: '#FFA000' },
+      { name: 'Other', value: 0, percentage: 0, color: '#6D4C41' }
+    ];
+  }
+};
+
+// Get revenue summary statistics
+export const getRevenueSummary = async () => {
+  try {
+    const currentYear = new Date().getFullYear();
+    const startOfYear = new Date(currentYear, 0, 1).toISOString().split('T')[0];
+    const currentMonth = new Date().getMonth() + 1;
+    
+    // Fetch all paid invoices for the year
+    const { data, error } = await supabase
+      .from('invoices')
+      .select('date, amount')
+      .eq('status', 'Paid')
+      .gte('date', startOfYear);
+      
+    if (error) throw error;
+    
+    // Calculate total YTD revenue
+    let totalYTD = 0;
+    let monthlyRevenue = Array(12).fill(0);
+    
+    data.forEach(invoice => {
+      const invoiceAmount = parseFloat(invoice.amount);
+      totalYTD += invoiceAmount;
+      
+      // Track monthly amounts for average calculation
+      const month = new Date(invoice.date).getMonth();
+      monthlyRevenue[month] += invoiceAmount;
+    });
+    
+    // Calculate average monthly revenue (use only months that have passed)
+    const monthsElapsed = currentMonth;
+    const totalRevenue = monthlyRevenue.slice(0, monthsElapsed).reduce((sum, val) => sum + val, 0);
+    const avgMonthly = monthsElapsed > 0 ? totalRevenue / monthsElapsed : 0;
+    
+    // Calculate projected annual revenue
+    const projectedAnnual = monthsElapsed > 0 ? (avgMonthly * 12) : 0;
+    
+    return {
+      totalYTD,
+      avgMonthly,
+      projectedAnnual
+    };
+  } catch (error) {
+    console.error('Error calculating revenue summary:', error);
+    return {
+      totalYTD: 0,
+      avgMonthly: 0,
+      projectedAnnual: 0
+    };
+  }
+};
+
+// Get customers with revenue data
+export const getCustomersWithRevenue = async (limit = 5) => {
+  try {
+    // Fetch customers with their invoices
+    const { data, error } = await supabase
+      .from('customers')
+      .select(`
+        id,
+        name,
+        type,
+        status,
+        invoices (id, date, amount, status)
+      `)
+      .order('name')
+      .limit(limit);
+      
+    if (error) throw error;
+    
+    // Process customer data
+    return data.map(customer => {
+      const paidInvoices = (customer.invoices || [])
+        .filter(invoice => invoice.status === 'Paid' || invoice.status === 'Completed');
+      
+      const totalPurchases = paidInvoices.reduce((sum, invoice) => 
+        sum + parseFloat(invoice.amount), 0);
+      
+      const lastOrder = paidInvoices.length > 0 
+        ? new Date(Math.max(...paidInvoices.map(inv => new Date(inv.date).getTime())))
+        : null;
+      
+      return {
+        id: customer.id,
+        name: customer.name,
+        type: customer.type,
+        totalPurchases,
+        lastOrder: lastOrder ? lastOrder.toISOString() : null,
+        status: customer.status || 'Active'
+      };
+    }).sort((a, b) => b.totalPurchases - a.totalPurchases); // Sort by highest revenue
+  } catch (error) {
+    console.error('Error fetching customers with revenue:', error);
+    return [];
+  }
+};

@@ -908,10 +908,10 @@ const NavItem = ({ icon, label, active = false, collapsed = false }) => {
 const KpiCard = ({ title, value, icon, trend, positive = true }) => {
   // Define gradient classes for different card types
   const gradients = {
-    cows: "from-green-500 to-teal-500",
-    milk: "from-blue-500 to-cyan-400", 
-    health: "from-red-500 to-orange-400",
-    tasks: "from-yellow-500 to-amber-400",
+    cows: "from-green-500 to-green-500",
+    milk: "from-blue-500 to-blue-400", 
+    health: "from-red-500 to-red-400",
+    tasks: "from-yellow-500 to-yellow-400",
     revenue: "from-indigo-500 to-purple-500"
   };
 

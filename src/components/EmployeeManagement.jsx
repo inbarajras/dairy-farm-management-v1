@@ -115,10 +115,31 @@ const EmployeeManagement = () => {
           const summary = await getMonthlyAttendanceSummary(month, year);
           const statistics = await getAttendanceStatistics(month, year);
           
+          // Fetch today's attendance data specifically for the KPI cards
+          const todayStr = new Date().toISOString().split('T')[0];
+          const todayAttendance = summary.filter(record => record.date === todayStr);
+          
+          // Calculate today's statistics
+          const presentToday = todayAttendance.filter(record => record.status === 'Present').length;
+          const absentToday = todayAttendance.filter(record => record.status === 'Absent').length;
+          const lateToday = todayAttendance.filter(record => record.status === 'Late').length;
+          
+          // Calculate attendance rate for today
+          const totalToday = presentToday + absentToday + lateToday;
+          const attendanceRateToday = totalToday > 0 
+            ? ((presentToday + lateToday) / totalToday * 100).toFixed(1)
+            : "0.0";
+          
           // Store the raw attendance records as summary and the statistics separately
           setAttendanceData({
             summary, // This should be an array of attendance records
-            statistics
+            statistics: {
+              ...statistics,
+              presentToday,
+              absentToday,
+              lateToday,
+              attendanceRateToday: parseFloat(attendanceRateToday)
+            }
           });
           
           setIsLoading(false);
@@ -2290,8 +2311,9 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
 
   return (
     <div>
-      {/* Stats Cards with improved consistent styling */}
+      {/* Updated KPI Cards with real data */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {/* Present Today Card */}
         <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300">
           <div className="h-2 bg-gradient-to-r from-green-500 to-green-600"></div>
           <div className="p-5">
@@ -2299,7 +2321,7 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
               <div>
                 <p className="text-sm font-medium text-gray-500">Present Today</p>
                 <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-green-500 mt-1">
-                  {statistics.present || 0}
+                  {statistics.presentToday || 0}
                 </p>
               </div>
               <div className="p-2.5 rounded-xl bg-gradient-to-r from-green-500 to-green-600">
@@ -2308,11 +2330,12 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
             </div>
             <div className="mt-2 text-xs text-green-600 flex items-center">
               <TrendingUp size={14} className="mr-1" />
-              <span>{statistics.attendanceRate || 0}% attendance rate</span>
+              <span>{statistics.attendanceRateToday || 0}% today's attendance rate</span>
             </div>
           </div>
         </div>
         
+        {/* Absent Today Card */}
         <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300">
           <div className="h-2 bg-gradient-to-r from-red-500 to-red-600"></div>
           <div className="p-5">
@@ -2320,7 +2343,7 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
               <div>
                 <p className="text-sm font-medium text-gray-500">Absent Today</p>
                 <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-red-600 to-red-500 mt-1">
-                  {statistics.absent || 0}
+                  {statistics.absentToday || 0}
                 </p>
               </div>
               <div className="p-2.5 rounded-xl bg-gradient-to-r from-red-500 to-red-600">
@@ -2329,32 +2352,34 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
             </div>
             <div className="mt-2 text-xs text-red-600 flex items-center">
               <AlertTriangle size={14} className="mr-1" />
-              <span>Action may be required</span>
+              <span>{statistics.absentToday > 0 ? 'Action may be required' : 'No absences today'}</span>
             </div>
           </div>
         </div>
         
+        {/* Late Arrivals Card */}
         <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300">
-          <div className="h-2 bg-gradient-to-r from-amber-500 to-amber-400"></div>
+          <div className="h-2 bg-gradient-to-r from-yellow-500 to-yellow-400"></div>
           <div className="p-5">
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-sm font-medium text-gray-500">Late Arrivals</p>
-                <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-amber-500 mt-1">
-                  {statistics.late || 0}
+                <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-yellow-600 to-yellow-500 mt-1">
+                  {statistics.lateToday || 0}
                 </p>
               </div>
-              <div className="p-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400">
+              <div className="p-2.5 rounded-xl bg-gradient-to-r from-yellow-500 to-yellow-400">
                 <Clock size={20} className="text-white" />
               </div>
             </div>
-            <div className="mt-2 text-xs text-amber-600 flex items-center">
+            <div className="mt-2 text-xs text-yellow-600 flex items-center">
               <AlertCircle size={14} className="mr-1" />
-              <span>Review needed</span>
+              <span>{statistics.lateToday > 0 ? 'Review needed' : 'No late arrivals'}</span>
             </div>
           </div>
         </div>
         
+        {/* Total Employees Card */}
         <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300">
           <div className="h-2 bg-gradient-to-r from-blue-500 to-blue-600"></div>
           <div className="p-5">
@@ -2371,7 +2396,7 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
             </div>
             <div className="mt-2 text-xs text-blue-600 flex items-center">
               <Info size={14} className="mr-1" />
-              <span>Full staff overview</span>
+              <span>Monthly avg: {statistics.attendanceRate || 0}%</span>
             </div>
           </div>
         </div>
@@ -3350,8 +3375,8 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
     return (
       <div>
          <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300 p-6 mb-6">
-        <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 -mt-6 mb-5"></div>
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6">
+         <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 -mx-6 -mt-6"></div>
+         <div className="pt-5 flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6">
           <div className="flex items-center mb-4 sm:mb-0">
             <button
               onClick={() => handleViewChange('week')}
@@ -3527,10 +3552,10 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Shift Templates Card */}
-          <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300 p-6">
-            <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 -mt-6 mb-5"></div>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">
+        <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300 p-6">
+          <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 -mx-6 -mt-6"></div>
+          <div className="pt-5 flex justify-between items-center mb-4">
+            <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">
                 Shift Templates
               </h3>
               <button 
@@ -3578,10 +3603,11 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
           
           {/* Quick Assign Card */}
           <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300 p-6">
-            <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 -mt-6 mb-5"></div>
-            <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700 mb-4">
-              Quick Assign
-            </h3>
+            <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 -mx-6 -mt-6"></div>
+              <div className="pt-5">
+              <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700 mb-4">
+                Quick Assign
+              </h3>
             
             {/* Show success/error message */}
             {assignMessage.text && (
@@ -3714,6 +3740,7 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
             onSubmit={handleTemplateSubmit}
           />
         )}
+      </div>
       </div>
     );
   };
@@ -4090,16 +4117,16 @@ const PerformanceTab = ({
         </div>
         
         <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300">
-          <div className="h-2 bg-gradient-to-r from-amber-500 to-amber-400"></div>
+          <div className="h-2 bg-gradient-to-r from-yellow-500 to-yellow-400"></div>
           <div className="p-5">
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-sm font-medium text-gray-500">Upcoming Reviews</p>
-                <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-amber-500 mt-1">
+                <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-yellow-600 to-yellow-500 mt-1">
                   {upcomingReviews.length}
                 </p>
               </div>
-              <div className="p-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400">
+              <div className="p-2.5 rounded-xl bg-gradient-to-r from-yellow-500 to-yellow-400">
                 <Calendar size={20} className="text-white" />
               </div>
             </div>
