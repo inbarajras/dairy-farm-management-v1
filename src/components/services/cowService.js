@@ -23,7 +23,10 @@ export const fetchCows = async () => {
       owner: cow.owner,
       milkProduction: cow.milk_production.map(record => ({
         date: record.date,
-        amount: record.amount
+        amount: record.amount,
+        shift: record.shift || 'Morning',
+        quality: record.quality || 'Good',
+        notes: record.notes || ''
       })),
       lastHealthCheck: cow.last_health_check,
       vaccinationStatus: cow.vaccination_status,
@@ -32,6 +35,8 @@ export const fetchCows = async () => {
       purchaseDate: cow.purchase_date,
       purchasePrice: cow.purchase_price,
       initialWeight: cow.initial_weight,
+      currentWeight: cow.current_weight,
+      growthRate: cow.growth_rate,
       notes: cow.notes
     }));
   } catch (error) {
@@ -59,6 +64,7 @@ export const addCow = async (cowData) => {
       purchase_date: cowData.purchaseDate || null,
       purchase_price: cowData.purchasePrice || null,
       initial_weight: cowData.initialWeight || null,
+      current_weight: cowData.initialWeight || null, // Initialize current_weight with initial_weight
       notes: cowData.notes || null,
       // Add calf-specific fields
       mother: cowData.mother || null,
@@ -215,7 +221,7 @@ export const recordHealthEvent = async (cowId, eventData) => {
     
     return true
   } catch (error) {
-    console.error('Error recording health event:', error)
+    console.error('Error recording health event:', error);
     throw error
   }
 }
@@ -636,3 +642,191 @@ export const fetchHealthHistory = async (cowId) => {
       throw error;
     }
   };
+
+// Fetch growth milestones for a calf/heifer
+export const fetchGrowthMilestones = async (cowId) => {
+  try {
+    // First, get the cow's birth data as the initial milestone
+    const { data: cowData, error: cowError } = await supabase
+      .from('cows')
+      .select('id, tag_number, name, date_of_birth, initial_weight, current_weight, growth_rate, transition_date')
+      .eq('id', cowId)
+      .single();
+    
+    if (cowError) throw cowError;
+
+    // Then, fetch all health events that record weight measurements
+    const { data: healthEvents, error: healthError } = await supabase
+      .from('health_events')
+      .select('id, event_date, event_type, description, notes')
+      .eq('cow_id', cowId)
+      .eq('event_type', 'Weight Measurement')
+      .order('event_date', { ascending: true });
+    
+    if (healthError) throw healthError;
+
+    // Create the first milestone from birth data
+    const milestones = [{
+      id: `birth-${cowId}`,
+      date: cowData.date_of_birth,
+      milestone: 'Birth',
+      weight: parseFloat(cowData.initial_weight) || 0,
+      notes: 'Birth weight record',
+      ageInDays: 0
+    }];
+
+    // Calculate growth milestones from health events
+    healthEvents.forEach(event => {
+      // Extract weight from the description or notes using regex
+      const weightMatch = 
+        (event.description && event.description.match(/(\d+(\.\d+)?)\s*kg/i)) ||
+        (event.notes && event.notes.match(/(\d+(\.\d+)?)\s*kg/i));
+      
+      if (weightMatch) {
+        const weight = parseFloat(weightMatch[1]);
+        const eventDate = new Date(event.event_date);
+        const birthDate = new Date(cowData.date_of_birth);
+        const ageInDays = Math.floor((eventDate - birthDate) / (24 * 60 * 60 * 1000));
+        const milestone = generateMilestoneName(ageInDays);
+        
+        milestones.push({
+          id: event.id,
+          date: event.event_date,
+          milestone,
+          weight,
+          notes: event.description || event.notes,
+          ageInDays
+        });
+      }
+    });
+
+    // Add transition milestone if available
+    if (cowData.transition_date) {
+      const transitionDate = new Date(cowData.transition_date);
+      const birthDate = new Date(cowData.date_of_birth);
+      const ageInDays = Math.floor((transitionDate - birthDate) / (24 * 60 * 60 * 1000));
+      
+      milestones.push({
+        id: `transition-${cowId}`,
+        date: cowData.transition_date,
+        milestone: 'Status Transition',
+        weight: parseFloat(cowData.current_weight) || milestones[milestones.length - 1].weight,
+        notes: 'Transition to new status',
+        ageInDays
+      });
+    }
+
+    // Sort milestones by date
+    milestones.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Calculate growth rate between milestones if we have multiple points
+    if (milestones.length > 1) {
+      for (let i = 1; i < milestones.length; i++) {
+        const daysPassed = milestones[i].ageInDays - milestones[i-1].ageInDays;
+        const weightGain = milestones[i].weight - milestones[i-1].weight;
+        const growthRate = daysPassed > 0 ? (weightGain / daysPassed * 30).toFixed(2) : 0; // kg per month
+        
+        milestones[i].growthRate = parseFloat(growthRate);
+      }
+    }
+
+    return milestones;
+  } catch (error) {
+    console.error('Error fetching growth milestones:', error);
+    throw error;
+  }
+};
+
+// Generate milestone name based on age
+const generateMilestoneName = (ageInDays) => {
+  if (ageInDays < 7) return 'First Week';
+  if (ageInDays < 30) return 'First Month';
+  
+  const months = Math.floor(ageInDays / 30);
+  if (months === 1) return '1 Month';
+  if (months < 12) return `${months} Months`;
+  
+  const years = Math.floor(months / 12);
+  const remainingMonths = months % 12;
+  
+  if (remainingMonths === 0) return `${years} Year${years > 1 ? 's' : ''}`;
+  return `${years} Year${years > 1 ? 's' : ''}, ${remainingMonths} Month${remainingMonths > 1 ? 's' : ''}`;
+};
+
+// Record a new growth milestone
+export const recordGrowthMilestone = async (cowId, milestoneData) => {
+  try {
+    // Create a health event of type "Weight Measurement"
+    const healthEvent = {
+      cow_id: cowId,
+      event_type: 'Weight Measurement',
+      event_date: milestoneData.date,
+      description: milestoneData.milestone,
+      notes: `Weight: ${milestoneData.weight} kg. ${milestoneData.notes || ''}`,
+      performed_by: milestoneData.performedBy || 'Farm Staff',
+      status: 'Completed'
+    };
+    
+    const { data, error } = await supabase
+      .from('health_events')
+      .insert(healthEvent)
+      .select();
+      
+    if (error) throw error;
+    
+    // Get previous milestones to calculate growth rate
+    const previousMilestones = await fetchGrowthMilestones(cowId);
+    let growthRate = null;
+    
+    if (previousMilestones.length > 0) {
+      const lastMilestone = previousMilestones[previousMilestones.length - 1];
+      const currentMilestoneDate = new Date(milestoneData.date);
+      const lastMilestoneDate = new Date(lastMilestone.date);
+      const daysPassed = Math.max(1, Math.floor((currentMilestoneDate - lastMilestoneDate) / (24 * 60 * 60 * 1000)));
+      
+      // Calculate monthly growth rate
+      const weightDiff = parseFloat(milestoneData.weight) - parseFloat(lastMilestone.weight);
+      growthRate = (weightDiff / daysPassed) * 30; // kg per month
+    }
+    
+    // Update the cow's current weight and growth rate if calculated
+    const updateData = {
+      current_weight: milestoneData.weight,
+      updated_at: new Date().toISOString()
+    };
+    
+    // Only add growth rate if we could calculate it
+    if (growthRate !== null) {
+      updateData.growth_rate = growthRate.toFixed(2);
+    }
+    
+    const { error: updateError } = await supabase
+      .from('cows')
+      .update(updateData)
+      .eq('id', cowId);
+      
+    if (updateError) throw updateError;
+    
+    // Calculate growth rate if this isn't the first weight measurement
+    const milestones = await fetchGrowthMilestones(cowId);
+    if (milestones.length > 1) {
+      const latestMilestone = milestones[milestones.length - 1];
+      
+      // Update cow's growth rate
+      const { error: rateError } = await supabase
+        .from('cows')
+        .update({
+          growth_rate: latestMilestone.growthRate || 0,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', cowId);
+        
+      if (rateError) throw rateError;
+    }
+    
+    return data[0];
+  } catch (error) {
+    console.error('Error recording growth milestone:', error);
+    throw error;
+  }
+};

@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Calendar, Clock, Mail, Phone, MapPin, Users, Award, FileText, Briefcase, User,Download,DollarSign,Droplet,Thermometer } from 'lucide-react';
 import { fetchCows, addCow, updateCow, deleteCow, recordHealthEvent, recordMilkProduction, recordBreedingEvent,
-  fetchRecentActivity,fetchBreedingEvents,fetchHealthHistory,fetchReproductiveStatus
+  fetchRecentActivity,fetchBreedingEvents,fetchHealthHistory,fetchReproductiveStatus,
+  fetchGrowthMilestones, recordGrowthMilestone
  } from './services/cowService';
+import RecordGrowthMilestoneModal from './RecordGrowthMilestoneModal';
+import GrowthChart from './GrowthChart';
+import GrowthMilestoneSummary from './GrowthMilestoneSummary';
+import NextMilestoneReminder from './NextMilestoneReminder';
 import cowSample from '../assets/images/cow.jpg';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area } from 'recharts';
 import { supabase } from '../lib/supabase';
@@ -54,13 +59,16 @@ const CowManagement = () => {
   const [isRecordHealthEventModalOpen, setIsRecordHealthEventModalOpen] = useState(false);
   const [isRecordMilkModalOpen, setIsRecordMilkModalOpen] = useState(false);
   const [isRecordBreedingEventModalOpen, setIsRecordBreedingEventModalOpen] = useState(false);
+  const [isRecordGrowthMilestoneModalOpen, setIsRecordGrowthMilestoneModalOpen] = useState(false);
   const [cowToEdit, setCowToEdit] = useState(null);
   const [cowToDelete, setCowToDelete] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [growthMilestones, setGrowthMilestones] = useState([]);
   const [filters, setFilters] = useState({
     status: 'All',
     healthStatus: 'All',
-    breed: 'All'
+    breed: 'All',
+    milkingStatus: 'All'
   });
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
@@ -108,6 +116,36 @@ const CowManagement = () => {
     setCurrentPage(1); // Reset to first page on filter change
   };
 
+  // Helper function to check milking status for filtering and display
+  const checkCowMilkingStatus = (cow) => {
+    // Skip check for non-milking cows
+    if (cow?.status === 'Calf' || cow?.status === 'Heifer' || cow?.status === 'Dry') {
+      return null;
+    }
+    
+    if (cow?.milkProduction && cow.milkProduction.length > 0) {
+      const latest = cow.milkProduction[cow.milkProduction.length - 1];
+      if (!latest.date) return { milked: false, message: 'No milking date recorded' };
+      
+      const today = new Date();
+      const milkDate = new Date(latest.date);
+      
+      // Check if dates are the same day
+      const isSameDay = 
+        milkDate.getDate() === today.getDate() &&
+        milkDate.getMonth() === today.getMonth() &&
+        milkDate.getFullYear() === today.getFullYear();
+        
+      return { 
+        milked: isSameDay,
+        message: isSameDay ? 'Milked today' : 'Not milked today',
+        shift: latest.shift || 'Not specified'
+      };
+    }
+    
+    return { milked: false, message: 'No milking records' };
+  };
+
   // Filter cows based on search and filters
   const filteredCows = ensureValidCows(cows).filter(cow => {
     // Only process if cow is a valid object
@@ -136,7 +174,21 @@ const CowManagement = () => {
       filters.breed === 'All' || 
       cow.breed === filters.breed;
     
-    return matchesSearch && matchesStatus && matchesHealthStatus && matchesBreed;
+    // Milking status filter
+    let matchesMilkingStatus = true;
+    if (filters.milkingStatus !== 'All') {
+      const milkingStatus = checkCowMilkingStatus(cow);
+      
+      if (filters.milkingStatus === 'Milked') {
+        matchesMilkingStatus = milkingStatus && milkingStatus.milked;
+      } else if (filters.milkingStatus === 'NotMilked') {
+        matchesMilkingStatus = !milkingStatus || !milkingStatus.milked;
+      } else if (filters.milkingStatus === 'Morning' || filters.milkingStatus === 'Evening') {
+        matchesMilkingStatus = milkingStatus && milkingStatus.milked && milkingStatus.shift === filters.milkingStatus;
+      }
+    }
+    
+    return matchesSearch && matchesStatus && matchesHealthStatus && matchesBreed && matchesMilkingStatus;
   });
 
   // Pagination
@@ -190,6 +242,11 @@ const CowManagement = () => {
   // Toggle record breeding event modal
   const toggleRecordBreedingEventModal = () => {
     setIsRecordBreedingEventModalOpen(!isRecordBreedingEventModalOpen);
+  };
+  
+  // Toggle record growth milestone modal
+  const toggleRecordGrowthMilestoneModal = () => {
+    setIsRecordGrowthMilestoneModalOpen(!isRecordGrowthMilestoneModalOpen);
   };
 
   // Add new cow
@@ -306,7 +363,10 @@ const CowManagement = () => {
             ...cow,
             milkProduction: [...cow.milkProduction, {
               date: recordData.date,
-              amount: recordData.amount
+              amount: recordData.amount,
+              shift: recordData.shift || 'Morning', // Adding shift property
+              quality: recordData.quality || 'Good',
+              notes: recordData.notes || ''
             }]
           };
         }
@@ -320,7 +380,10 @@ const CowManagement = () => {
           ...selectedCow,
           milkProduction: [...selectedCow.milkProduction, {
             date: recordData.date,
-            amount: recordData.amount
+            amount: recordData.amount,
+            shift: recordData.shift || 'Morning',
+            quality: recordData.quality || 'Good',
+            notes: recordData.notes || ''
           }]
         });
       }
@@ -368,6 +431,54 @@ const CowManagement = () => {
       setLoading(false);
     }
   };
+  
+  // Record growth milestone
+  const handleRecordGrowthMilestone = async (cowId, milestoneData) => {
+    try {
+      setLoading(true);
+      const newMilestone = await recordGrowthMilestone(cowId, milestoneData);
+      
+      // Refresh the growth milestones data
+      const updatedMilestones = await fetchGrowthMilestones(cowId);
+      setGrowthMilestones(updatedMilestones);
+      
+      // Update the cows list with new weight/growth data
+      const updatedCows = cows.map(cow => {
+        if (cow.id === cowId) {
+          return {
+            ...cow,
+            currentWeight: parseFloat(milestoneData.weight),
+            // If we have enough data to calculate growth rate, update it
+            growthRate: updatedMilestones.length > 1 && 
+              updatedMilestones[updatedMilestones.length - 1].growthRate || cow.growthRate
+          };
+        }
+        return cow;
+      });
+      
+      setCows(updatedCows);
+      
+      // If this was for the selected cow, refresh the cow data
+      if (selectedCow && selectedCow.id === cowId) {
+        const updatedCowData = updatedCows.find(cow => cow.id === cowId);
+        if (updatedCowData) {
+          setSelectedCow(updatedCowData);
+        }
+      }
+      
+      setSuccessMessage('Growth milestone recorded successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      console.error("Error recording growth milestone:", err);
+      setErrorMessage('Failed to record growth milestone. Please try again.');
+      setTimeout(() => setErrorMessage(''), 3000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // We're now using the global checkCowMilkingStatus function consistently
+  
 
   if (loading && cows.length === 0) {
     return <LoadingSpinner message="Loading Cows" />;
@@ -421,6 +532,7 @@ const CowManagement = () => {
           onRecordHealthEvent={toggleRecordHealthEventModal} 
           toggleRecordMilkModal={toggleRecordMilkModal}
           toggleRecordBreedingEventModal={toggleRecordBreedingEventModal}
+          toggleRecordGrowthMilestoneModal={toggleRecordGrowthMilestoneModal}
         />
       ) : (
         <div className="px-4 py-6 sm:px-6 max-w-[1500px] mx-auto">
@@ -451,7 +563,7 @@ const CowManagement = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3 md:gap-4 col-span-3 md:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3 md:gap-4 col-span-3 md:grid-cols-4">
               <div>
                 <select
                   className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
@@ -493,6 +605,20 @@ const CowManagement = () => {
                   ))}
                 </select>
               </div>
+
+              <div>
+                <select
+                  className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                  value={filters.milkingStatus}
+                  onChange={(e) => handleFilterChange('milkingStatus', e.target.value)}
+                >
+                  <option value="All">All Milking</option>
+                  <option value="Milked">Milked Today</option>
+                  <option value="NotMilked">Not Milked Today</option>
+                  <option value="Morning">Morning Shift</option>
+                  <option value="Evening">Evening Shift</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -529,6 +655,7 @@ const CowManagement = () => {
                   onClick={() => openCowProfile(cow)}
                   onEdit={(e) => toggleEditModal(cow, e)}
                   onDelete={(e) => toggleDeleteModal(cow, e)}
+                  checkCowMilkingStatus={checkCowMilkingStatus}
                 />
               ))}
             </div>
@@ -554,6 +681,9 @@ const CowManagement = () => {
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Milk Production
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Milking Status
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
@@ -585,6 +715,39 @@ const CowManagement = () => {
                         ? `${cow.milkProduction[cow.milkProduction.length - 1].amount}L/day`
                         : '0L/day'
                       }
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {(() => {
+                          const milkingStatus = checkCowMilkingStatus(cow);
+                          if (!milkingStatus || cow?.status === 'Calf' || cow?.status === 'Heifer' || cow?.status === 'Dry') {
+                            return <span className="text-sm text-gray-400">N/A</span>;
+                          }
+                          
+                          return (
+                            <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full items-center ${
+                              milkingStatus.milked 
+                                ? milkingStatus.shift === 'Morning'
+                                  ? 'bg-blue-100 text-blue-700' 
+                                  : milkingStatus.shift === 'Evening'
+                                    ? 'bg-purple-100 text-purple-700'
+                                    : 'bg-green-100 text-green-700'
+                                : 'bg-red-100 text-red-700'
+                            }`}>
+                              <div className={`w-2 h-2 rounded-full mr-2 inline-block ${
+                                milkingStatus.milked 
+                                  ? milkingStatus.shift === 'Morning'
+                                    ? 'bg-blue-500'
+                                    : milkingStatus.shift === 'Evening'
+                                      ? 'bg-purple-500'
+                                      : 'bg-green-500'
+                                  : 'bg-red-500'
+                              }`}></div>
+                              {milkingStatus.milked 
+                                ? `Milked (${milkingStatus.shift})` 
+                                : 'Not milked'}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>
@@ -689,12 +852,20 @@ const CowManagement = () => {
           onSubmit={(id,record) => handleRecordBreedingEvent(id, record)}
         />
       )}
+      
+      {isRecordGrowthMilestoneModalOpen && (
+        <RecordGrowthMilestoneModal 
+          cow={selectedCow} 
+          onClose={toggleRecordGrowthMilestoneModal} 
+          onSubmit={(id,record) => handleRecordGrowthMilestone(id, record)}
+        />
+      )}
     </div>
   );
 };
 
 // Cow Card Component
-const CowCard = ({ cow, onClick, onEdit, onDelete }) => {
+const CowCard = ({ cow, onClick, onEdit, onDelete, checkCowMilkingStatus }) => {
   // Safe method to get latest milk production
   const getLatestMilkProduction = () => {
     if (cow?.milkProduction && cow.milkProduction.length > 0) {
@@ -716,6 +887,9 @@ const CowCard = ({ cow, onClick, onEdit, onDelete }) => {
   // Ensure alerts is always an array
   const alerts = Array.isArray(cow?.alerts) ? cow.alerts : 
                 (cow?.alerts ? [cow.alerts] : []);
+
+  // Get milking status for today using the shared function from the parent component
+  const milkingStatus = checkCowMilkingStatus(cow);
 
   return (
     <div 
@@ -765,6 +939,34 @@ const CowCard = ({ cow, onClick, onEdit, onDelete }) => {
             </div>
           </div>
           
+          {/* Daily Milking Status Indicator */}
+          {milkingStatus && cow?.status !== 'Calf' && cow?.status !== 'Heifer' && cow?.status !== 'Dry' && (
+            <div className={`mt-2 flex items-center text-sm rounded-md px-2 py-1 ${
+              milkingStatus.milked 
+                ? milkingStatus.shift === 'Morning'
+                  ? 'bg-blue-50 text-blue-700' 
+                  : milkingStatus.shift === 'Evening'
+                    ? 'bg-purple-50 text-purple-700'
+                    : 'bg-green-50 text-green-700'
+                : 'bg-red-50 text-red-700'
+            }`}>
+              <div className={`w-2 h-2 rounded-full mr-2 ${
+                milkingStatus.milked 
+                  ? milkingStatus.shift === 'Morning'
+                    ? 'bg-blue-500'
+                    : milkingStatus.shift === 'Evening'
+                      ? 'bg-purple-500'
+                      : 'bg-green-500'
+                  : 'bg-red-500'
+              }`}></div>
+              <span className="truncate font-medium">
+                {milkingStatus.milked 
+                  ? `Milked today (${milkingStatus.shift})` 
+                  : 'Not milked today'}
+              </span>
+            </div>
+          )}
+          
           {alerts.length > 0 && (
             <div className="mt-2 flex items-start text-amber-600 text-sm">
               <svg className="h-4 w-4 mr-1 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -795,17 +997,20 @@ const CowCard = ({ cow, onClick, onEdit, onDelete }) => {
 };
 
 // Employee Profile Component
-const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMilkModal, toggleRecordBreedingEventModal }) => {
+const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMilkModal, toggleRecordBreedingEventModal, toggleRecordGrowthMilestoneModal }) => {
   const [activeTab, setActiveTab] = useState('overview');
   const [healthHistory, setHealthHistory] = useState([]);
   const [breedingEvents, setBreedingEvents] = useState([]);
   const [reproductiveStatus, setReproductiveStatus] = useState(null);
   const [recentActivities, setRecentActivities] = useState([]);
+  const [growthMilestones, setGrowthMilestones] = useState([]);
+  const [scheduledMilestone, setScheduledMilestone] = useState(null);
   const [loading, setLoading] = useState({
     health: false,
     breeding: false,
     reproductive: false,
-    activity: false
+    activity: false,
+    growth: false
   });
   const [error, setError] = useState(null);
   const [showTransitionModal, setShowTransitionModal] = useState(false);
@@ -950,6 +1155,70 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
       loadRecentActivities();
     }
   }, [activeTab, cow, recentActivities.length]);
+
+  // Fetch growth milestones when tab changes to growth
+  useEffect(() => {
+    if (activeTab === 'growth' && cow && cow.id && !growthMilestones.length && (isCalf || isHeifer)) {
+      loadGrowthMilestones();
+    }
+  }, [activeTab, cow, growthMilestones.length, isCalf, isHeifer]);
+
+  const loadGrowthMilestones = async () => {
+    if (!cow?.id) return;
+    
+    setLoading(prevState => ({ ...prevState, growth: true }));
+    try {
+      const data = await fetchGrowthMilestones(cow.id);
+      setGrowthMilestones(data);
+      
+      // If we have growth data from the milestones but it's not in the cow object, update it
+      if (data.length > 1) {
+        const latestMilestone = data[data.length - 1];
+        // Update both current weight and growth rate from real milestone data
+        if ((latestMilestone.weight && latestMilestone.weight !== cow.currentWeight) ||
+            (latestMilestone.growthRate && latestMilestone.growthRate !== cow.growthRate)) {
+          
+          const updatedCow = {
+            ...cow,
+            currentWeight: latestMilestone.weight || cow.currentWeight,
+            growthRate: latestMilestone.growthRate || cow.growthRate
+          };
+          
+          // Update the cow data
+          onEdit(updatedCow);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching growth milestones:', error);
+      setError(error.message);
+    } finally {
+      setLoading(prevState => ({ ...prevState, growth: false }));
+    }
+  };
+
+  // Handle recording a new growth milestone
+  const handleRecordGrowthMilestone = () => {
+    toggleRecordGrowthMilestoneModal();
+  };
+
+  // Handle scheduling a new growth milestone
+  const handleScheduleMilestone = (milestoneData) => {
+    setScheduledMilestone(milestoneData);
+    
+    // In a real application, this would store the reminder in a database
+    console.log('Scheduled next milestone check:', milestoneData);
+    
+    // Add an alert to the cow's profile
+    const updatedCow = {
+      ...cow,
+      alerts: [...(cow.alerts || []), `Growth check scheduled for ${milestoneData.formattedDate}`]
+    };
+    
+    // Update the cow data
+    onEdit(updatedCow);
+    
+    toast.success(`Growth milestone check scheduled for ${milestoneData.formattedDate}`);
+  };
 
   const toggleTransitionModal = () => {
     setShowTransitionModal(!showTransitionModal);
@@ -1150,7 +1419,7 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                               <div>
                                 <p className="text-sm font-medium text-gray-500">Current Weight</p>
                                 <p className="text-2xl font-semibold text-gray-800 mt-1">
-                                  {cow.initialWeight || '0.0'} kg
+                                  {cow.currentWeight || cow.initialWeight || '0.0'} kg
                                 </p>
                               </div>
                               <div className="p-2 rounded-full bg-gradient-to-r from-purple-50 to-purple-100 text-purple-600">
@@ -1159,11 +1428,29 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                                 </svg>
                               </div>
                             </div>
-                            <div className="mt-4 text-xs text-green-600 flex items-center">
-                              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                              </svg>
-                              <span>Growing steadily</span>
+                            <div className="mt-4 text-xs flex items-center">
+                              {cow.currentWeight && cow.initialWeight && parseFloat(cow.currentWeight) > parseFloat(cow.initialWeight) ? (
+                                <>
+                                  <svg className="w-4 h-4 mr-1 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                                  </svg>
+                                  <span className="text-green-600">Growing steadily</span>
+                                </>
+                              ) : cow.currentWeight && cow.initialWeight && parseFloat(cow.currentWeight) < parseFloat(cow.initialWeight) ? (
+                                <>
+                                  <svg className="w-4 h-4 mr-1 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                                  </svg>
+                                  <span className="text-red-600">Weight loss detected</span>
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="w-4 h-4 mr-1 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14" />
+                                  </svg>
+                                  <span className="text-gray-500">No change detected</span>
+                                </>
+                              )}
                             </div>
                           </div>
                         </>
@@ -1436,10 +1723,8 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                     <div className="bg-white shadow-lg rounded-lg p-6 mb-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
                       <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-purple-600 mb-4">Growth Progress</h3>
                       <div className="h-64">
-                        {/* Here you would add a growth chart component */}
-                        <div className="h-full bg-gradient-to-r from-purple-50/40 via-gray-50 to-pink-50/30 rounded-lg flex items-center justify-center">
-                          <p className="text-gray-500">Growth tracking chart will display here</p>
-                        </div>
+                        {/* Growth chart component */}
+                        <GrowthChart milestones={growthMilestones} cowBreed={cow.breed} />
                       </div>
                       
                       <div className="grid grid-cols-3 gap-3 mt-4">
@@ -1448,26 +1733,56 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                           <p className="text-lg font-bold text-purple-600">
                             {cow.initialWeight || 'N/A'} kg
                           </p>
+                          <p className="text-xs text-purple-600 mt-1">
+                            Initial recording
+                          </p>
                         </div>
                         <div className="text-center p-2 rounded-lg bg-gradient-to-b from-green-50 to-green-100 border border-green-200">
                           <p className="text-xs text-gray-500">Current Weight</p>
                           <p className="text-lg font-bold text-green-600">
                             {cow.currentWeight || cow.initialWeight || 'N/A'} kg
                           </p>
+                          {cow.currentWeight && cow.initialWeight && (
+                            <p className="text-xs text-green-700 mt-1">
+                              +{(cow.currentWeight - cow.initialWeight).toFixed(1)} kg total gain
+                            </p>
+                          )}
                         </div>
                         <div className="text-center p-2 rounded-lg bg-gradient-to-b from-blue-50 to-blue-100 border border-blue-200">
                           <p className="text-xs text-gray-500">Growth Rate</p>
                           <p className="text-lg font-bold text-blue-600">
                             {cow.growthRate || 'N/A'} kg/month
                           </p>
+                          {growthMilestones && growthMilestones.length >= 2 && (
+                            <div className="flex items-center justify-center text-xs mt-1">
+                              <span className={cow.growthRate >= 0.7 ? "text-green-600" : "text-amber-600"}>
+                                {cow.growthRate >= 0.7 ? "Healthy growth" : "Below target"}
+                              </span>
+                            </div>
+                          )}
                         </div>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                      <div className="lg:col-span-2">
+                        <GrowthMilestoneSummary milestones={growthMilestones} cowBreed={cow.breed} />
+                      </div>
+                      <div>
+                        <NextMilestoneReminder 
+                          cow={cow} 
+                          lastMilestone={growthMilestones && growthMilestones.length > 0 ? 
+                            growthMilestones[growthMilestones.length - 1] : null} 
+                          onSchedule={handleScheduleMilestone}
+                        />
                       </div>
                     </div>
                     
                     <div className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
                       <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
                         <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-purple-600">Development Milestones</h3>
-                        <button className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gradient-to-r from-purple-500 to-purple-600 hover:opacity-90 transition-opacity shadow-sm">
+                        <button className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gradient-to-r from-purple-500 to-purple-600 hover:opacity-90 transition-opacity shadow-sm"
+                        onClick={handleRecordGrowthMilestone}>
                           Record Milestone
                         </button>
                       </div>
@@ -1489,36 +1804,30 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                          {/* Sample data - would be replaced by actual milestone data */}
-                          <tr className="hover:bg-gray-50 transition-colors duration-200">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {formatDate(cow.dateOfBirth)}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                              Birth
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {cow.initialWeight || 'N/A'} kg
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              Healthy birth
-                            </td>
-                          </tr>
-                          {/* Additional sample milestones */}
-                          <tr className="hover:bg-gray-50 transition-colors duration-200">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {formatDate(new Date(new Date(cow.dateOfBirth).getTime() + 30*24*60*60*1000))}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                              First Month Check
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {parseInt(cow.initialWeight || 0) + 15} kg
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              Growing well
-                            </td>
-                          </tr>
+                          {growthMilestones.length > 0 ? (
+                            growthMilestones.map((milestone, index) => (
+                              <tr key={index} className="hover:bg-gray-50 transition-colors duration-200">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {formatDate(milestone.date)}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                                  {milestone.milestone}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {milestone.weight || 'N/A'} kg
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                  {milestone.notes || '-'}
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
+                                No growth milestones recorded for this cow.
+                              </td>
+                            </tr>
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -1757,7 +2066,7 @@ const TransitionModal = ({ cow, isCalf, onClose, onTransition }) => {
   const [formData, setFormData] = useState({
     status: isCalf ? 'Heifer' : 'Active',
     transitionDate: new Date().toISOString().split('T')[0],
-    currentWeight: cow.initialWeight || '',
+    currentWeight: cow.currentWeight || cow.initialWeight || '',
     notes: ''
   });
   
@@ -2026,6 +2335,7 @@ const AddCowModal = ({ onClose, onAdd }) => {
     purchaseDate: '',
     purchasePrice: '',
     initialWeight: '',
+    currentWeight: '',
     notes: '',
     photo: null,
     // Calf-specific fields
@@ -2110,6 +2420,14 @@ const AddCowModal = ({ onClose, onAdd }) => {
           newErrors.initialWeight = 'Weight must be greater than 0';
         }
       }
+      
+      if (formData.currentWeight) {
+        if (isNaN(formData.currentWeight)) {
+          newErrors.currentWeight = 'Weight must be a number';
+        } else if (parseFloat(formData.currentWeight) <= 0) {
+          newErrors.currentWeight = 'Weight must be greater than 0';
+        }
+      }
     }
     
     setErrors(newErrors);
@@ -2144,7 +2462,8 @@ const AddCowModal = ({ onClose, onAdd }) => {
       notes: formData.notes,
       purchaseDate: formData.purchaseDate || null,
       purchasePrice: formData.purchasePrice || null,
-      initialWeight: formData.initialWeight || null
+      initialWeight: formData.initialWeight || null,
+      currentWeight: formData.currentWeight || formData.initialWeight || null
     };
     
     onAdd(newCow);
@@ -2530,6 +2849,24 @@ const AddCowModal = ({ onClose, onAdd }) => {
                     <p className="mt-1 text-xs text-red-500">{errors.initialWeight}</p>
                   )}
                 </div>
+
+                <div>
+                  <label htmlFor="currentWeight" className="block text-sm font-medium text-gray-700 mb-1">
+                    Current Weight (kg)
+                  </label>
+                  <input
+                    type="number"
+                    id="currentWeight"
+                    name="currentWeight"
+                    value={formData.currentWeight}
+                    onChange={handleChange}
+                    className={`block w-full px-3 py-2 border ${errors.currentWeight ? 'border-red-300' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300`}
+                    step="0.1"
+                  />
+                  {errors.currentWeight && (
+                    <p className="mt-1 text-xs text-red-500">{errors.currentWeight}</p>
+                  )}
+                </div>
                 
                 <div>
                   <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
@@ -2684,6 +3021,7 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
     purchaseDate: cow.purchaseDate ? new Date(cow.purchaseDate).toISOString().split('T')[0] : '',
     purchasePrice: cow.purchasePrice || '',
     initialWeight: cow.initialWeight || '',
+    currentWeight: cow.currentWeight || cow.initialWeight || '',
     notes: cow.notes || '',
     photo: cow.image && cow.image !== '/api/placeholder/160/160' ? cow.image : null,
     alerts: Array.isArray(cow.alerts) ? [...cow.alerts] : []
@@ -2764,6 +3102,14 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
         newErrors.initialWeight = 'Weight must be greater than 0';
       }
     }
+
+    if (formData.currentWeight) {
+      if (isNaN(formData.currentWeight)) {
+        newErrors.currentWeight = 'Weight must be a number';
+      } else if (parseFloat(formData.currentWeight) <= 0) {
+        newErrors.currentWeight = 'Weight must be greater than 0';
+      }
+    }
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0; // Returns true if no errors
@@ -2793,6 +3139,7 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
       purchaseDate: formData.purchaseDate || null,
       purchasePrice: formData.purchasePrice ? parseFloat(formData.purchasePrice) : null,
       initialWeight: formData.initialWeight ? parseFloat(formData.initialWeight) : null,
+      currentWeight: formData.currentWeight ? parseFloat(formData.currentWeight) : (formData.initialWeight ? parseFloat(formData.initialWeight) : null),
       notes: formData.notes || null,
       photo: formData.photo,
       alerts: formData.alerts || []
