@@ -2452,12 +2452,12 @@ const FinancesManagement = () => {
                 </div>
                 
                 <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
-                  <div className="h-2 bg-gradient-to-r from-amber-500 to-amber-400"></div>
+                  <div className="h-2 bg-gradient-to-r from-yellow-500 to-yellow-400"></div>
                   <div className="p-5">
                     <div className="flex justify-between items-start">
                       <div>
                         <p className="text-sm font-medium text-gray-500">Cash Flow</p>
-                        <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-amber-500 mt-1 mb-3">
+                        <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-yellow-600 to-yellow-500 mt-1 mb-3">
                           {formatCurrency(financialData?.financialStats?.cashflow?.current)}
                         </p>
                       </div>
@@ -2709,10 +2709,10 @@ const FinancesManagement = () => {
                   </div>
                   
                   <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
-                    <div className="h-2 bg-gradient-to-r from-amber-500 to-amber-400"></div>
+                    <div className="h-2 bg-gradient-to-r from-yellow-500 to-yellow-400"></div>
                     <div className="p-5">
                       <p className="text-sm font-medium text-gray-500">YTD Payroll</p>
-                      <p className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-amber-500 mt-1">
+                      <p className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-yellow-600 to-yellow-500 mt-1">
                         {formatCurrency(financialData?.payroll?.ytdCost || 0)}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">{financialData?.payroll?.ytdPayments || 0} payments</p>

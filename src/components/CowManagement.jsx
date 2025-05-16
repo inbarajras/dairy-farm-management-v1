@@ -18,7 +18,7 @@ import {toast} from './utils/ToastContainer';
 const statusColors = {
   'Active': 'bg-green-100 text-green-800',
   'Dry': 'bg-blue-100 text-blue-800',
-  'Sold': 'bg-amber-100 text-amber-800',
+  'Sold': 'bg-black-100 text-balck-800',
   'Deceased': 'bg-red-100 text-red-800',
   'Calf': 'bg-purple-100 text-purple-800',
   'Heifer': 'bg-pink-100 text-pink-800'
@@ -27,7 +27,7 @@ const statusColors = {
 // Health status colors
 const healthStatusColors = {
   'Healthy': 'bg-green-100 text-green-800',
-  'Monitored': 'bg-amber-100 text-amber-800',
+  'Monitored': 'bg-yellow-100 text-yellow-800',
   'Under treatment': 'bg-red-100 text-red-800'
 };
 
@@ -35,7 +35,7 @@ const healthStatusColors = {
 const attendanceStatusColors = {
   'Present': 'bg-green-100 text-green-800',
   'Absent': 'bg-red-100 text-red-800',
-  'Late': 'bg-amber-100 text-amber-800',
+  'Late': 'bg-yellow-100 text-yellow-800',
   'Weekend': 'bg-gray-100 text-gray-800',
   'Holiday': 'bg-blue-100 text-blue-800',
   'Vacation': 'bg-purple-100 text-purple-800'
@@ -898,9 +898,9 @@ const CowCard = ({ cow, onClick, onEdit, onDelete, checkCowMilkingStatus }) => {
     >
       {/* Add color bar at top based on health status */}
       <div className={`h-2 bg-gradient-to-r ${
-        cow?.healthStatus === 'Completed' ? 'from-green-500 to-teal-500' :
-        cow?.healthStatus === 'Monitored' ? 'from-yellow-500 to-amber-400' :
-        cow?.healthStatus === 'In progress' ? 'from-red-500 to-orange-400' :
+        cow?.healthStatus === 'Completed' ? 'from-green-500 to-green-500' :
+        cow?.healthStatus === 'Monitored' ? 'from-yellow-500 to-yellow-400' :
+        cow?.healthStatus === 'In progress' ? 'from-red-500 to-red-400' :
         'from-gray-500 to-gray-400'
       }`}></div>
       

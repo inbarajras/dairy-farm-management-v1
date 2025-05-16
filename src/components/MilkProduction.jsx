@@ -671,14 +671,14 @@ useEffect(() => {
             {/* KPI Cards - updated to use actual quality parameters from database */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
               <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300 border border-gray-100">
-                <div className="h-2 bg-gradient-to-r from-blue-500 to-cyan-400"></div>
+                <div className="h-2 bg-gradient-to-r from-blue-500 to-blue-400"></div>
                 <div className="p-5">
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-sm font-medium text-gray-500">Total Milk Production</p>
-                      <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-cyan-400 mt-1 mb-3">{totalMilk.toFixed(1)} L</p>
+                      <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-blue-400 mt-1 mb-3">{totalMilk.toFixed(1)} L</p>
                     </div>
-                    <div className="p-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-400">
+                    <div className="p-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-400">
                       <Droplet size={20} className="text-white" />
                     </div>
                   </div>
@@ -695,16 +695,16 @@ useEffect(() => {
               </div>
               
               <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300 border border-gray-100">
-                <div className="h-2 bg-gradient-to-r from-yellow-500 to-amber-400"></div>
+                <div className="h-2 bg-gradient-to-r from-yellow-500 to-yellow-400"></div>
                 <div className="p-5">
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-sm font-medium text-gray-500">Average Fat Content</p>
-                      <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-yellow-500 to-amber-400 mt-1 mb-3">
+                      <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-yellow-500 to-yellow-400 mt-1 mb-3">
                         {calculateAverageFat(milkData.dailyCollections)}%
                       </p>
                     </div>
-                    <div className="p-2.5 rounded-xl bg-gradient-to-r from-yellow-500 to-amber-400">
+                    <div className="p-2.5 rounded-xl bg-gradient-to-r from-yellow-500 to-yellow-400">
                       <ThermometerSun size={20} className="text-white" />
                     </div>
                   </div>

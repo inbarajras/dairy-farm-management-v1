@@ -21,6 +21,8 @@ import {
   deletePerformanceReview,
   getEmployeePerformanceReviews
 } from './services/employeeService';
+import { getEmployeePayrollHistory, getEmployeeSalaryHistory } from './services/financialService';
+import generatePayslipPDF from '../utils/pdfGenerator';
 import emp from '../assets/images/emp.jpg';
 import LoadingSpinner from './LoadingSpinner';
 
@@ -1068,9 +1070,18 @@ const OverviewTab = ({ employee }) => {
         // Get performance reviews for this employee - existing code
         const performanceReviews = await getEmployeePerformanceReviews(employee.id);
         
-        // Calculate actual performance rating - existing code
+        // Calculate actual performance rating
         if (performanceReviews && performanceReviews.length > 0) {
-          // ...existing performance calculation...
+          const completedReviews = performanceReviews.filter(review => 
+            review.status === 'Completed' && review.rating
+          );
+          
+          if (completedReviews.length > 0) {
+            const sum = completedReviews.reduce((total, review) => 
+              total + parseFloat(review.rating || 0), 0);
+            const avgRating = (sum / completedReviews.length).toFixed(1);
+            setPerformanceMetrics({ rating: avgRating });
+          }
         }
         
         // Calculate attendance rate from attendance history
@@ -1733,10 +1744,115 @@ const PerformanceDetailsTab = ({ employee }) => {
   );
 };
 
-// Add the missing PayrollTab component
+// Updated PayrollTab component with real data fetching
 const PayrollTab = ({ employee }) => {
+  const [paymentHistory, setPaymentHistory] = useState([]);
+  const [salaryHistory, setSalaryHistory] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSalaryHistoryLoading, setIsSalaryHistoryLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [salaryHistoryError, setSalaryHistoryError] = useState(null);
+  const [downloadingPayslip, setDownloadingPayslip] = useState(false);
+  const [downloadMessage, setDownloadMessage] = useState({ show: false, type: '', text: '' });
+  
+  useEffect(() => {
+    const fetchPayrollHistory = async () => {
+      try {
+        setIsLoading(true);
+        const data = await getEmployeePayrollHistory(employee.id);
+        setPaymentHistory(data);
+      } catch (err) {
+        console.error('Error fetching employee payroll history:', err);
+        setError('Failed to load payroll history. Please try again later.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    const fetchSalaryHistory = async () => {
+      try {
+        setIsSalaryHistoryLoading(true);
+        const data = await getEmployeeSalaryHistory(employee.id);
+        setSalaryHistory(data);
+      } catch (err) {
+        console.error('Error fetching employee salary history:', err);
+        setSalaryHistoryError('Failed to load salary history. Please try again later.');
+      } finally {
+        setIsSalaryHistoryLoading(false);
+      }
+    };
+    
+    fetchPayrollHistory();
+    fetchSalaryHistory();
+  }, [employee.id]);
+  
+  // Handle payslip download
+  const handlePayslipDownload = async (payment) => {
+    try {
+      setDownloadingPayslip(true);
+      setDownloadMessage({ show: true, type: 'info', text: 'Generating payslip...' });
+      
+      await generatePayslipPDF(payment, employee);
+      
+      setDownloadMessage({ show: true, type: 'success', text: 'Payslip downloaded successfully!' });
+      
+      // Hide success message after 3 seconds
+      setTimeout(() => {
+        setDownloadMessage({ show: false, type: '', text: '' });
+      }, 3000);
+    } catch (err) {
+      console.error('Error generating payslip:', err);
+      let errorMessage = 'Failed to generate payslip. Please try again.';
+      
+      // More specific error messages based on the error
+      if (err.message && err.message.includes('missing required fields')) {
+        errorMessage = 'Payslip could not be generated due to missing payment data.';
+      } else if (err.message && err.message.includes('Missing required payment')) {
+        errorMessage = 'Employee payment details are incomplete.';
+      }
+      
+      setDownloadMessage({ show: true, type: 'error', text: errorMessage });
+      
+      // Hide error message after 5 seconds
+      setTimeout(() => {
+        setDownloadMessage({ show: false, type: '', text: '' });
+      }, 5000);
+    } finally {
+      setDownloadingPayslip(false);
+    }
+  };
+  
   return (
     <div className="space-y-6">
+      {/* Download notification message */}
+      {downloadMessage.show && (
+        <div className={`p-4 rounded-md ${
+          downloadMessage.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' :
+          downloadMessage.type === 'error' ? 'bg-red-50 text-red-800 border border-red-200' :
+          'bg-blue-50 text-blue-800 border border-blue-200'
+        }`}>
+          <div className="flex items-center">
+            {downloadMessage.type === 'success' && (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            )}
+            {downloadMessage.type === 'error' && (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9 9a1 1 0 000 2h2a1 1 0 000-2H9z" clipRule="evenodd" />
+                <path d="M10 6a1 1 0 011 1v3a1 1 0 11-2 0V7a1 1 0 011-1z" />
+              </svg>
+            )}
+            {downloadMessage.type === 'info' && (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" />
+              </svg>
+            )}
+            <span>{downloadMessage.text}</span>
+          </div>
+        </div>
+      )}
+    
       {/* Payroll Summary Card */}
       <div className="bg-white shadow-sm rounded-lg p-6">
         <h3 className="text-lg font-medium text-gray-800 mb-4">Payroll Summary</h3>
@@ -1762,58 +1878,87 @@ const PayrollTab = ({ employee }) => {
           <h3 className="text-lg font-medium text-gray-800">Payment History</h3>
         </div>
         
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pay Period</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gross Pay</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deductions</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Net Pay</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              <tr>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">April 1-30, 2023</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency(employee.salary / 12)}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency((employee.salary / 12) * 0.15)}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{formatCurrency((employee.salary / 12) * 0.85)}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Paid</span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <a href="#" className="text-blue-600 hover:text-blue-900 mr-4"><Download size={16} className="inline" /> Slip</a>
-                </td>
-              </tr>
-              <tr>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">March 1-31, 2023</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency(employee.salary / 12)}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency((employee.salary / 12) * 0.15)}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{formatCurrency((employee.salary / 12) * 0.85)}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Paid</span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <a href="#" className="text-blue-600 hover:text-blue-900 mr-4"><Download size={16} className="inline" /> Slip</a>
-                </td>
-              </tr>
-              <tr>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">February 1-28, 2023</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency(employee.salary / 12)}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency((employee.salary / 12) * 0.15)}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{formatCurrency((employee.salary / 12) * 0.85)}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Paid</span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <a href="#" className="text-blue-600 hover:text-blue-900 mr-4"><Download size={16} className="inline" /> Slip</a>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        {isLoading ? (
+          <div className="p-6 text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mb-2"></div>
+            <p className="text-gray-500">Loading payment history...</p>
+          </div>
+        ) : error ? (
+          <div className="p-6 text-center">
+            <div className="text-red-500 mb-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <p className="text-gray-700">{error}</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            {paymentHistory.length > 0 ? (
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pay Period</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gross Pay</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deductions</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Net Pay</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {paymentHistory.map((payment) => (
+                    <tr key={payment.id}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(payment.pay_period_start)} - {formatDate(payment.pay_period_end)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatCurrency(payment.gross_pay)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatCurrency(payment.deductions)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {formatCurrency(payment.net_pay)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          payment.status === 'Completed' ? 'bg-green-100 text-green-800' : 
+                          payment.status === 'Voided' ? 'bg-red-100 text-red-800' : 
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {payment.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button 
+                          onClick={() => handlePayslipDownload(payment)}
+                          disabled={downloadingPayslip}
+                          className={`text-blue-600 hover:text-blue-900 mr-4 flex items-center ${downloadingPayslip ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          {downloadingPayslip ? (
+                            <>
+                              <div className="animate-spin h-4 w-4 mr-2 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                              Generating...
+                            </>
+                          ) : (
+                            <>
+                              <Download size={16} className="mr-1" /> Payslip
+                            </>
+                          )}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="text-center py-6 text-gray-500">
+                No payment history found for this employee.
+              </div>
+            )}
+          </div>
+        )}
       </div>
       
       {/* Compensation History */}
@@ -1834,22 +1979,42 @@ const PayrollTab = ({ employee }) => {
             
             <div className="pt-2">
               <h4 className="text-sm font-medium text-gray-700 mb-3">Salary History</h4>
-              <div className="space-y-3">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">{formatCurrency(employee.salary * 0.9)}</div>
-                    <div className="text-xs text-gray-500">From {formatDate('2022-04-01')} to {formatDate('2023-03-31')}</div>
-                  </div>
-                  <div className="text-sm text-green-600">+10% increase</div>
+              {isSalaryHistoryLoading ? (
+                <div className="py-4 text-center">
+                  <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-green-500 mb-2"></div>
+                  <p className="text-gray-500 text-sm">Loading salary history...</p>
                 </div>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">{formatCurrency(employee.salary * 0.85)}</div>
-                    <div className="text-xs text-gray-500">From {formatDate('2021-04-01')} to {formatDate('2022-03-31')}</div>
+              ) : salaryHistoryError ? (
+                <div className="py-4 text-center">
+                  <div className="text-red-500 mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
                   </div>
-                  <div className="text-sm text-green-600">+5.9% increase</div>
+                  <p className="text-gray-700 text-sm">{salaryHistoryError}</p>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-3">
+                  {salaryHistory.length > 0 ? (
+                    salaryHistory.map((history) => (
+                      <div key={history.id} className="flex justify-between items-start">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{formatCurrency(history.salary_amount)}</div>
+                          <div className="text-xs text-gray-500">
+                            From {formatDate(history.effective_from)} to {history.effective_to ? formatDate(history.effective_to) : 'Present'}
+                          </div>
+                          {history.reason && <div className="text-xs text-gray-500 mt-1">Reason: {history.reason}</div>}
+                        </div>
+                        {history.percentage_change > 0 && (
+                          <div className="text-sm text-green-600">+{history.percentage_change}% increase</div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-sm text-gray-500 py-2">No salary history records found.</div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -11,6 +11,41 @@ export const formatMonth = (month) => {
   return months[monthIndex] || month;
 };
 
+// Function to get the last working day of a month (excluding weekends)
+export const getLastWorkingDayOfMonth = (year, month) => {
+  // Set date to the last day of the specified month
+  const date = new Date(year, month + 1, 0);
+  
+  // Keep going back until we find a weekday (not Saturday or Sunday)
+  while (date.getDay() === 0 || date.getDay() === 6) {
+    date.setDate(date.getDate() - 1);
+  }
+  
+  return date;
+};
+
+// Function to get the next payroll date
+export const getNextPayrollDate = () => {
+  const today = new Date();
+  const currentMonthLastWorkingDay = getLastWorkingDayOfMonth(today.getFullYear(), today.getMonth());
+  
+  // If today is after or equal to the last working day of the current month,
+  // then next payroll is the last working day of the next month
+  let nextPayrollDate;
+  if (today >= currentMonthLastWorkingDay) {
+    // Get last working day of next month
+    nextPayrollDate = getLastWorkingDayOfMonth(
+      today.getMonth() === 11 ? today.getFullYear() + 1 : today.getFullYear(), 
+      today.getMonth() === 11 ? 0 : today.getMonth() + 1
+    );
+  } else {
+    // Otherwise, the next payroll is the last working day of the current month
+    nextPayrollDate = currentMonthLastWorkingDay;
+  }
+  
+  return nextPayrollDate;
+};
+
 export const getCurrentMonth = () => {
   return (new Date().getMonth() + 1).toString();
 };
@@ -256,13 +291,73 @@ export const getPayrollHistory = async () => {
 
 export const getUpcomingPayroll = async () => {
   try {
+    // Check if data exists in the database first
     const { data, error } = await supabase
       .from('upcoming_payroll')
       .select('*')
       .order('date');
       
     if (error) throw error;
-    return data;
+    
+    // If data exists, use it
+    if (data && data.length > 0) {
+      return data;
+    }
+    
+    // If no data exists, calculate the next payroll date manually
+    // Get current date
+    const today = new Date();
+    
+    // Calculate the last working day of current month
+    const currentMonthLastWorkingDay = getLastWorkingDayOfMonth(today.getFullYear(), today.getMonth());
+    
+    // If today is after or equal to the last working day of the current month,
+    // then next payroll is the last working day of the next month
+    let nextPayrollDate;
+    if (today >= currentMonthLastWorkingDay) {
+      // Get last working day of next month
+      nextPayrollDate = getLastWorkingDayOfMonth(
+        today.getMonth() === 11 ? today.getFullYear() + 1 : today.getFullYear(), 
+        today.getMonth() === 11 ? 0 : today.getMonth() + 1
+      );
+    } else {
+      // Otherwise, the next payroll is the last working day of the current month
+      nextPayrollDate = currentMonthLastWorkingDay;
+    }
+    
+    // Calculate estimated payroll amount based on active employees
+    // Fetch all employees to calculate an estimate
+    const { data: employees, error: empError } = await supabase
+      .from('employees')
+      .select('salary, hourly_rate')
+      .eq('status', 'Active');
+      
+    if (empError) throw empError;
+    
+    let estimatedPayroll = 0;
+    const employeesCount = employees ? employees.length : 0;
+    
+    if (employees && employees.length > 0) {
+      estimatedPayroll = employees.reduce((sum, emp) => {
+        if (emp.salary) {
+          return sum + (emp.salary / 12); // Monthly salary
+        } else if (emp.hourly_rate) {
+          return sum + (emp.hourly_rate * 160); // Assuming 160 hours per month
+        }
+        return sum;
+      }, 0);
+    } else {
+      estimatedPayroll = 42000; // Default value
+    }
+    
+    return [{
+      id: 'next-payroll',
+      date: nextPayrollDate.toISOString().split('T')[0],
+      type: 'Monthly Salary',
+      amount: estimatedPayroll,
+      status: 'Pending',
+      employees_count: employeesCount
+    }];
   } catch (error) {
     console.error('Error fetching upcoming payroll:', error);
     throw error;
@@ -561,7 +656,33 @@ export const getFinancialDashboardData = async () => {
       payroll: {
         employees: payrollEmployees,
         paymentHistory: payrollHistory,
-        upcoming: upcomingPayroll
+        upcoming: upcomingPayroll,
+        // Calculate additional payroll metrics
+        employeeCount: payrollEmployees.length,
+        monthlyCost: payrollEmployees.reduce((sum, employee) => {
+          // Calculate monthly cost based on salary or hourly rate
+          if (employee.salary) {
+            return sum + (employee.salary / 12);
+          } else if (employee.hourlyRate) {
+            // Estimate monthly hours at 160 (40 hours per week * 4 weeks)
+            return sum + (employee.hourlyRate * 160);
+          }
+          return sum;
+        }, 0),
+        // Get the last payroll information
+        lastPayrollAmount: payrollHistory && payrollHistory.length > 0 ? 
+          payrollHistory[0].amount : 0,
+        lastPayrollDate: payrollHistory && payrollHistory.length > 0 ? 
+          payrollHistory[0].payment_date : null,
+        // Calculate YTD payroll
+        ytdCost: payrollHistory ? payrollHistory.reduce((sum, payment) => 
+          sum + (payment.amount || 0), 0) : 0,
+        ytdPayments: payrollHistory ? payrollHistory.length : 0,
+        // Get next payroll information
+        nextPayrollDate: upcomingPayroll && upcomingPayroll.length > 0 ? 
+          upcomingPayroll[0].date : null,
+        estimatedNextPayroll: upcomingPayroll && upcomingPayroll.length > 0 ? 
+          upcomingPayroll[0].amount : 0
       }
     };
   } catch (error) {
@@ -1516,5 +1637,54 @@ export const getCustomersWithRevenue = async (limit = 5) => {
   } catch (error) {
     console.error('Error fetching customers with revenue:', error);
     return [];
+  }
+};
+
+// Fetch employee salary history
+export const getEmployeeSalaryHistory = async (employeeId) => {
+  try {
+    // Get salary history from employee_payroll_items
+    const { data, error } = await supabase
+      .from('employee_payroll_items')
+      .select(`
+        id,
+        employee_id,
+        salary_amount,
+        gross_pay,
+        pay_period_start,
+        pay_period_end
+      `)
+      .eq('employee_id', employeeId)
+      .order('pay_period_start', { ascending: false });
+      
+    if (error) throw error;
+    
+    // Transform the data to match the expected format in the UI
+    const formattedData = data.map((item, index) => {
+      // Calculate percentage change if possible
+      let percentageChange = null;
+      if (index < data.length - 1) {
+        const currentAmount = item.salary_amount || item.gross_pay;
+        const previousAmount = data[index + 1].salary_amount || data[index + 1].gross_pay;
+        if (previousAmount && currentAmount > previousAmount) {
+          percentageChange = parseFloat(((currentAmount - previousAmount) / previousAmount * 100).toFixed(1));
+        }
+      }
+      
+      return {
+        id: item.id,
+        employee_id: item.employee_id,
+        salary_amount: item.salary_amount || item.gross_pay, // Use salary_amount if available, otherwise use gross_pay
+        effective_from: item.pay_period_start,
+        effective_to: item.pay_period_end,
+        reason: "Regular payment", // Default reason since this table doesn't store reasons
+        percentage_change: percentageChange
+      };
+    });
+    
+    return formattedData || [];
+  } catch (error) {
+    console.error('Error fetching employee salary history:', error);
+    throw error;
   }
 };
