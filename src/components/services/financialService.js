@@ -879,8 +879,9 @@ export const getFinancialDashboardData = async () => {
       upcomingPayrollResult.value : [];
     const payrollDistribution = payrollDistributionResult.status === 'fulfilled' ? 
       payrollDistributionResult.value : getDefaultPayrollDistribution();
-    const payrollTrends = payrollTrendsResult.status === 'fulfilled' ? 
-      payrollTrendsResult.value : getDefaultMonthlyPayrollTrends();
+    console.log('Payroll distribution result:', payrollDistributionResult);
+    console.log('Payroll distribution processed:', payrollDistribution);
+    const payrollTrends = payrollTrendsResult.status === 'fulfilled' ? payrollTrendsResult.value : [];
     // Try to fetch employees directly if the result is empty
     let employeesData = payrollEmployees;
     if (!employeesData || employeesData.length === 0) {
@@ -954,25 +955,49 @@ export const getFinancialDashboardData = async () => {
         trends: payrollTrends,
         // Calculate additional payroll metrics
         employeeCount: employeesData.length,
-        monthlyCost: employeesData.reduce((sum, employee) => {
-          // Calculate monthly cost based on salary or hourly rate
-          if (employee.salary) {
-            return sum + (employee.salary / 12);
-          } else if (employee.hourlyRate) {
-            // Estimate monthly hours at 160 (40 hours per week * 4 weeks)
-            return sum + (employee.hourlyRate * 160);
+        // Calculate monthly cost from actual payroll payments within the current month
+        monthlyCost: (() => {
+          // If there are no payroll history records, fall back to estimate from employee data
+          if (!payrollHistory || payrollHistory.length === 0) {
+            return employeesData.reduce((sum, employee) => {
+              // Calculate monthly cost based on salary or hourly rate
+              if (employee.salary) {
+                return sum + (employee.salary / 12);
+              } else if (employee.hourlyRate) {
+                // Estimate monthly hours at 160 (40 hours per week * 4 weeks)
+                return sum + (employee.hourlyRate * 160);
+              }
+              return sum;
+            }, 0);
           }
-          return sum;
-        }, 0),
+          
+          // Get current month and year
+          const now = new Date();
+          const currentMonth = now.getMonth();
+          const currentYear = now.getFullYear();
+          
+          // Calculate sum of payments made in the current month that are not voided
+          return payrollHistory
+            .filter(payment => {
+              const paymentDate = new Date(payment.payment_date || payment.date);
+              return paymentDate.getMonth() === currentMonth && 
+                     paymentDate.getFullYear() === currentYear && 
+                     payment.status !== 'Voided';
+            })
+            .reduce((sum, payment) => sum + (payment.amount || payment.total_amount || 0), 0);
+        })(),
         // Get the last payroll information
+        // Get the last non-voided payroll information
         lastPayrollAmount: payrollHistory && payrollHistory.length > 0 ? 
-          payrollHistory[0].amount : 0,
+          payrollHistory.find(p => p.status !== 'Voided')?.amount || 0 : 0,
         lastPayrollDate: payrollHistory && payrollHistory.length > 0 ? 
-          payrollHistory[0].payment_date : null,
-        // Calculate YTD payroll
-        ytdCost: payrollHistory ? payrollHistory.reduce((sum, payment) => 
-          sum + (payment.amount || 0), 0) : 0,
-        ytdPayments: payrollHistory ? payrollHistory.length : 0,
+          payrollHistory.find(p => p.status !== 'Voided')?.payment_date || null : null,
+        // Calculate YTD payroll (excluding voided payments)
+        ytdCost: payrollHistory ? payrollHistory
+          .filter(payment => payment.status !== 'Voided')
+          .reduce((sum, payment) => sum + (payment.amount || 0), 0) : 0,
+        ytdPayments: payrollHistory ? 
+          payrollHistory.filter(payment => payment.status !== 'Voided').length : 0,
         // Get next payroll information
         nextPayrollDate: upcomingPayroll && upcomingPayroll.length > 0 ? 
           upcomingPayroll[0].date : getLastWorkingDayOfMonth(new Date().getFullYear(), new Date().getMonth()).toISOString().split('T')[0],
@@ -1367,6 +1392,7 @@ export const getPayrollDetails = async (paymentId) => {
     }
     
     // Get the payment items - update the query to use job_title instead of position
+    // For voided payments, ensure we still show the items
     const { data: items, error: itemsError } = await supabase
       .from('employee_payroll_items')
       .select(`
@@ -1376,6 +1402,69 @@ export const getPayrollDetails = async (paymentId) => {
       .eq('payroll_payment_id', payment.id);
       
     if (itemsError) throw itemsError;
+    
+    console.log(`Found ${items.length} payment items for payment ID ${payment.id}`);
+    
+    if (items.length === 0 && payment.status === 'Voided') {
+      console.log('This is a voided payment with no items. Attempting to retrieve the original items');
+      
+      // For voided payments with no items, try to fetch the original items
+      // We need to find the items in a different way, perhaps by using the payment_id
+      const { data: archivedItems, error: archivedItemsError } = await supabase
+        .from('employee_payroll_items_archive')
+        .select(`
+          *,
+          employees:employee_id (id, name, job_title)
+        `)
+        .eq('payroll_payment_id', payment.id);
+      
+      if (!archivedItemsError && archivedItems && archivedItems.length > 0) {
+        console.log(`Found ${archivedItems.length} archived items for voided payment`);
+        
+        // Map the archived items
+        const formattedArchivedItems = archivedItems.map(item => ({
+          ...item,
+          employees: item.employees ? {
+            ...item.employees,
+            position: item.employees.job_title // Add position alias for job_title
+          } : null
+        }));
+        
+        return {
+          ...payment,
+          items: formattedArchivedItems
+        };
+      }
+      
+      // If archive table doesn't exist or has no records, check if we need to query differently
+      // Try to find payment items that might have been associated with this payment
+      // This is a fallback for systems where items don't get removed on void
+      const { data: alternativeItems, error: alternativeItemsError } = await supabase
+        .from('employee_payroll_items')
+        .select(`
+          *,
+          employees:employee_id (id, name, job_title)
+        `)
+        .eq('payroll_payment_id', payment.id);
+      
+      if (!alternativeItemsError && alternativeItems && alternativeItems.length > 0) {
+        console.log(`Found ${alternativeItems.length} alternative items for voided payment`);
+        
+        // Map the alternative items
+        const formattedAlternativeItems = alternativeItems.map(item => ({
+          ...item,
+          employees: item.employees ? {
+            ...item.employees,
+            position: item.employees.job_title // Add position alias for job_title
+          } : null
+        }));
+        
+        return {
+          ...payment,
+          items: formattedAlternativeItems
+        };
+      }
+    }
     
     // Map the items to use position as the property name to keep consistency with the UI
     const formattedItems = items.map(item => ({
@@ -1407,14 +1496,35 @@ export const voidPayrollPayment = async (paymentId) => {
     
     console.log(`Using query field: ${queryField} for paymentId: ${paymentId}`);
     
+    // Before updating, get the payment to make sure we have the correct ID
+    const { data: paymentData, error: fetchError } = await supabase
+      .from('payroll_payments')
+      .select('*')
+      .eq(queryField, paymentId)
+      .single();
+      
+    if (fetchError) {
+      console.error('Error fetching payment before voiding:', fetchError);
+      throw fetchError;
+    }
+    
+    // Get the payment ID and make sure it exists
+    const actualPaymentId = paymentData.id;
+    console.log('Actual payment ID for voiding:', actualPaymentId);
+    
+    // Update payment status to Voided
     const { data, error } = await supabase
       .from('payroll_payments')
       .update({ status: 'Voided' })
-      .eq(queryField, paymentId)
+      .eq('id', actualPaymentId)
       .select();
       
     if (error) throw error;
     
+    // We do NOT update or delete the employee_payroll_items entries
+    // so the payment details can still be viewed even when voided
+    
+    console.log('Successfully voided payment:', data[0]);
     return data[0];
   } catch (error) {
     console.error('Error voiding payroll payment:', error);
@@ -2046,6 +2156,8 @@ export const getPayrollCostDistribution = async () => {
         hourly_rate,
         hours_worked,
         gross_pay,
+        payroll_payment_id,
+        payroll_payments:payroll_payment_id (status),
         employees:employee_id (schedule)
       `)
       .gte('created_at', new Date(new Date().getFullYear(), 0, 1).toISOString()); // Get data for current year
@@ -2064,8 +2176,11 @@ export const getPayrollCostDistribution = async () => {
     if (payrollItems && payrollItems.length > 0) {
       let totalAmount = 0;
       
-      // Process each payroll item
+      // Process each payroll item, filtering out voided payments
       payrollItems.forEach(item => {
+        // Skip items from voided payments
+        if (item.payroll_payments && item.payroll_payments.status === 'Voided') return;
+        
         const grossPay = parseFloat(item.gross_pay) || 0;
         totalAmount += grossPay;
         
@@ -2161,9 +2276,10 @@ export const getMonthlyPayrollTrends = async () => {
     const startDate = new Date(currentYear, 0, 1).toISOString().split('T')[0];
     
     // Query payroll_payments to get monthly payment data
+    // Include status field so we can filter out voided payments
     const { data: payments, error } = await supabase
       .from('payroll_payments')
-      .select('payment_date, total_amount')
+      .select('payment_date, total_amount, status')
       .gte('payment_date', startDate)
       .order('payment_date');
       
@@ -2183,9 +2299,12 @@ export const getMonthlyPayrollTrends = async () => {
       };
     }
     
-    // Aggregate payments by month
+    // Aggregate payments by month, excluding voided payments
     if (payments && payments.length > 0) {
       payments.forEach(payment => {
+        // Skip voided payments
+        if (payment.status === 'Voided') return;
+        
         const paymentDate = new Date(payment.payment_date);
         const month = paymentDate.getMonth();
         const amount = parseFloat(payment.total_amount) || 0;
@@ -2199,26 +2318,10 @@ export const getMonthlyPayrollTrends = async () => {
     // Convert to array format for chart
     const result = Object.values(monthlyData);
     
-    // If we don't have data for the current year, return example data
-    if (result.every(month => month.amount === 0)) {
-      return getDefaultMonthlyPayrollTrends();
-    }
-    
     return result;
   } catch (error) {
     console.error('Error fetching monthly payroll trends:', error);
-    return getDefaultMonthlyPayrollTrends();
+    return [];
   }
 };
 
-// Helper function to get default monthly payroll trends data
-const getDefaultMonthlyPayrollTrends = () => {
-  return [
-    { month: 'Jan', amount: 42000 },
-    { month: 'Feb', amount: 42000 },
-    { month: 'Mar', amount: 44500 },
-    { month: 'Apr', amount: 44500 },
-    { month: 'May', amount: 48000 },
-    { month: 'Jun', amount: 48000 }
-  ];
-};

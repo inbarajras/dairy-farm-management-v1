@@ -72,7 +72,8 @@ const FinancesManagement = () => {
     revenue: { monthly: [], categories: [] },
     payroll: { 
       paymentHistory: [],
-      employees: [] // Make sure employees array is initialized
+      employees: [], // Make sure employees array is initialized
+      trends: [] // For monthly payroll trends
     }
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -295,12 +296,27 @@ const FinancesManagement = () => {
       console.log(`Fetching payroll details for payment: ${paymentId}`);
       const data = await getPayrollDetails(paymentId);
       console.log('Payroll details received:', data);
-      setPayrollDetails(data || null);
+      
+      // Ensure items array exists even if not returned from the API
+      const safeData = {
+        ...data,
+        items: data.items || []
+      };
+      
+      setPayrollDetails(safeData);
     } catch (err) {
       console.error('Error fetching payroll details:', err);
       setError(`Failed to load payroll details: ${err.message || 'Unknown error'}`);
-      // Set null to prevent reference errors
-      setPayrollDetails(null);
+      // Set empty data to prevent reference errors
+      setPayrollDetails({
+        id: paymentId,
+        payment_id: paymentId,
+        status: 'Unknown',
+        payment_date: new Date(),
+        payment_type: 'Unknown',
+        total_amount: 0,
+        items: []
+      });
     } finally {
       setIsLoadingPayrollDetails(false);
     }
@@ -3010,42 +3026,6 @@ const FinancesManagement = () => {
             
             {/* Payroll Analytics */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
-                <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-                <div className="p-6">
-                  <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">Payroll Cost Distribution</h2>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={[
-                            { name: 'Salaries', value: 75, color: '#4CAF50' },
-                            { name: 'Hourly Wages', value: 15, color: '#2196F3' },
-                            { name: 'Bonuses', value: 5, color: '#FFC107' },
-                            { name: 'Overtime', value: 5, color: '#F44336' }
-                          ]}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          outerRadius={80}
-                          fill="#8884d8"
-                          dataKey="value"
-                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                        >
-                          <Cell fill="#4CAF50" />
-                          <Cell fill="#2196F3" />
-                          <Cell fill="#FFC107" />
-                          <Cell fill="#F44336" />
-                        </Pie>
-                        <Tooltip 
-                          formatter={(value) => [`${value}%`, '']}
-                          contentStyle={{ background: '#fff', border: '1px solid #f1f1f1', borderRadius: '4px' }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
               
               <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
                 <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
@@ -3054,14 +3034,7 @@ const FinancesManagement = () => {
                   <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart
-                        data={[
-                          { month: 'Jan', amount: 42000 },
-                          { month: 'Feb', amount: 42000 },
-                          { month: 'Mar', amount: 44500 },
-                          { month: 'Apr', amount: 44500 },
-                          { month: 'May', amount: 48000 },
-                          { month: 'Jun', amount: 48000 }
-                        ]}
+                        data={financialData.payroll.trends || []}
                         margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -3188,249 +3161,6 @@ const FinancesManagement = () => {
               </div>
             </div>
           </div>
-            
-            {/* Financial Metrics Summary */}
-            <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
-              <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-              <div className="px-6 py-6">
-                <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">Key Financial Metrics</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="bg-white rounded-lg shadow-sm p-4 border border-gray-100">
-                    <h3 className="text-sm font-medium text-gray-700">Profit Margin</h3>
-                    <div className="mt-1 flex items-center">
-                      <span className="text-2xl font-bold text-gray-900">24.8%</span>
-                      <span className="ml-2 flex items-center text-sm text-green-600">
-                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                        </svg>
-                        2.3%
-                      </span>
-                    </div>
-                    <div className="mt-1 text-xs text-gray-500">vs previous period</div>
-                  </div>
-                  
-                  <div className="bg-white rounded-lg shadow-sm p-4 border border-gray-100">
-                    <h3 className="text-sm font-medium text-gray-700">Return on Investment</h3>
-                    <div className="mt-1 flex items-center">
-                      <span className="text-2xl font-bold text-gray-900">18.5%</span>
-                      <span className="ml-2 flex items-center text-sm text-green-600">
-                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                        </svg>
-                        1.4%
-                      </span>
-                    </div>
-                    <div className="mt-1 text-xs text-gray-500">Annual return</div>
-                  </div>
-                  
-                  <div className="bg-white rounded-lg shadow-sm p-4 border border-gray-100">
-                    <h3 className="text-sm font-medium text-gray-700">Operating Expense Ratio</h3>
-                    <div className="mt-1 flex items-center">
-                      <span className="text-2xl font-bold text-gray-900">32.6%</span>
-                      <span className="ml-2 flex items-center text-sm text-red-600">
-                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                        </svg>
-                        0.8%
-                      </span>
-                    </div>
-                    <div className="mt-1 text-xs text-gray-500">vs previous period</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            {/* Saved Reports */}
-            <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
-              <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Saved Reports</h2>
-              </div>
-              <div className="max-h-96 overflow-y-auto">
-                <ul className="divide-y divide-gray-200">
-                  <ReportItem 
-                    title="Monthly Income Statement - April 2023"
-                    type="Income Statement"
-                    date="2023-04-27"
-                    format="PDF"
-                    size="1.2 MB"
-                  />
-                  <ReportItem 
-                    title="Q1 2023 Balance Sheet"
-                    type="Balance Sheet"
-                    date="2023-04-15"
-                    format="Excel"
-                    size="780 KB"
-                  />
-                  <ReportItem 
-                    title="Q1 2023 Expense Report"
-                    type="Expense Report"
-                    date="2023-04-10"
-                    format="PDF"
-                    size="950 KB"
-                  />
-                  <ReportItem 
-                    title="Monthly Income Statement - March 2023"
-                    type="Income Statement"
-                    date="2023-03-31"
-                    format="PDF"
-                    size="1.1 MB"
-                  />
-                  <ReportItem 
-                    title="Tax Documentation - 2022"
-                    type="Tax Report"
-                    date="2023-03-15"
-                    format="PDF"
-                    size="3.4 MB"
-                  />
-                </ul>
-              </div>
-            </div>
-            
-            {/* Schedule Reports */}
-            <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
-              <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-              <div className="px-6 py-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Scheduled Reports</h2>
-                  <button className="text-sm text-green-600 hover:text-green-500 font-medium flex items-center">
-                    <Plus size={16} className="mr-1" />
-                    New Schedule
-                  </button>
-                </div>
-                
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
-                        <tr>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Report Name
-                          </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Frequency
-                          </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Recipients
-                          </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Next Delivery
-                          </th>
-                          <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        <tr className="hover:bg-gray-50 transition-colors duration-200">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          Monthly Financial Summary
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          Monthly
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          3 recipients
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          June 1, 2025
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button className="text-blue-600 hover:text-blue-900 mr-3">Edit</button>
-                          <button className="text-red-600 hover:text-red-900">Delete</button>
-                        </td>
-                      </tr>
-                      <tr className="hover:bg-gray-50 transition-colors duration-200">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          Weekly Cash Flow Report
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          Weekly
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          2 recipients
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          May 13, 2025
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button className="text-blue-600 hover:text-blue-900 mr-3">Edit</button>
-                          <button className="text-red-600 hover:text-red-900">Delete</button>
-                        </td>
-                      </tr>
-                      <tr className="hover:bg-gray-50 transition-colors duration-200">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          Quarterly Tax Summary
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          Quarterly
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          1 recipient
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          July 1, 2025
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button className="text-blue-600 hover:text-blue-900 mr-3">Edit</button>
-                          <button className="text-red-600 hover:text-red-900">Delete</button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-            </div>
-            
-            {/* Report Templates */}
-            <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
-              <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-              <div className="px-6 py-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Report Templates</h2>
-                  <button className="text-sm text-green-600 hover:text-green-500 font-medium flex items-center">
-                    <Plus size={16} className="mr-1" />
-                    Create Template
-                  </button>
-                </div>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all duration-200">
-                    <div className="flex justify-between items-center flex-wrap gap-2">
-                      <h3 className="text-sm font-medium text-gray-900">Monthly Financial Summary</h3>
-                      <div className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-md">Default</div>
-                    </div>
-                    <p className="mt-2 text-xs text-gray-500">A comprehensive monthly summary of income, expenses, and profit</p>
-                    <div className="mt-3 flex justify-end">
-                      <button className="text-sm text-green-600 hover:text-green-500">Use Template</button>
-                    </div>
-                  </div>
-                  
-                  <div className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all duration-200">
-                    <div className="flex justify-between items-center">
-                      <h3 className="text-sm font-medium text-gray-900">Cash Flow Analysis</h3>
-                      <div className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded-md">Custom</div>
-                    </div>
-                    <p className="mt-2 text-xs text-gray-500">Detailed analysis of cash inflows and outflows with projections</p>
-                    <div className="mt-3 flex justify-end">
-                      <button className="text-sm text-green-600 hover:text-green-500">Use Template</button>
-                    </div>
-                  </div>
-                  
-                  <div className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all duration-200">
-                    <div className="flex justify-between items-center">
-                      <h3 className="text-sm font-medium text-gray-900">Expense Breakdown</h3>
-                      <div className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded-md">Custom</div>
-                    </div>
-                    <p className="mt-2 text-xs text-gray-500">Category-wise breakdown of all expenses with comparative analysis</p>
-                    <div className="mt-3 flex justify-end">
-                      <button className="text-sm text-green-600 hover:text-green-500">Use Template</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         )}
       </div>
@@ -4000,31 +3730,41 @@ const PayrollDetailsModal = ({ payrollData, isLoading, onClose, onVoid }) => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {payrollData.items.map((item) => (
-                    <tr key={item.id} className="hover:bg-gray-50 transition-colors duration-200">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {item.employees.name}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {item.employees.position}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatDate(item.pay_period_start)} - {formatDate(item.pay_period_end)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {item.hours_worked > 0 ? item.hours_worked : 'N/A'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatCurrency(item.gross_pay)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatCurrency(item.deductions)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {formatCurrency(item.net_pay)}
+                  {payrollData.items && payrollData.items.length > 0 ? (
+                    payrollData.items.map((item) => (
+                      <tr key={item.id} className="hover:bg-gray-50 transition-colors duration-200">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {item.employees?.name || 'Unknown'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {item.employees?.position || 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatDate(item.pay_period_start)} - {formatDate(item.pay_period_end)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {item.hours_worked > 0 ? item.hours_worked : 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {formatCurrency(item.gross_pay)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {formatCurrency(item.deductions)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {formatCurrency(item.net_pay)}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="7" className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">
+                        {payrollData.status === 'Voided' ? 
+                          'No item details available for this voided payment.' : 
+                          'No payment items found.'}
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
