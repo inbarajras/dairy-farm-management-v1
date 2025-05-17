@@ -468,13 +468,13 @@ const handleDeleteEvent = async () => {
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-sm font-medium text-gray-500">Treated This Month</p>
-                      <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-amber-500 mt-1 mb-3">{healthData.healthStats.treatedLastMonth}</p>
+                      <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-yellow-600 to-yellow-500 mt-1 mb-3">{healthData.healthStats.treatedLastMonth}</p>
                     </div>
-                    <div className="p-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400">
+                    <div className="p-2.5 rounded-xl bg-gradient-to-r from-yellow-500 to-yellow-400">
                       <Thermometer size={20} className="text-white" />
                     </div>
                   </div>
-                  <div className="mt-2 text-xs text-amber-600 flex items-center">
+                  <div className="mt-2 text-xs text-yellow-600 flex items-center">
                     <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path 
                         strokeLinecap="round" 

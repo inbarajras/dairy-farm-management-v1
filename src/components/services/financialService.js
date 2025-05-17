@@ -244,30 +244,48 @@ export const getInvoiceAging = async () => {
 // Payroll Management - with employee relationship
 export const getPayrollEmployees = async () => {
   try {
+    console.log('Fetching payroll employees...');
     const { data, error } = await supabase
       .from('employees')
-      .select('id, name, job_title, salary, schedule, last_paid_date')
+      .select('id, name, job_title, salary, schedule')
       .eq('status', 'Active')
       .order('name');
       
-    if (error) throw error;
+    if (error) {
+      console.error('Supabase error fetching employees:', error);
+      throw error;
+    }
+    
+    if (!data || data.length === 0) {
+      console.log('No employees found in database');
+      return [];
+    }
+    
+    console.log('Raw employee data from DB:', data);
     
     // Format for payroll display
-    return data.map(employee => ({
-      id: employee.id,
-      name: employee.name,
-      position: employee.job_title,
-      salary: employee.salary,
-      hourlyRate: employee.schedule.toLowerCase().includes('part-time') ? 
-        parseFloat((employee.salary / 2080).toFixed(2)) : null,
-      payPeriod: employee.schedule.toLowerCase().includes('part-time') ? 
-        'Bi-weekly' : 'Monthly',
-      // Use actual last paid date from database or fallback to first of month
-      lastPaid: employee.last_paid_date || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
-    }));
+    const formattedEmployees = data.map(employee => {
+      // Handle potential nulls or missing values with safe defaults
+      const schedule = employee.schedule || '';
+      const salary = employee.salary || 0;
+      const isPartTime = schedule.toLowerCase().includes('part-time');
+      
+      return {
+        id: employee.id || `emp-${Math.random().toString(36).substring(2, 9)}`,
+        name: employee.name || 'Unnamed Employee',
+        position: employee.job_title || 'Staff',
+        salary: salary,
+        hourlyRate: isPartTime ? parseFloat((salary / 2080).toFixed(2)) : null,
+        payPeriod: isPartTime ? 'Bi-weekly' : 'Monthly'
+      };
+    });
+    
+    console.log('Formatted employee data:', formattedEmployees);
+    return formattedEmployees;
   } catch (error) {
     console.error('Error fetching payroll employees:', error);
-    throw error;
+    // Return empty array instead of throwing to prevent UI breaking
+    return [];
   }
 };
 
@@ -280,14 +298,19 @@ export const getPayrollHistory = async () => {
       .order('payment_date', { ascending: false });
       
     if (!paymentsError && paymentsData && paymentsData.length > 0) {
-      // Format from payroll_payments table to match expected structure
+    // Format from payroll_payments table to match expected structure
       return paymentsData.map(payment => ({
         id: payment.id,
-        payment_id: payment.payment_id,
-        amount: payment.total_amount,
-        payment_date: payment.payment_date,
-        payment_type: payment.payment_type,
-        status: payment.status
+        payment_id: payment.payment_id || payment.id,
+        amount: payment.total_amount || payment.amount,
+        total_amount: payment.total_amount || payment.amount,
+        date: payment.payment_date || payment.date,
+        payment_date: payment.payment_date || payment.date,
+        type: payment.payment_type || 'Regular',
+        payment_type: payment.payment_type || 'Regular',
+        status: payment.status || 'Paid',
+        employees: payment.employee_count || payment.employees || '-',
+        employee_count: payment.employee_count || payment.employees || '-'
       }));
     }
     
@@ -298,7 +321,21 @@ export const getPayrollHistory = async () => {
       .order('date', { ascending: false });
       
     if (error) throw error;
-    return data;
+    
+    // Normalize the data to have consistent property names
+    return data.map(payment => ({
+      id: payment.id,
+      payment_id: payment.payment_id || payment.id,
+      amount: payment.amount || 0,
+      total_amount: payment.total_amount || payment.amount || 0,
+      date: payment.date || payment.payment_date,
+      payment_date: payment.payment_date || payment.date,
+      type: payment.type || 'Regular',
+      payment_type: payment.payment_type || payment.type || 'Regular',
+      status: payment.status || 'Paid',
+      employees: payment.employees || payment.employee_count || '-',
+      employee_count: payment.employee_count || payment.employees || '-'
+    }));
   } catch (error) {
     console.error('Error fetching payroll history:', error);
     throw error;
@@ -830,11 +867,33 @@ export const getFinancialDashboardData = async () => {
     const recentExpenses = recentExpensesResult.status === 'fulfilled' ? recentExpensesResult.value : [];
     const recentInvoices = recentInvoicesResult.status === 'fulfilled' ? recentInvoicesResult.value : [];
     const invoiceAging = invoiceAgingResult.status === 'fulfilled' ? invoiceAgingResult.value : [];
-    const payrollEmployees = payrollEmployeesResult.status === 'fulfilled' ? payrollEmployeesResult.value : [];
-    const payrollHistory = payrollHistoryResult.status === 'fulfilled' ? payrollHistoryResult.value : [];
-    const upcomingPayroll = upcomingPayrollResult.status === 'fulfilled' ? upcomingPayrollResult.value : [];
-    const payrollDistribution = payrollDistributionResult.status === 'fulfilled' ? payrollDistributionResult.value : getDefaultPayrollDistribution();
-    const payrollTrends = payrollTrendsResult.status === 'fulfilled' ? payrollTrendsResult.value : getDefaultMonthlyPayrollTrends();
+    
+    // Ensure we have valid data with defaults
+    const payrollEmployees = payrollEmployeesResult.status === 'fulfilled' ? payrollEmployeesResult.value || [] : [];
+    console.log('Payroll employees result:', payrollEmployeesResult);
+    console.log('Payroll employees processed:', payrollEmployees);
+    
+    const payrollHistory = payrollHistoryResult.status === 'fulfilled' && payrollHistoryResult.value ? 
+      payrollHistoryResult.value : [];
+    const upcomingPayroll = upcomingPayrollResult.status === 'fulfilled' && upcomingPayrollResult.value ? 
+      upcomingPayrollResult.value : [];
+    const payrollDistribution = payrollDistributionResult.status === 'fulfilled' ? 
+      payrollDistributionResult.value : getDefaultPayrollDistribution();
+    const payrollTrends = payrollTrendsResult.status === 'fulfilled' ? 
+      payrollTrendsResult.value : getDefaultMonthlyPayrollTrends();
+    // Try to fetch employees directly if the result is empty
+    let employeesData = payrollEmployees;
+    if (!employeesData || employeesData.length === 0) {
+      console.log('No employees from parallel fetch, trying direct fetch');
+      try {
+        employeesData = await getPayrollEmployees();
+        console.log('Direct fetch employees result:', employeesData);
+      } catch (err) {
+        console.error('Direct employee fetch also failed:', err);
+        employeesData = []; // Ensure we have an empty array at minimum
+      }
+    }
+    
     const invoiceSummary = await fetchInvoiceSummaryData();
     
     console.log('Recent invoices data:', recentInvoices);
@@ -886,7 +945,7 @@ export const getFinancialDashboardData = async () => {
         recent: recentExpenses
       },
       payroll: {
-        employees: payrollEmployees,
+        employees: employeesData,
         paymentHistory: payrollHistory,
         upcoming: upcomingPayroll,
         // Distribution data for pie chart
@@ -894,8 +953,8 @@ export const getFinancialDashboardData = async () => {
         // Monthly trends data for line chart
         trends: payrollTrends,
         // Calculate additional payroll metrics
-        employeeCount: payrollEmployees.length,
-        monthlyCost: payrollEmployees.reduce((sum, employee) => {
+        employeeCount: employeesData.length,
+        monthlyCost: employeesData.reduce((sum, employee) => {
           // Calculate monthly cost based on salary or hourly rate
           if (employee.salary) {
             return sum + (employee.salary / 12);
@@ -1140,7 +1199,8 @@ export const getExpenseCategories = async () => {
 // Fetch employee payroll history
 export const getEmployeePayrollHistory = async (employeeId) => {
   try {
-    const { data, error } = await supabase
+    // First, try to get data from employee_payroll_items
+    const { data: payrollItems, error: payrollError } = await supabase
       .from('employee_payroll_items')
       .select(`
         id,
@@ -1156,23 +1216,52 @@ export const getEmployeePayrollHistory = async (employeeId) => {
       .eq('employee_id', employeeId)
       .order('created_at', { ascending: false });
       
-    if (error) throw error;
+    if (!payrollError && payrollItems && payrollItems.length > 0) {
+      console.log('Employee payroll items found:', payrollItems);
+      
+      // Format data for easier consumption
+      return payrollItems.map(item => ({
+        id: item.id,
+        payment_date: item.payroll_payments?.payment_date || null,
+        pay_period_start: item.pay_period_start,
+        pay_period_end: item.pay_period_end,
+        hours_worked: item.hours_worked || 0,
+        gross_pay: item.gross_pay || 0,
+        deductions: item.deductions || 0,
+        net_pay: item.net_pay || 0,
+        status: item.payroll_payments?.status || 'Paid'
+      }));
+    }
     
-    // Format data for easier consumption
-    return data.map(item => ({
-      id: item.id,
-      payment_date: item.payroll_payments.payment_date,
-      pay_period_start: item.pay_period_start,
-      pay_period_end: item.pay_period_end,
-      hours_worked: item.hours_worked,
-      gross_pay: item.gross_pay,
-      deductions: item.deductions,
-      net_pay: item.net_pay,
-      status: item.payroll_payments.status
-    }));
+    // Fallback: try employee_payments view if no items found
+    const { data: payments, error: paymentsError } = await supabase
+      .from('employee_payments')
+      .select('*')
+      .eq('employee_id', employeeId)
+      .order('payment_date', { ascending: false });
+      
+    if (paymentsError) throw paymentsError;
+    
+    if (payments && payments.length > 0) {
+      console.log('Employee payments found:', payments);
+      return payments.map(payment => ({
+        id: payment.id,
+        payment_date: payment.payment_date,
+        pay_period_start: payment.pay_period_start,
+        pay_period_end: payment.pay_period_end,
+        hours_worked: payment.hours_worked || 0,
+        gross_pay: payment.gross_pay || payment.amount || 0,
+        deductions: payment.deductions || 0,
+        net_pay: payment.net_pay || payment.amount || 0,
+        status: payment.status || 'Paid'
+      }));
+    }
+    
+    console.log('No payroll history found for employee:', employeeId);
+    return [];
   } catch (error) {
-    console.error('Error fetching employee payroll history:', error);
-    throw error;
+    console.error('Error getting employee payroll history:', error);
+    return [];
   }
 };
 
@@ -1184,103 +1273,23 @@ export const processPayroll = async (payrollData) => {
     const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
     const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
     const paymentId = `PAY-${dateStr}-${randomStr}`;
-    
+    console.log(payrollData);
     // 1. Record the payroll batch
     const { data: paymentData, error: paymentError } = await supabase
       .from('payroll_payments')
       .insert({
         payment_id: paymentId,
-        payment_date: payrollData.date,
-        payment_type: payrollData.type,
+        payment_date: payrollData.payment_date,
+        payment_type: payrollData.payment_type,
         total_amount: payrollData.total_amount,
         notes: payrollData.notes,
-        status: 'Completed',
-        next_payroll_date: payrollData.nextPayrollDate || null // Save the next payroll date
+        status: 'Completed'
       })
       .select();
     
     if (paymentError) throw paymentError;
     
     const payrollPaymentId = paymentData[0].id;
-    
-    // 2. Process individual employee payments
-    const employeePayments = payrollData.employee_payments.map(payment => ({
-      payroll_payment_id: payrollPaymentId,
-      employee_id: payment.employee_id,
-      salary_amount: payment.salary || null,
-      hourly_rate: payment.hourly_rate || null,
-      hours_worked: payment.hours_worked || 0,
-      gross_pay: payment.gross_pay,
-      deductions: payment.deductions,
-      net_pay: payment.net_pay,
-      pay_period_start: payment.pay_period_start,
-      pay_period_end: payment.pay_period_end
-    }));
-    
-    const { error: itemsError } = await supabase
-      .from('employee_payroll_items')
-      .insert(employeePayments);
-    
-    if (itemsError) throw itemsError;
-    
-    // 3. Update the last paid date for all employees in the employees table
-    const employeeIds = payrollData.employee_payments.map(p => p.employee_id);
-    
-    const { error: updateError } = await supabase
-      .from('employees')
-      .update({ last_paid_date: payrollData.date })
-      .in('id', employeeIds);
-    
-    if (updateError) throw updateError;
-    
-    // 4. If we have a next payroll date, update the upcoming_payroll table
-    if (payrollData.nextPayrollDate) {
-      // Check if an upcoming payroll record exists
-      const { data: existingRecord, error: checkError } = await supabase
-        .from('upcoming_payroll')
-        .select('id')
-        .maybeSingle();
-      
-      if (checkError) {
-        console.error('Error checking existing upcoming payroll:', checkError);
-      } else {
-        // Calculate estimated payroll amount based on employee records
-        const estimatedAmount = payrollData.employee_payments.reduce(
-          (sum, payment) => sum + payment.gross_pay, 0
-        );
-        
-        if (existingRecord) {
-          // Update existing record
-          const { error: updateError } = await supabase
-            .from('upcoming_payroll')
-            .update({
-              date: payrollData.nextPayrollDate,
-              type: payrollData.type,
-              estimated_amount: estimatedAmount,
-              employees: payrollData.employee_payments.length
-            })
-            .eq('id', existingRecord.id);
-            
-          if (updateError) {
-            console.error('Error updating upcoming payroll:', updateError);
-          }
-        } else {
-          // Create new record
-          const { error: insertError } = await supabase
-            .from('upcoming_payroll')
-            .insert({
-              date: payrollData.nextPayrollDate,
-              type: payrollData.type,
-              estimated_amount: estimatedAmount,
-              employees: payrollData.employee_payments.length
-            });
-            
-          if (insertError) {
-            console.error('Error inserting upcoming payroll:', insertError);
-          }
-        }
-      }
-    }
     
     return payrollPaymentId;
   } catch (error) {
@@ -1296,10 +1305,10 @@ export const updateEmployeePayrollInfo = async (employeeId, payrollInfo) => {
       .from('employees')
       .update({
         salary: payrollInfo.salary || null,
-        hourly_rate: payrollInfo.hourlyRate || null,
-        pay_schedule: payrollInfo.paySchedule,
+        // hourly_rate: payrollInfo.hourlyRate || null,
+        // pay_schedule: payrollInfo.paySchedule,
         bank_account: payrollInfo.bankAccount || null,
-        tax_withholding: payrollInfo.taxWithholding || 15
+        // tax_withholding: payrollInfo.taxWithholding || 15
       })
       .eq('id', employeeId)
       .select();
@@ -1316,14 +1325,46 @@ export const updateEmployeePayrollInfo = async (employeeId, payrollInfo) => {
 // Get payroll payment details
 export const getPayrollDetails = async (paymentId) => {
   try {
+    console.log('Fetching payroll details for ID:', paymentId);
+    
+    // Determine which field to query based on the ID format
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(paymentId);
+    const queryField = isUuid ? 'id' : 'payment_id';
+    
+    console.log(`Using query field: ${queryField} for paymentId: ${paymentId}`);
+    
     // Get the payment header
-    const { data: payment, error: paymentError } = await supabase
+    let { data: payment, error: paymentError } = await supabase
       .from('payroll_payments')
       .select('*')
-      .eq('id', paymentId)
+      .eq(queryField, paymentId)
       .single();
       
-    if (paymentError) throw paymentError;
+    if (paymentError) {
+      console.error('Error fetching payment:', paymentError);
+      
+      // If not found with one field, try the other field
+      if (paymentError.code === 'PGRST116' || paymentError.code === '22P02') {
+        const alternativeField = isUuid ? 'payment_id' : 'id';
+        console.log(`Trying alternative field: ${alternativeField}`);
+        
+        const { data: altPayment, error: altError } = await supabase
+          .from('payroll_payments')
+          .select('*')
+          .eq(alternativeField, paymentId)
+          .single();
+          
+        if (altError) throw altError;
+        
+        if (altPayment) {
+          payment = altPayment;
+        } else {
+          throw new Error('Payment not found with either ID or payment_id');
+        }
+      } else {
+        throw paymentError;
+      }
+    }
     
     // Get the payment items - update the query to use job_title instead of position
     const { data: items, error: itemsError } = await supabase
@@ -1332,7 +1373,7 @@ export const getPayrollDetails = async (paymentId) => {
         *,
         employees:employee_id (id, name, job_title)
       `)
-      .eq('payroll_payment_id', paymentId);
+      .eq('payroll_payment_id', payment.id);
       
     if (itemsError) throw itemsError;
     
@@ -1358,10 +1399,18 @@ export const getPayrollDetails = async (paymentId) => {
 // Void a payroll payment
 export const voidPayrollPayment = async (paymentId) => {
   try {
+    console.log('Voiding payroll payment with ID:', paymentId);
+    
+    // Determine which field to query based on the ID format
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(paymentId);
+    const queryField = isUuid ? 'id' : 'payment_id';
+    
+    console.log(`Using query field: ${queryField} for paymentId: ${paymentId}`);
+    
     const { data, error } = await supabase
       .from('payroll_payments')
       .update({ status: 'Voided' })
-      .eq('id', paymentId)
+      .eq(queryField, paymentId)
       .select();
       
     if (error) throw error;

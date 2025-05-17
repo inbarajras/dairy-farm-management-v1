@@ -70,7 +70,10 @@ const FinancesManagement = () => {
     },
     expenses: { recent: [], categories: [] },
     revenue: { monthly: [], categories: [] },
-    payroll: { paymentHistory: [] }
+    payroll: { 
+      paymentHistory: [],
+      employees: [] // Make sure employees array is initialized
+    }
   });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -147,6 +150,7 @@ const FinancesManagement = () => {
       { name: 'Overdue', value: 0, color: '#F44336' }
     ]
   });
+  const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
 
 
   const toggleViewPayrollHistoryModal = async (employee = null) => {
@@ -163,11 +167,19 @@ const FinancesManagement = () => {
   };
   
   const togglePayrollDetailsModal = async (paymentId = null) => {
-    if (paymentId) {
-      setSelectedPayrollPayment(paymentId);
-      await fetchPayrollDetails(paymentId);
+    try {
+      if (paymentId) {
+        setSelectedPayrollPayment(paymentId);
+        setError(null);
+        await fetchPayrollDetails(paymentId);
+      }
+      setIsPayrollDetailsModalOpen(!isPayrollDetailsModalOpen);
+    } catch (err) {
+      console.error('Error toggling payroll details modal:', err);
+      setError('Failed to load payroll payment details');
+      // Still show the modal, but it will display the error
+      setIsPayrollDetailsModalOpen(!isPayrollDetailsModalOpen);
     }
-    setIsPayrollDetailsModalOpen(!isPayrollDetailsModalOpen);
   };
 
   const toggleViewCustomerModal = (customer = null) => {
@@ -262,11 +274,14 @@ const FinancesManagement = () => {
   const fetchEmployeePayrollHistory = async (employeeId) => {
     try {
       setIsLoadingPayrollHistory(true);
+      setError(null);
       const data = await getEmployeePayrollHistory(employeeId);
-      setEmployeePayrollHistory(data);
+      setEmployeePayrollHistory(data || []);
     } catch (err) {
       console.error('Error fetching employee payroll history:', err);
-      // Display error notification
+      setError('Failed to load employee payroll history. Please try again.');
+      // Set empty array to prevent null reference errors
+      setEmployeePayrollHistory([]);
     } finally {
       setIsLoadingPayrollHistory(false);
     }
@@ -276,11 +291,16 @@ const FinancesManagement = () => {
   const fetchPayrollDetails = async (paymentId) => {
     try {
       setIsLoadingPayrollDetails(true);
+      setError(null);
+      console.log(`Fetching payroll details for payment: ${paymentId}`);
       const data = await getPayrollDetails(paymentId);
-      setPayrollDetails(data);
+      console.log('Payroll details received:', data);
+      setPayrollDetails(data || null);
     } catch (err) {
       console.error('Error fetching payroll details:', err);
-      // Display error notification
+      setError(`Failed to load payroll details: ${err.message || 'Unknown error'}`);
+      // Set null to prevent reference errors
+      setPayrollDetails(null);
     } finally {
       setIsLoadingPayrollDetails(false);
     }
@@ -315,6 +335,7 @@ const FinancesManagement = () => {
     
     try {
       setIsLoading(true);
+      console.log(`Voiding payment with ID: ${paymentId}`);
       await voidPayrollPayment(paymentId);
       
       // Refresh data
@@ -329,6 +350,7 @@ const FinancesManagement = () => {
       return true;
     } catch (err) {
       console.error('Error voiding payment:', err);
+      setError(`Failed to void payment: ${err.message || 'Unknown error'}`);
       return false;
     } finally {
       setIsLoading(false);
@@ -541,6 +563,8 @@ const FinancesManagement = () => {
       try {
         setIsLoading(true);
         const data = await getFinancialDashboardData();
+        console.log('Financial dashboard data received:', data);
+        console.log('Payroll employees data:', data.payroll.employees);
         setFinancialData(data);
         setError(null);
       } catch (err) {
@@ -562,6 +586,22 @@ const FinancesManagement = () => {
   const toggleEditExpenseModal = (expense = null) => {
     setSelectedExpense(expense);
     setIsEditExpenseModalOpen(!isEditExpenseModalOpen);
+  };
+  
+  // Function to fetch employee data
+  const fetchEmployees = async () => {
+    try {
+      setIsLoading(true);
+      const data = await getFinancialDashboardData();
+      console.log('Refreshed financial data with employees:', data.payroll.employees);
+      setFinancialData(data);
+      setError(null);
+    } catch (err) {
+      console.error('Error loading employee data:', err);
+      setError('Failed to load employee data. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   // Handle payroll processing
@@ -2758,84 +2798,98 @@ const FinancesManagement = () => {
             <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 mb-6">
               <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
               <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Employee Payroll Information</h2>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Search className="h-5 w-5 text-gray-400" />
+                <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">
+                  Employee Payroll Information
+                </h2>
+                <div className="flex items-center">
+                  {isLoadingEmployees && <LoadingSpinner size="sm" message="" />}
+                  <div className="relative ml-4">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Search className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      type="text"
+                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                      placeholder="Search employees..."
+                    />
                   </div>
-                  <input
-                    type="text"
-                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                    placeholder="Search employees..."
-                  />
                 </div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
-                    <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Employee
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Position
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Pay Rate
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Pay Period
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Last Paid
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {financialData.payroll.employees.map(employee => (
-                      <tr key={employee.id} className="hover:bg-gray-50 transition-colors duration-200">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="text-sm font-medium text-gray-900">{employee.name}</div>
-                            <div className="text-sm text-gray-500 ml-2">({employee.id})</div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {employee.position}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {employee.salary ? 
-                            formatCurrency(employee.salary) + '/year' : 
-                            formatCurrency(employee.hourlyRate) + '/hour'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {employee.payPeriod}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {formatDate(employee.lastPaid)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button 
-                            onClick={() => toggleViewPayrollHistoryModal(employee)}
-                            className="text-green-600 hover:text-green-900 mr-4"
-                          >
-                            View History
-                          </button>
-                          <button 
-                            onClick={() => toggleEditEmployeePayrollModal(employee)}
-                            className="text-blue-600 hover:text-blue-900"
-                          >
-                            Edit
-                          </button>
-                        </td>
+              
+              {isLoadingEmployees ? (
+                <div className="py-12">
+                  <LoadingSpinner message="Loading employee data..." />
+                </div>
+              ) : !financialData.payroll.employees || financialData.payroll.employees.length === 0 ? (
+                <EmptyEmployeeSection onRetry={fetchEmployees} />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
+                      <tr>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Employee
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Position
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Pay Rate
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Pay Period
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Last Paid
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {financialData.payroll.employees.map(employee => (
+                        <tr key={employee.id} className="hover:bg-gray-50 transition-colors duration-200">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="text-sm font-medium text-gray-900">{employee.name}</div>
+                              <div className="text-sm text-gray-500 ml-2">({employee.id})</div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {employee.position || employee.job_title || 'N/A'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {employee.salary ? 
+                              formatCurrency(employee.salary) + '/year' : 
+                              formatCurrency(employee.hourlyRate) + '/hour'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {employee.payPeriod}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {formatDate(employee.lastPaid)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <button 
+                              onClick={() => toggleViewPayrollHistoryModal(employee)}
+                              className="text-green-600 hover:text-green-900 mr-4"
+                            >
+                              View History
+                            </button>
+                            <button 
+                              onClick={() => toggleEditEmployeePayrollModal(employee)}
+                              className="text-blue-600 hover:text-blue-900"
+                            >
+                              Edit
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
             
             {/* Payment History */}
@@ -2876,46 +2930,54 @@ const FinancesManagement = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {financialData.payroll.paymentHistory.map(payment => (
-                      <tr key={payment.id} className="hover:bg-gray-50 transition-colors duration-200">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {payment.id}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {formatDate(payment.date)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {payment.type}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {payment.employees}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {formatCurrency(payment.amount)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColors[payment.status]}`}>
-                            {payment.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button 
-                            onClick={() => togglePayrollDetailsModal(payment.id)}
-                            className="text-blue-600 hover:text-blue-900 mr-4"
-                          >
-                            Details
-                          </button>
-                          {payment.status !== 'Voided' && (
+                    {financialData.payroll.paymentHistory && financialData.payroll.paymentHistory.length > 0 ? (
+                      financialData.payroll.paymentHistory.map(payment => (
+                        <tr key={payment.id || payment.payment_id || `payment-${Math.random()}`} className="hover:bg-gray-50 transition-colors duration-200">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {payment.payment_id || payment.id || "-"}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {formatDate(payment.payment_date || payment.date)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {payment.payment_type || payment.type || "Regular"}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {payment.employee_count || payment.employees || "-"}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {formatCurrency(payment.total_amount || payment.amount || 0)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColors[payment.status || "Paid"]}`}>
+                              {payment.status || "Paid"}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <button 
-                              onClick={() => handleVoidPayment(payment.id)}
-                              className="text-red-600 hover:text-red-900"
+                              onClick={() => togglePayrollDetailsModal(payment.payment_id || payment.id)}
+                              className="text-blue-600 hover:text-blue-900 mr-4"
                             >
-                              Void
+                              Details
                             </button>
-                          )}
+                            {(payment.status !== 'Voided' && payment.status !== 'void') && (
+                              <button 
+                                onClick={() => handleVoidPayment(payment.payment_id || payment.id)}
+                                className="text-red-600 hover:text-red-900"
+                              >
+                                Void
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="7" className="px-6 py-4 text-center text-sm text-gray-500">
+                          No payment history available
                         </td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -2923,7 +2985,11 @@ const FinancesManagement = () => {
               {/* Pagination */}
               <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center">
                 <div className="text-sm text-gray-500">
-                  Showing 1 to {financialData.payroll.paymentHistory.length} of {financialData.payroll.paymentHistory.length} payments
+                  {financialData.payroll.paymentHistory && financialData.payroll.paymentHistory.length > 0 ? (
+                    `Showing 1 to ${financialData.payroll.paymentHistory.length} of ${financialData.payroll.paymentHistory.length} payments`
+                  ) : (
+                    'No payments to display'
+                  )}
                 </div>
                 <div className="flex space-x-2">
                   <button 
@@ -3427,10 +3493,11 @@ const FinancesManagement = () => {
         />
       )}
 
-      {isPayrollDetailsModalOpen && payrollDetails && (
+      {isPayrollDetailsModalOpen && (
         <PayrollDetailsModal 
           payrollData={payrollDetails}
           isLoading={isLoadingPayrollDetails}
+          error={error}
           onClose={() => togglePayrollDetailsModal()}
           onVoid={handleVoidPayment}
         />
@@ -3490,7 +3557,7 @@ const ViewPayrollHistoryModal = ({ employee, payrollHistory, isLoading, onClose 
                 <div className="h-2 bg-gradient-to-r from-blue-500 to-blue-600"></div>
                 <div className="p-4">
                   <p className="text-sm font-medium text-gray-500">Position</p>
-                  <p className="text-md font-semibold text-gray-800">{employee.position}</p>
+                  <p className="text-md font-semibold text-gray-800">{employee.position || employee.job_title || 'N/A'}</p>
                 </div>
               </div>
               <div className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-all duration-300 border border-gray-100">
@@ -3505,7 +3572,7 @@ const ViewPayrollHistoryModal = ({ employee, payrollHistory, isLoading, onClose 
                 </div>
               </div>
               <div className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-all duration-300 border border-gray-100">
-                <div className="h-2 bg-gradient-to-r from-amber-500 to-amber-400"></div>
+                <div className="h-2 bg-gradient-to-r from-yellow-500 to-yellow-400"></div>
                 <div className="p-4">
                   <p className="text-sm font-medium text-gray-500">Last Payment</p>
                   <p className="text-md font-semibold text-gray-800">{formatDate(employee.lastPaid)}</p>
@@ -3556,21 +3623,20 @@ const ViewPayrollHistoryModal = ({ employee, payrollHistory, isLoading, onClose 
                           {payment.hours_worked > 0 ? payment.hours_worked : 'N/A'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {formatCurrency(payment.gross_pay)}
+                          {formatCurrency(payment.gross_pay || 0)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {formatCurrency(payment.deductions)}
+                          {formatCurrency(payment.deductions || 0)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {formatCurrency(payment.net_pay)}
+                          {formatCurrency(payment.net_pay || 0)}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            payment.status === 'Completed' ? 'bg-green-100 text-green-800' : 
-                            payment.status === 'Voided' ? 'bg-red-100 text-red-800' : 
+                        <td className="px-6 py-4 whitespace-nowrap">                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            payment.status === 'Completed' || payment.status === 'Paid' ? 'bg-green-100 text-green-800' : 
+                            payment.status === 'Voided' || payment.status === 'void' ? 'bg-red-100 text-red-800' :
                             'bg-gray-100 text-gray-800'
                           }`}>
-                            {payment.status}
+                            {payment.status || 'Paid'}
                           </span>
                         </td>
                       </tr>
@@ -3882,7 +3948,7 @@ const PayrollDetailsModal = ({ payrollData, isLoading, onClose, onVoid }) => {
                 </div>
               </div>
               <div className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-all duration-300 border border-gray-100">
-                <div className="h-2 bg-gradient-to-r from-amber-500 to-amber-400"></div>
+                <div className="h-2 bg-gradient-to-r from-yellow-500 to-yellow-400"></div>
                 <div className="p-4">
                   <p className="text-sm font-medium text-gray-500">Status</p>
                   <p className={`text-md font-semibold ${
@@ -4935,9 +5001,10 @@ const ProcessPayrollModal = ({ onClose, onSubmit, employees }) => {
         payment_date: formData.date,
         payment_type: formData.type,
         notes: formData.notes,
-        employees: formData.selectedEmployees
+        employees: formData.selectedEmployees,
+        total_amount: totalAmount
       };
-      
+
       const success = await onSubmit(payrollData);
       
       if (success) {
@@ -6059,6 +6126,27 @@ const EditCustomerModal = ({ customer, onClose, onSubmit }) => {
           </div>
         </form>
       </div>
+    </div>
+  );
+};
+
+// Component to handle empty employee data
+const EmptyEmployeeSection = ({ onRetry }) => {
+  return (
+    <div className="px-6 py-8 text-center">
+      <div className="mb-4">
+        <AlertCircle size={40} className="mx-auto text-amber-500" />
+      </div>
+      <h3 className="text-lg font-medium text-gray-800 mb-2">No Employee Data Available</h3>
+      <p className="text-sm text-gray-600 mb-6">
+        Could not retrieve employee payroll information from the database.
+      </p>
+      <button 
+        onClick={onRetry}
+        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+      >
+        Retry Loading
+      </button>
     </div>
   );
 };
