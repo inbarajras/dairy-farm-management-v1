@@ -13,12 +13,16 @@ import InventoryManagement from './components/InventoryManagement';
 import SettingsScreen from './components/Settings';
 import ResetPasswordPage from '../src/pages/ResetPasswordPage';
 import ToastContainer from './components/utils/ToastContainer';
+import QuickActionButton from './components/QuickActionButton';
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeModule, setActiveModule] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [currentPage, setCurrentPage] = useState(null);
+  
+  // Refs for modal actions
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
 
   // Check for URL path on initial load and when URL changes
   useEffect(() => {
@@ -58,6 +62,75 @@ const App = () => {
   // Toggle sidebar
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
+  };
+
+  // Quick action handlers
+  const handleAddCow = () => {
+    // Create a reference to the CowManagement component 
+    const cowManagementRef = React.createRef();
+    setActiveModule('cows');
+    
+    // Use setTimeout to ensure the component is mounted before trying to access its methods
+    setTimeout(() => {
+      // Directly open the add cow modal by accessing the component's toggleAddModal method
+      document.querySelector('button[data-action="add-cow"]')?.click();
+    }, 100);
+  };
+
+  const handleRecordMilk = () => {
+    setActiveModule('milk');
+    
+    // Use setTimeout to ensure the component is mounted
+    setTimeout(() => {
+      // Directly open the add milk record modal
+      document.querySelector('button[data-action="record-milk"]')?.click();
+    }, 100);
+  };
+
+  const handleRecordHealth = () => {
+    setActiveModule('health');
+    
+    // Use setTimeout to ensure the component is mounted
+    setTimeout(() => {
+      // Directly open the add health event modal
+      document.querySelector('button[data-action="add-health-event"]')?.click();
+    }, 100);
+  };
+
+  const handleAddInventory = () => {
+    setActiveModule('inventory');
+    
+    // Use setTimeout to ensure the component is mounted
+    setTimeout(() => {
+      // Directly open the add inventory item modal
+      document.querySelector('button[data-action="add-inventory"]')?.click();
+    }, 100);
+  };
+
+  const handleAddExpense = () => {
+    setActiveModule('finances');
+    
+    // Use setTimeout to ensure the component is mounted
+    setTimeout(() => {
+      // Directly open the add expense modal
+      document.querySelector('button[data-action="add-expense"]')?.click();
+    }, 100);
+  };
+
+  const handleAddEmployee = () => {
+    setActiveModule('employees');
+    
+    // Use setTimeout to ensure the component is mounted
+    setTimeout(() => {
+      // Directly open the add employee modal
+      document.querySelector('button[data-action="add-employee"]')?.click();
+    }, 100);
+  };
+
+  const handleGlobalSearch = () => {
+    setShowGlobalSearch(true);
+    // In a real implementation, this would show a global search modal
+    alert("Global search feature is coming soon!");
   };
 
   // Render module based on active state
@@ -207,6 +280,17 @@ const App = () => {
           {renderModule()}
         </div>
       </div>
+
+      {/* Quick Action Button */}
+      <QuickActionButton 
+        onAddCow={handleAddCow}
+        onRecordMilk={handleRecordMilk}
+        onRecordHealth={handleRecordHealth}
+        onAddInventory={handleAddInventory}
+        onAddExpense={handleAddExpense}
+        onAddEmployee={handleAddEmployee}
+        onSearch={handleGlobalSearch}
+      />
     </div>
   );
 };

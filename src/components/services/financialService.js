@@ -16,10 +16,15 @@ export const getLastWorkingDayOfMonth = (year, month) => {
   // Set date to the last day of the specified month
   const date = new Date(year, month + 1, 0);
   
+  console.log(`getLastWorkingDayOfMonth called for ${month + 1}/${year}`);
+  console.log(`Last day of month: ${date.toISOString().split('T')[0]}`);
+  
   // Keep going back until we find a weekday (not Saturday or Sunday)
   while (date.getDay() === 0 || date.getDay() === 6) {
     date.setDate(date.getDate() - 1);
   }
+  
+  console.log(`Last working day is: ${date.toISOString().split('T')[0]}`);
   
   return date;
 };
@@ -27,23 +32,8 @@ export const getLastWorkingDayOfMonth = (year, month) => {
 // Function to get the next payroll date
 export const getNextPayrollDate = () => {
   const today = new Date();
-  const currentMonthLastWorkingDay = getLastWorkingDayOfMonth(today.getFullYear(), today.getMonth());
-  
-  // If today is after or equal to the last working day of the current month,
-  // then next payroll is the last working day of the next month
-  let nextPayrollDate;
-  if (today >= currentMonthLastWorkingDay) {
-    // Get last working day of next month
-    nextPayrollDate = getLastWorkingDayOfMonth(
-      today.getMonth() === 11 ? today.getFullYear() + 1 : today.getFullYear(), 
-      today.getMonth() === 11 ? 0 : today.getMonth() + 1
-    );
-  } else {
-    // Otherwise, the next payroll is the last working day of the current month
-    nextPayrollDate = currentMonthLastWorkingDay;
-  }
-  
-  return nextPayrollDate;
+  // Always return the last working day of the current month
+  return getLastWorkingDayOfMonth(today.getFullYear(), today.getMonth());
 };
 
 export const getCurrentMonth = () => {
@@ -207,6 +197,7 @@ export const addExpense = async (expenseData) => {
 // Invoice Management
 export const getRecentInvoices = async (limit = 5) => {
   try {
+    console.log('Fetching recent invoices with limit:', limit);
     const { data, error } = await supabase
       .from('invoices')
       .select(`
@@ -218,10 +209,16 @@ export const getRecentInvoices = async (limit = 5) => {
       
     if (error) throw error;
     
+    console.log('Raw recent invoices data:', data);
+    
     // Format the data to match component expectations
     return data.map(invoice => ({
-      ...invoice,
-      customer: invoice.customers ? invoice.customers.name : 'Unknown'
+      id: invoice.id,
+      invoice_number: invoice.invoice_number,
+      customer: invoice.customers ? invoice.customers.name : 'Unknown',
+      amount: invoice.amount,
+      due_date: invoice.due_date,
+      status: invoice.status
     }));
   } catch (error) {
     console.error('Error fetching recent invoices:', error);
@@ -249,7 +246,7 @@ export const getPayrollEmployees = async () => {
   try {
     const { data, error } = await supabase
       .from('employees')
-      .select('id, name, job_title, salary, schedule')
+      .select('id, name, job_title, salary, schedule, last_paid_date')
       .eq('status', 'Active')
       .order('name');
       
@@ -265,8 +262,8 @@ export const getPayrollEmployees = async () => {
         parseFloat((employee.salary / 2080).toFixed(2)) : null,
       payPeriod: employee.schedule.toLowerCase().includes('part-time') ? 
         'Bi-weekly' : 'Monthly',
-      // Calculate estimated last paid date (1st of current month)
-      lastPaid: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
+      // Use actual last paid date from database or fallback to first of month
+      lastPaid: employee.last_paid_date || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
     }));
   } catch (error) {
     console.error('Error fetching payroll employees:', error);
@@ -276,6 +273,25 @@ export const getPayrollEmployees = async () => {
 
 export const getPayrollHistory = async () => {
   try {
+    // Check if we should use payroll_payments (preferred) or the payroll_history view
+    const { data: paymentsData, error: paymentsError } = await supabase
+      .from('payroll_payments')
+      .select('*')
+      .order('payment_date', { ascending: false });
+      
+    if (!paymentsError && paymentsData && paymentsData.length > 0) {
+      // Format from payroll_payments table to match expected structure
+      return paymentsData.map(payment => ({
+        id: payment.id,
+        payment_id: payment.payment_id,
+        amount: payment.total_amount,
+        payment_date: payment.payment_date,
+        payment_type: payment.payment_type,
+        status: payment.status
+      }));
+    }
+    
+    // Fallback to payroll_history view if needed
     const { data, error } = await supabase
       .from('payroll_history')
       .select('*')
@@ -304,26 +320,12 @@ export const getUpcomingPayroll = async () => {
       return data;
     }
     
-    // If no data exists, calculate the next payroll date manually
     // Get current date
     const today = new Date();
     
-    // Calculate the last working day of current month
+    // Always set next payroll date to last working day of current month
     const currentMonthLastWorkingDay = getLastWorkingDayOfMonth(today.getFullYear(), today.getMonth());
-    
-    // If today is after or equal to the last working day of the current month,
-    // then next payroll is the last working day of the next month
-    let nextPayrollDate;
-    if (today >= currentMonthLastWorkingDay) {
-      // Get last working day of next month
-      nextPayrollDate = getLastWorkingDayOfMonth(
-        today.getMonth() === 11 ? today.getFullYear() + 1 : today.getFullYear(), 
-        today.getMonth() === 11 ? 0 : today.getMonth() + 1
-      );
-    } else {
-      // Otherwise, the next payroll is the last working day of the current month
-      nextPayrollDate = currentMonthLastWorkingDay;
-    }
+    console.log("Next payroll date calculated as:", currentMonthLastWorkingDay.toISOString().split('T')[0]);
     
     // Calculate estimated payroll amount based on active employees
     // Fetch all employees to calculate an estimate
@@ -352,11 +354,10 @@ export const getUpcomingPayroll = async () => {
     
     return [{
       id: 'next-payroll',
-      date: nextPayrollDate.toISOString().split('T')[0],
+      date: currentMonthLastWorkingDay.toISOString().split('T')[0],
       type: 'Monthly Salary',
-      amount: estimatedPayroll,
-      status: 'Pending',
-      employees_count: employeesCount
+      estimated_amount: estimatedPayroll,
+      employees: employeesCount
     }];
   } catch (error) {
     console.error('Error fetching upcoming payroll:', error);
@@ -364,65 +365,276 @@ export const getUpcomingPayroll = async () => {
   }
 };
 
+// Function to update upcoming payroll information
+export const updateUpcomingPayroll = async (payrollData) => {
+  try {
+    // Check if any record exists
+    const { data: existingRecords, error: checkError } = await supabase
+      .from('upcoming_payroll')
+      .select('id')
+      .maybeSingle();
+      
+    if (checkError) throw checkError;
+    
+    if (existingRecords) {
+      // Update existing record
+      const { data, error } = await supabase
+        .from('upcoming_payroll')
+        .update({
+          date: payrollData.date,
+          type: payrollData.type,
+          estimated_amount: parseFloat(payrollData.amount || 0)
+        })
+        .eq('id', existingRecords.id)
+        .select();
+        
+      if (error) throw error;
+      return data[0];
+    } else {
+      // Create new record
+      const { data, error } = await supabase
+        .from('upcoming_payroll')
+        .insert({
+          date: payrollData.date,
+          type: payrollData.type,
+          estimated_amount: parseFloat(payrollData.amount || 0),
+          notes: payrollData.notes || null,
+          employees: payrollData.employees_count || 0
+        })
+        .select();
+        
+      if (error) throw error;
+      return data[0];
+    }
+  } catch (error) {
+    console.error('Error updating upcoming payroll:', error);
+    throw error;
+  }
+};
+
 export const getFinancialStats = async (month = getCurrentMonth(), year = getCurrentYear()) => {
   try {
-    const { data, error } = await supabase
-      .from('financial_stats')
-      .select('*')
-      .eq('month', month)
-      .eq('year', year)
-      .single();
-      
-    if (error) {
-      // If error is "No rows found", return default values
-      if (error.code === 'PGRST116') {
-        return {
-          month,
-          year,
-          net_profit: 0,
-          revenue: 0,
-          expenses: 0,
-          cashflow: 0,
-          previous_net_profit: 0,
-          previous_revenue: 0,
-          previous_expenses: 0,
-          previous_cashflow: 0
-        };
-      }
-      throw error;
-    }
-    return data;
+    console.log(`Calculating financial stats for ${month}/${year}`);
+    
+    // Calculate start and end dates for current month
+    const currentMonthStart = new Date(year, month - 1, 1);
+    const currentMonthEnd = new Date(year, month, 0);
+    
+    // Format dates as ISO strings for Supabase queries
+    const currentMonthStartStr = currentMonthStart.toISOString().split('T')[0];
+    const currentMonthEndStr = currentMonthEnd.toISOString().split('T')[0];
+    
+    // Calculate start and end dates for previous month
+    const prevMonth = month === 1 ? 12 : month - 1;
+    const prevYear = month === 1 ? year - 1 : year;
+    const prevMonthStart = new Date(prevYear, prevMonth - 1, 1);
+    const prevMonthEnd = new Date(prevYear, prevMonth, 0);
+    
+    // Format previous month dates as ISO strings
+    const prevMonthStartStr = prevMonthStart.toISOString().split('T')[0];
+    const prevMonthEndStr = prevMonthEnd.toISOString().split('T')[0];
+    
+    console.log(`Current month period: ${currentMonthStartStr} to ${currentMonthEndStr}`);
+    console.log(`Previous month period: ${prevMonthStartStr} to ${prevMonthEndStr}`);
+    
+    // Fetch current month's revenue (sum of paid invoices)
+    const { data: currentRevenueData, error: currentRevenueError } = await supabase
+      .from('invoices')
+      .select('amount')
+      .eq('status', 'Paid')
+      .gte('date', currentMonthStartStr)
+      .lte('date', currentMonthEndStr);
+    
+    if (currentRevenueError) throw currentRevenueError;
+    
+    // Fetch previous month's revenue
+    const { data: prevRevenueData, error: prevRevenueError } = await supabase
+      .from('invoices')
+      .select('amount')
+      .eq('status', 'Paid')
+      .gte('date', prevMonthStartStr)
+      .lte('date', prevMonthEndStr);
+    
+    if (prevRevenueError) throw prevRevenueError;
+    
+    // Fetch current month's expenses
+    const { data: currentExpensesData, error: currentExpensesError } = await supabase
+      .from('expenses')
+      .select('amount')
+      .gte('date', currentMonthStartStr)
+      .lte('date', currentMonthEndStr);
+    
+    if (currentExpensesError) throw currentExpensesError;
+    
+    // Fetch previous month's expenses
+    const { data: prevExpensesData, error: prevExpensesError } = await supabase
+      .from('expenses')
+      .select('amount')
+      .gte('date', prevMonthStartStr)
+      .lte('date', prevMonthEndStr);
+    
+    if (prevExpensesError) throw prevExpensesError;
+    
+    console.log(`Found ${currentRevenueData.length} revenue transactions for current month`);
+    console.log(`Found ${prevRevenueData.length} revenue transactions for previous month`);
+    console.log(`Found ${currentExpensesData.length} expense transactions for current month`);
+    console.log(`Found ${prevExpensesData.length} expense transactions for previous month`);
+    
+    // Calculate totals
+    const revenue = currentRevenueData.reduce((sum, item) => sum + parseFloat(item.amount), 0);
+    const previous_revenue = prevRevenueData.reduce((sum, item) => sum + parseFloat(item.amount), 0);
+    const expenses = currentExpensesData.reduce((sum, item) => sum + parseFloat(item.amount), 0);
+    const previous_expenses = prevExpensesData.reduce((sum, item) => sum + parseFloat(item.amount), 0);
+    
+    // Calculate net profit and cashflow
+    const net_profit = revenue - expenses;
+    const previous_net_profit = previous_revenue - previous_expenses;
+    
+    // For cashflow, we'll use the same calculation for now
+    // In a more complex system, cashflow might include non-expense outflows and non-revenue inflows
+    const cashflow = revenue - expenses;
+    const previous_cashflow = previous_revenue - previous_expenses;
+    
+    console.log('Calculated financial metrics:');
+    console.log(`Current revenue: ${revenue}, Previous: ${previous_revenue}`);
+    console.log(`Current expenses: ${expenses}, Previous: ${previous_expenses}`);
+    console.log(`Current net profit: ${net_profit}, Previous: ${previous_net_profit}`);
+    console.log(`Current cashflow: ${cashflow}, Previous: ${previous_cashflow}`);
+    
+    // Return the calculated financial stats
+    return {
+      month,
+      year,
+      net_profit,
+      revenue,
+      expenses,
+      cashflow,
+      previous_net_profit,
+      previous_revenue,
+      previous_expenses,
+      previous_cashflow
+    };
   } catch (error) {
-    console.error('Error fetching financial stats:', error);
-    throw error;
+    console.error('Error calculating financial stats:', error);
+    // Return default values in case of error
+    return {
+      month,
+      year,
+      net_profit: 0,
+      revenue: 0,
+      expenses: 0,
+      cashflow: 0,
+      previous_net_profit: 0,
+      previous_revenue: 0,
+      previous_expenses: 0,
+      previous_cashflow: 0
+    };
   }
 };
 
 // Get monthly revenue data with zero data handling
 export const getMonthlyRevenueData = async (limit = 12) => {
   try {
-    const { data, error } = await supabase
-      .from('revenue_data')
-      .select('*')
-      .order('year', { ascending: true })
-      .order('month', { ascending: true })
-      .limit(limit);
-      
-    if (error) throw error;
+    console.log("Fetching monthly revenue data with limit:", limit);
+    // Calculate date range for the last 12 months or specified limit
+    const now = new Date();
+    const startDate = new Date(now.getFullYear(), now.getMonth() - (limit - 1), 1);
+    const formattedStartDate = startDate.toISOString().split('T')[0];
     
-    // Return empty array if no data
-    if (!data || data.length === 0) {
-      return generateDefaultMonthlyData(limit);
+    // Fetch revenue data based on invoices
+    const { data: invoiceData, error: invoiceError } = await supabase
+      .from('invoices')
+      .select('date, amount, status')
+      .gte('date', formattedStartDate)
+      .order('date', { ascending: true });
+    
+    if (invoiceError) throw invoiceError;
+    
+    // Fetch expenses for the same period for profit calculation
+    const { data: expenseData, error: expenseError } = await supabase
+      .from('expenses')
+      .select('date, amount')
+      .gte('date', formattedStartDate)
+      .order('date', { ascending: true });
+    
+    if (expenseError) throw expenseError;
+    
+    // Group by month
+    const monthlyData = {};
+    
+    // Process invoice data (revenue)
+    invoiceData.forEach(invoice => {
+      // Only count paid or completed invoices as revenue
+      if (invoice.status !== 'Paid' && invoice.status !== 'Completed') return;
+      
+      const date = new Date(invoice.date);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = {
+          month: formatMonth(date.getMonth() + 1),
+          year: date.getFullYear(),
+          income: 0,
+          expenses: 0,
+          profit: 0
+        };
+      }
+      
+      monthlyData[monthKey].income += parseFloat(invoice.amount);
+    });
+    
+    // Process expense data
+    expenseData.forEach(expense => {
+      const date = new Date(expense.date);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = {
+          month: formatMonth(date.getMonth() + 1),
+          year: date.getFullYear(),
+          income: 0,
+          expenses: 0,
+          profit: 0
+        };
+      }
+      
+      monthlyData[monthKey].expenses += parseFloat(expense.amount);
+    });
+    
+    // Calculate profit for each month
+    Object.keys(monthlyData).forEach(key => {
+      monthlyData[key].profit = monthlyData[key].income - monthlyData[key].expenses;
+    });
+    
+    // Convert to array and sort by date
+    const resultArray = Object.values(monthlyData).sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      const monthToNum = month => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(month);
+      return monthToNum(a.month) - monthToNum(b.month);
+    });
+    
+    console.log("Monthly revenue data generated:", resultArray);
+    
+    // If we don't have enough data, fill in with default values
+    if (resultArray.length < limit) {
+      const defaultData = generateDefaultMonthlyData(limit).filter(defaultItem => {
+        // Only include default items for months not already in our result
+        return !resultArray.some(item => 
+          item.month === defaultItem.month && item.year === defaultItem.year);
+      });
+      
+      // Combine real data with default data and sort again
+      return [...resultArray, ...defaultData].sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        const monthToNum = month => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(month);
+        return monthToNum(a.month) - monthToNum(b.month);
+      }).slice(-limit); // Take only the latest months up to limit
     }
     
-    // Map numeric month values to month names for chart display
-    return data.map(item => ({
-      ...item,
-      month: formatMonth(item.month)
-    }));
+    return resultArray.slice(-limit); // Take only the latest months up to limit
   } catch (error) {
     console.error('Error fetching monthly revenue data:', error);
-    throw error;
+    return generateDefaultMonthlyData(limit);
   }
 };
 
@@ -587,7 +799,9 @@ export const getFinancialDashboardData = async () => {
       invoiceAgingResult,
       payrollEmployeesResult,
       payrollHistoryResult,
-      upcomingPayrollResult
+      upcomingPayrollResult,
+      payrollDistributionResult,
+      payrollTrendsResult
     ] = await Promise.allSettled([
       getFinancialStats(),
       getMonthlyRevenueData(),
@@ -600,11 +814,14 @@ export const getFinancialDashboardData = async () => {
       getInvoiceAging(),
       getPayrollEmployees(),
       getPayrollHistory(),
-      getUpcomingPayroll()
+      getUpcomingPayroll(),
+      getPayrollCostDistribution(),
+      getMonthlyPayrollTrends()
     ]);
     
     // Extract data safely, providing defaults where needed
     const stats = statsResult.status === 'fulfilled' ? statsResult.value : getDefaultStats();
+    console.log('Financial stats processed:', stats);
     const revenueMonthly = revenueMonthlyResult.status === 'fulfilled' ? revenueMonthlyResult.value : [];
     const revenueCategories = revenueCategoriesResult.status === 'fulfilled' ? revenueCategoriesResult.value : [];
     const customers = customersResult.status === 'fulfilled' ? customersResult.value : [];
@@ -616,7 +833,18 @@ export const getFinancialDashboardData = async () => {
     const payrollEmployees = payrollEmployeesResult.status === 'fulfilled' ? payrollEmployeesResult.value : [];
     const payrollHistory = payrollHistoryResult.status === 'fulfilled' ? payrollHistoryResult.value : [];
     const upcomingPayroll = upcomingPayrollResult.status === 'fulfilled' ? upcomingPayrollResult.value : [];
+    const payrollDistribution = payrollDistributionResult.status === 'fulfilled' ? payrollDistributionResult.value : getDefaultPayrollDistribution();
+    const payrollTrends = payrollTrendsResult.status === 'fulfilled' ? payrollTrendsResult.value : getDefaultMonthlyPayrollTrends();
     const invoiceSummary = await fetchInvoiceSummaryData();
+    
+    console.log('Recent invoices data:', recentInvoices);
+    console.log('Invoice summary data:', invoiceSummary);
+    
+    // Debug payroll dates
+    console.log('Payroll history:', payrollHistory);
+    console.log('Last payroll date:', payrollHistory && payrollHistory.length > 0 ? payrollHistory[0].payment_date : 'No history');
+    console.log('Upcoming payroll:', upcomingPayroll);
+    console.log('Next payroll date:', upcomingPayroll && upcomingPayroll.length > 0 ? upcomingPayroll[0].date : 'No upcoming');
     
     // Format data to match component structure
     return {
@@ -643,6 +871,10 @@ export const getFinancialDashboardData = async () => {
           change: calculatePercentageChange(stats.cashflow, stats.previous_cashflow)
         }
       },
+      invoices: {
+        recent: recentInvoices,
+        aging: invoiceAging
+      },
       revenue: {
         monthly: revenueMonthly,
         categories: revenueCategories,
@@ -657,6 +889,10 @@ export const getFinancialDashboardData = async () => {
         employees: payrollEmployees,
         paymentHistory: payrollHistory,
         upcoming: upcomingPayroll,
+        // Distribution data for pie chart
+        distribution: payrollDistribution,
+        // Monthly trends data for line chart
+        trends: payrollTrends,
         // Calculate additional payroll metrics
         employeeCount: payrollEmployees.length,
         monthlyCost: payrollEmployees.reduce((sum, employee) => {
@@ -680,9 +916,9 @@ export const getFinancialDashboardData = async () => {
         ytdPayments: payrollHistory ? payrollHistory.length : 0,
         // Get next payroll information
         nextPayrollDate: upcomingPayroll && upcomingPayroll.length > 0 ? 
-          upcomingPayroll[0].date : null,
+          upcomingPayroll[0].date : getLastWorkingDayOfMonth(new Date().getFullYear(), new Date().getMonth()).toISOString().split('T')[0],
         estimatedNextPayroll: upcomingPayroll && upcomingPayroll.length > 0 ? 
-          upcomingPayroll[0].amount : 0
+          upcomingPayroll[0].estimated_amount : 0
       }
     };
   } catch (error) {
@@ -707,11 +943,21 @@ const getDefaultStats = () => {
 
 // Helper function to calculate percentage change
 function calculatePercentageChange(current, previous) {
+  // Ensure inputs are numbers
+  current = parseFloat(current) || 0;
+  previous = parseFloat(previous) || 0;
+  
+  // Handle edge cases
   if (previous === 0) {
-    if (current > 0) return 100; // If previous was 0 and now we have something, that's a 100% increase
-    return 0; // If both are 0, there's no change
+    if (current === 0) {
+      return 0; // No change if both are zero
+    }
+    return current > 0 ? 100 : -100; // 100% increase or decrease from zero
   }
-  return parseFloat(((current - previous) / previous * 100).toFixed(1));
+  
+  // Normal calculation with rounding to 1 decimal place
+  const change = ((current - previous) / Math.abs(previous)) * 100;
+  return parseFloat(change.toFixed(1));
 }
 
 export const getExpensesByPage = async (page = 1, limit = 10, search = '', startDate = null, endDate = null) => {
@@ -948,7 +1194,8 @@ export const processPayroll = async (payrollData) => {
         payment_type: payrollData.type,
         total_amount: payrollData.total_amount,
         notes: payrollData.notes,
-        status: 'Completed'
+        status: 'Completed',
+        next_payroll_date: payrollData.nextPayrollDate || null // Save the next payroll date
       })
       .select();
     
@@ -985,6 +1232,55 @@ export const processPayroll = async (payrollData) => {
       .in('id', employeeIds);
     
     if (updateError) throw updateError;
+    
+    // 4. If we have a next payroll date, update the upcoming_payroll table
+    if (payrollData.nextPayrollDate) {
+      // Check if an upcoming payroll record exists
+      const { data: existingRecord, error: checkError } = await supabase
+        .from('upcoming_payroll')
+        .select('id')
+        .maybeSingle();
+      
+      if (checkError) {
+        console.error('Error checking existing upcoming payroll:', checkError);
+      } else {
+        // Calculate estimated payroll amount based on employee records
+        const estimatedAmount = payrollData.employee_payments.reduce(
+          (sum, payment) => sum + payment.gross_pay, 0
+        );
+        
+        if (existingRecord) {
+          // Update existing record
+          const { error: updateError } = await supabase
+            .from('upcoming_payroll')
+            .update({
+              date: payrollData.nextPayrollDate,
+              type: payrollData.type,
+              estimated_amount: estimatedAmount,
+              employees: payrollData.employee_payments.length
+            })
+            .eq('id', existingRecord.id);
+            
+          if (updateError) {
+            console.error('Error updating upcoming payroll:', updateError);
+          }
+        } else {
+          // Create new record
+          const { error: insertError } = await supabase
+            .from('upcoming_payroll')
+            .insert({
+              date: payrollData.nextPayrollDate,
+              type: payrollData.type,
+              estimated_amount: estimatedAmount,
+              employees: payrollData.employee_payments.length
+            });
+            
+          if (insertError) {
+            console.error('Error inserting upcoming payroll:', insertError);
+          }
+        }
+      }
+    }
     
     return payrollPaymentId;
   } catch (error) {
@@ -1687,4 +1983,193 @@ export const getEmployeeSalaryHistory = async (employeeId) => {
     console.error('Error fetching employee salary history:', error);
     throw error;
   }
+};
+
+// Get payroll cost distribution data for pie chart
+export const getPayrollCostDistribution = async () => {
+  try {
+    // First, get data from employee_payroll_items to analyze actual payments
+    const { data: payrollItems, error: itemsError } = await supabase
+      .from('employee_payroll_items')
+      .select(`
+        id,
+        salary_amount,
+        hourly_rate,
+        hours_worked,
+        gross_pay,
+        employees:employee_id (schedule)
+      `)
+      .gte('created_at', new Date(new Date().getFullYear(), 0, 1).toISOString()); // Get data for current year
+      
+    if (itemsError) throw itemsError;
+    
+    // Default structure for the distribution
+    let distribution = {
+      'Salaries': 0,
+      'Hourly Wages': 0,
+      'Bonuses': 0,
+      'Overtime': 0
+    };
+    
+    // If we have payroll data, calculate the actual distribution
+    if (payrollItems && payrollItems.length > 0) {
+      let totalAmount = 0;
+      
+      // Process each payroll item
+      payrollItems.forEach(item => {
+        const grossPay = parseFloat(item.gross_pay) || 0;
+        totalAmount += grossPay;
+        
+        // Determine the category based on employee payment type
+        if (item.salary_amount) {
+          distribution['Salaries'] += grossPay;
+        } else if (item.hourly_rate) {
+          // Check if there was overtime (assuming standard 40-hour work week for simplicity)
+          const standardHours = 80; // Bi-weekly standard
+          const hoursWorked = parseFloat(item.hours_worked) || 0;
+          
+          if (hoursWorked <= standardHours) {
+            distribution['Hourly Wages'] += grossPay;
+          } else {
+            // Split between regular hours and overtime
+            const regularPay = item.hourly_rate * standardHours;
+            const overtimePay = grossPay - regularPay;
+            
+            distribution['Hourly Wages'] += regularPay;
+            distribution['Overtime'] += overtimePay;
+          }
+        }
+      });
+      
+      // If we don't have bonus data in the provided structure, we can check for bonuses in a separate query
+      const { data: bonuses, error: bonusError } = await supabase
+        .from('employee_bonuses') // Assuming this table exists
+        .select('amount')
+        .gte('date', new Date(new Date().getFullYear(), 0, 1).toISOString());
+        
+      // If the table exists and we have data, add bonuses
+      if (!bonusError && bonuses && bonuses.length > 0) {
+        distribution['Bonuses'] = bonuses.reduce((sum, bonus) => sum + parseFloat(bonus.amount || 0), 0);
+        totalAmount += distribution['Bonuses'];
+      }
+      
+      // If no data found in some categories, use estimated percentages
+      if (totalAmount === 0) {
+        return getDefaultPayrollDistribution();
+      }
+      
+      // Convert to percentage
+      Object.keys(distribution).forEach(key => {
+        distribution[key] = Math.round((distribution[key] / totalAmount) * 100);
+      });
+    } else {
+      // If no payroll data, return default distribution
+      return getDefaultPayrollDistribution();
+    }
+    
+    // Format for pie chart
+    return Object.entries(distribution).map(([name, value]) => ({
+      name,
+      value,
+      color: getPayrollCategoryColor(name)
+    }));
+  } catch (error) {
+    console.error('Error fetching payroll cost distribution:', error);
+    // Return default distribution in case of error
+    return getDefaultPayrollDistribution();
+  }
+};
+
+// Helper function to get default payroll distribution
+const getDefaultPayrollDistribution = () => {
+  return [
+    { name: 'Salaries', value: 75, color: '#4CAF50' },
+    { name: 'Hourly Wages', value: 15, color: '#2196F3' },
+    { name: 'Bonuses', value: 5, color: '#FFC107' },
+    { name: 'Overtime', value: 5, color: '#F44336' }
+  ];
+};
+
+// Helper function to get color for payroll category
+const getPayrollCategoryColor = (category) => {
+  const colors = {
+    'Salaries': '#4CAF50',
+    'Hourly Wages': '#2196F3',
+    'Bonuses': '#FFC107',
+    'Overtime': '#F44336'
+  };
+  
+  return colors[category] || '#607D8B'; // Default color if category not found
+};
+
+// Get monthly payroll trends for line chart
+export const getMonthlyPayrollTrends = async () => {
+  try {
+    // Get the current year
+    const currentYear = new Date().getFullYear();
+    
+    // Calculate start date (Jan 1st of current year)
+    const startDate = new Date(currentYear, 0, 1).toISOString().split('T')[0];
+    
+    // Query payroll_payments to get monthly payment data
+    const { data: payments, error } = await supabase
+      .from('payroll_payments')
+      .select('payment_date, total_amount')
+      .gte('payment_date', startDate)
+      .order('payment_date');
+      
+    if (error) throw error;
+    
+    // Process into monthly buckets
+    const monthlyData = {};
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    // Initialize all months with zero values for the current year so far
+    const currentMonth = new Date().getMonth(); // 0-indexed: Jan = 0, Feb = 1, etc.
+    
+    for (let i = 0; i <= currentMonth; i++) {
+      monthlyData[i] = {
+        month: months[i],
+        amount: 0
+      };
+    }
+    
+    // Aggregate payments by month
+    if (payments && payments.length > 0) {
+      payments.forEach(payment => {
+        const paymentDate = new Date(payment.payment_date);
+        const month = paymentDate.getMonth();
+        const amount = parseFloat(payment.total_amount) || 0;
+        
+        if (monthlyData[month]) {
+          monthlyData[month].amount += amount;
+        }
+      });
+    }
+    
+    // Convert to array format for chart
+    const result = Object.values(monthlyData);
+    
+    // If we don't have data for the current year, return example data
+    if (result.every(month => month.amount === 0)) {
+      return getDefaultMonthlyPayrollTrends();
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('Error fetching monthly payroll trends:', error);
+    return getDefaultMonthlyPayrollTrends();
+  }
+};
+
+// Helper function to get default monthly payroll trends data
+const getDefaultMonthlyPayrollTrends = () => {
+  return [
+    { month: 'Jan', amount: 42000 },
+    { month: 'Feb', amount: 42000 },
+    { month: 'Mar', amount: 44500 },
+    { month: 'Apr', amount: 44500 },
+    { month: 'May', amount: 48000 },
+    { month: 'Jun', amount: 48000 }
+  ];
 };

@@ -2,10 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Download, DollarSign, CreditCard, Briefcase, Calendar, ChevronDown, TrendingUp, TrendingDown, PieChart, IndianRupee,X,AlertCircle } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, Pie } from 'recharts';
 import { getFinancialDashboardData, addCustomer, addExpense, addInvoice,
-   processPayroll,updateExpense, deleteExpense, getExpensesByPage,getEmployeePayrollHistory,
-   updateEmployeePayrollInfo,getPayrollDetails,voidPayrollPayment,getInvoices, getInvoiceById, 
-   updateInvoiceStatus, deleteInvoice,getInvoiceAgingSummary,generateInvoiceNumber,getCustomers,updateCustomer,
-  deleteCustomer,getRevenueData,getRevenueCategoriesData,getRevenueSummary,getCustomersWithRevenue } from './services/financialService';
+   processPayroll, updateExpense, deleteExpense, getExpensesByPage, getEmployeePayrollHistory,
+   updateEmployeePayrollInfo, getPayrollDetails, voidPayrollPayment, getInvoices, getInvoiceById, 
+   updateInvoiceStatus, deleteInvoice, getInvoiceAgingSummary, generateInvoiceNumber, getCustomers, updateCustomer,
+   deleteCustomer, getRevenueData, getRevenueCategoriesData, getRevenueSummary, getCustomersWithRevenue, 
+   updateUpcomingPayroll } from './services/financialService';
 import { supabase } from '../lib/supabase';
 import LoadingSpinner from './LoadingSpinner';
 
@@ -13,7 +14,7 @@ import LoadingSpinner from './LoadingSpinner';
 const statusColors = {
   'Active': 'bg-green-100 text-green-800',
   'Inactive': 'bg-gray-100 text-gray-800',
-  'On Leave': 'bg-amber-100 text-amber-800',
+  'On Leave': 'bg-black-100 text-black-800',
   'Terminated': 'bg-red-100 text-red-800',
   'Pending': 'bg-yellow-100 text-yellow-800',
   'Paid': 'bg-green-100 text-green-800',
@@ -58,7 +59,19 @@ const formatDate = (dateString) => {
 const FinancesManagement = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [dateRange, setDateRange] = useState('month');
-  const [financialData, setFinancialData] = useState(null);
+  const [financialData, setFinancialData] = useState({
+    invoices: { recent: [] },
+    financialStats: {
+      invoices: {},
+      netProfit: { current: 0, previous: 0, change: 0 },
+      revenue: { current: 0, previous: 0, change: 0 },
+      expenses: { current: 0, previous: 0, change: 0 },
+      cashflow: { current: 0, previous: 0, change: 0 }
+    },
+    expenses: { recent: [], categories: [] },
+    revenue: { monthly: [], categories: [] },
+    payroll: { paymentHistory: [] }
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isAddExpenseModalOpen, setIsAddExpenseModalOpen] = useState(false);
@@ -1270,6 +1283,7 @@ const FinancesManagement = () => {
               <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Expense Summary</h2>
               <button 
                 onClick={toggleAddExpenseModal}
+                data-action="add-expense"
                 className="flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm"
               >
                 <Plus size={20} className="mr-2" />
@@ -1892,7 +1906,7 @@ const FinancesManagement = () => {
                 </div>
               </div>
               
-              <div>
+              {/* <div>
                 <h3 className="text-sm font-medium text-gray-700 mb-3">Invoice Status</h3>
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
@@ -1918,7 +1932,7 @@ const FinancesManagement = () => {
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-              </div>
+              </div> */}
             </div>
           </div>
         </div>
@@ -2627,30 +2641,37 @@ const FinancesManagement = () => {
                   </button>
                 </div>
                 <div className="divide-y divide-gray-200">
-                  {financialData?.invoices?.recent ? financialData.invoices.recent.map(invoice => (
-                    <div key={invoice.id} className="px-6 py-4 hover:bg-gray-50 transition-colors duration-200">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="flex items-center">
-                            <Briefcase size={16} className="text-blue-500 mr-2" />
-                            <h3 className="text-sm font-medium text-gray-800">
-                              {invoice.id}
-                            </h3>
+                  {isLoading ? (
+                    <div className="px-6 py-8 text-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-500 mx-auto mb-4"></div>
+                      <p className="text-gray-600">Loading invoices...</p>
+                    </div>
+                  ) : financialData?.invoices?.recent && financialData.invoices.recent.length > 0 ? (
+                    financialData.invoices.recent.map(invoice => (
+                      <div key={invoice.id} className="px-6 py-4 hover:bg-gray-50 transition-colors duration-200">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="flex items-center">
+                              <Briefcase size={16} className="text-blue-500 mr-2" />
+                              <h3 className="text-sm font-medium text-gray-800">
+                                {invoice.invoice_number || invoice.id}
+                              </h3>
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1">
+                              {invoice.customer}
+                            </p>
                           </div>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {invoice.customer}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-lg font-semibold text-gray-800">{formatCurrency(invoice.amount)}</p>
-                          <p className="text-xs text-gray-500 mt-1">Due: {formatDate(invoice.dueDate)}</p>
-                          <span className={`mt-1 inline-flex px-2 py-1 text-xs rounded-full ${statusColors[invoice.status]}`}>
-                            {invoice.status}
-                          </span>
+                          <div className="text-right">
+                            <p className="text-lg font-semibold text-gray-800">{formatCurrency(invoice.amount)}</p>
+                            <p className="text-xs text-gray-500 mt-1">Due: {formatDate(invoice.due_date || invoice.dueDate)}</p>
+                            <span className={`mt-1 inline-flex px-2 py-1 text-xs rounded-full ${statusColors[invoice.status]}`}>
+                              {invoice.status}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )) : (
+                    ))
+                  ) : (
                     <div className="px-6 py-4 text-center text-gray-500">
                       No recent invoices to display
                     </div>
@@ -2719,16 +2740,16 @@ const FinancesManagement = () => {
                     </div>
                   </div>
                   
-                  <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
+                  {/* <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
                     <div className="h-2 bg-gradient-to-r from-purple-500 to-purple-600"></div>
                     <div className="p-5">
-                      <p className="text-sm font-medium text-gray-500">Next Payroll Due</p>
+                        <p className="text-sm font-medium text-gray-500">Next Payroll Due</p>
                       <p className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-purple-500 mt-1">
                         {formatDate(financialData?.payroll?.nextPayrollDate || new Date())}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">Estimated: {formatCurrency(financialData?.payroll?.estimatedNextPayroll || 0)}</p>
                     </div>
-                  </div>
+                  </div> */}
                 </div>
               </div>
             </div>

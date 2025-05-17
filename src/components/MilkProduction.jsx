@@ -556,6 +556,7 @@ useEffect(() => {
           <h1 className="text-xl sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Milk Production</h1>
           <button 
             onClick={toggleAddModal}
+            data-action="record-milk"
             className="flex items-center px-4 py-2 text-white rounded-lg bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 shadow-sm"
           >
             <Plus size={20} className="mr-2" />

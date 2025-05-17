@@ -1825,6 +1825,7 @@ const MedicationsTab = ({ medications }) => {
           
           <button 
             onClick={toggleAddModal}
+            data-action="add-health-event"
             className="flex items-center px-4 py-2 text-white rounded-lg bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 shadow-sm whitespace-nowrap"
           >
             <Plus size={16} className="mr-2 flex-shrink-0" />
