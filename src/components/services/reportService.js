@@ -724,22 +724,38 @@ async function createReportFile(reportType, format, data, reportId) {
     let fileData, fileSize, filePath;
     const filename = `${reportType}-report-${new Date().toISOString().split('T')[0]}-${reportId}`;
     
+    // Check if this is a financial report
+    const financialReports = ['incomeStatement', 'balanceSheet', 'cashFlow', 'expenseReport', 'revenueReport', 'taxReport'];
+    const isFinancialReport = financialReports.includes(reportType);
+    
     switch (format.toLowerCase()) {
       case 'pdf':
-        fileData = createPdfReport(reportType, data);
+        if (isFinancialReport) {
+          fileData = createFinancialPdfReport(reportType, data);
+        } else {
+          fileData = createPdfReport(reportType, data);
+        }
         fileSize = `${Math.round(fileData.length / 1024)} KB`;
         filePath = `/reports/${filename}.pdf`;
         break;
         
       case 'excel':
       case 'xlsx':
-        fileData = createExcelReport(reportType, data);
+        if (isFinancialReport) {
+          fileData = createFinancialExcelReport(reportType, data);
+        } else {
+          fileData = createExcelReport(reportType, data);
+        }
         fileSize = `${Math.round(fileData.length / 1024)} KB`;
         filePath = `/reports/${filename}.xlsx`;
         break;
         
       case 'csv':
-        fileData = createCsvReport(reportType, data);
+        if (isFinancialReport) {
+          fileData = createFinancialCsvReport(reportType, data);
+        } else {
+          fileData = createCsvReport(reportType, data);
+        }
         fileSize = `${Math.round(fileData.length / 1024)} KB`;
         filePath = `/reports/${filename}.csv`;
         break;
@@ -755,49 +771,1152 @@ async function createReportFile(reportType, format, data, reportId) {
   }
 }
 
-// Generate PDF report
+// Generate financial reports for the finance management section
+export const generateFinancialReport = async (reportType, format, dateRange, startDate = null, endDate = null) => {
+  try {
+    // Generate a unique ID for the report
+    const reportId = Math.random().toString(36).substring(2, 10);
+    
+    // Fetch data based on report type
+    let data;
+    switch (reportType) {
+      case 'incomeStatement':
+        data = await fetchIncomeStatementData(dateRange, startDate, endDate);
+        break;
+      case 'balanceSheet':
+        data = await fetchBalanceSheetData();
+        break;
+      case 'cashFlow':
+        data = await fetchCashFlowData(dateRange, startDate, endDate);
+        break;
+      case 'expenseReport':
+        data = await fetchExpenseReportData(dateRange, startDate, endDate);
+        break;
+      case 'revenueReport':
+        data = await fetchRevenueReportData(dateRange, startDate, endDate);
+        break;
+      case 'taxReport':
+        data = await fetchTaxReportData(dateRange, startDate, endDate);
+        break;
+      default:
+        throw new Error('Unsupported report type');
+    }
+    
+    // Create the actual report file
+    const reportFile = await createReportFile(reportType, format, data, reportId);
+    
+    // Save report metadata to database
+    const reportMetadata = {
+      title: `${formatReportTitle(reportType)} - ${formatDateRangeForTitle(dateRange, startDate, endDate)}`,
+      report_type: reportType,
+      date_range_start: startDate || getDateRangeStart(dateRange),
+      date_range_end: endDate || getDateRangeEnd(dateRange),
+      format: format.toLowerCase(),
+      file_size: reportFile.fileSize,
+      file_path: reportFile.filePath,
+      created_at: new Date().toISOString(),
+      status: 'completed'
+    };
+    
+    // Save report metadata to the database
+    const { data: savedReport, error } = await supabase
+      .from('reports')
+      .insert([reportMetadata])
+      .select();
+      
+    if (error) throw error;
+    
+    return {
+      ...savedReport[0],
+      fileData: reportFile.fileData
+    };
+  } catch (error) {
+    console.error('Error generating financial report:', error);
+    throw error;
+  }
+};
+
+// Helper function to format report title
+const formatReportTitle = (reportType) => {
+  switch (reportType) {
+    case 'incomeStatement': return 'Income Statement';
+    case 'balanceSheet': return 'Balance Sheet';
+    case 'cashFlow': return 'Cash Flow Statement';
+    case 'expenseReport': return 'Expense Report';
+    case 'revenueReport': return 'Revenue Report';
+    case 'taxReport': return 'Tax Report';
+    default: return reportType;
+  }
+};
+
+// Helper function to format date range for title
+const formatDateRangeForTitle = (dateRange, startDate, endDate) => {
+  if (startDate && endDate) {
+    return `${new Date(startDate).toLocaleDateString()} to ${new Date(endDate).toLocaleDateString()}`;
+  }
+  
+  switch (dateRange) {
+    case 'thisMonth': return `${new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}`;
+    case 'lastMonth': {
+      const date = new Date();
+      date.setMonth(date.getMonth() - 1);
+      return date.toLocaleString('default', { month: 'long', year: 'numeric' });
+    }
+    case 'thisQuarter': return `Q${Math.floor(new Date().getMonth() / 3) + 1} ${new Date().getFullYear()}`;
+    case 'lastQuarter': {
+      const date = new Date();
+      date.setMonth(date.getMonth() - 3);
+      return `Q${Math.floor(date.getMonth() / 3) + 1} ${date.getFullYear()}`;
+    }
+    case 'thisYear': return `${new Date().getFullYear()}`;
+    case 'lastYear': return `${new Date().getFullYear() - 1}`;
+    default: return dateRange;
+  }
+};
+
+// Helper function to get date range start
+const getDateRangeStart = (dateRange) => {
+  const now = new Date();
+  switch (dateRange) {
+    case 'thisMonth':
+      return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    case 'lastMonth':
+      return new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+    case 'thisQuarter':
+      const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3;
+      return new Date(now.getFullYear(), quarterStartMonth, 1).toISOString();
+    case 'lastQuarter':
+      const lastQuarterStartMonth = Math.floor((now.getMonth() - 3) / 3) * 3;
+      return new Date(now.getFullYear(), lastQuarterStartMonth, 1).toISOString();
+    case 'thisYear':
+      return new Date(now.getFullYear(), 0, 1).toISOString();
+    case 'lastYear':
+      return new Date(now.getFullYear() - 1, 0, 1).toISOString();
+    default:
+      return new Date(now.getFullYear(), now.getMonth() - 12, 1).toISOString();
+  }
+};
+
+// Helper function to get date range end
+const getDateRangeEnd = (dateRange) => {
+  const now = new Date();
+  switch (dateRange) {
+    case 'thisMonth':
+      return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString();
+    case 'lastMonth':
+      return new Date(now.getFullYear(), now.getMonth(), 0).toISOString();
+    case 'thisQuarter':
+      const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3;
+      return new Date(now.getFullYear(), quarterStartMonth + 3, 0).toISOString();
+    case 'lastQuarter':
+      const lastQuarterStartMonth = Math.floor((now.getMonth() - 3) / 3) * 3;
+      return new Date(now.getFullYear(), lastQuarterStartMonth + 3, 0).toISOString();
+    case 'thisYear':
+      return new Date(now.getFullYear(), 11, 31).toISOString();
+    case 'lastYear':
+      return new Date(now.getFullYear() - 1, 11, 31).toISOString();
+    default:
+      return new Date().toISOString();
+  }
+};
+
+// Data fetching functions for different report types
+async function fetchIncomeStatementData(dateRange, startDate, endDate) {
+  // Implement data fetching logic for income statement
+  // This would typically query your database for revenue and expense data
+  return { 
+    title: 'Income Statement',
+    period: formatDateRangeForTitle(dateRange, startDate, endDate),
+    revenue: {
+      milkSales: 15000,
+      livestockSales: 8500,
+      otherSales: 2500,
+      total: 26000
+    },
+    expenses: {
+      feedCosts: 7500,
+      labor: 6000,
+      veterinary: 2200,
+      utilities: 1800,
+      maintenance: 2500,
+      other: 1500,
+      total: 21500
+    },
+    netIncome: 4500
+  };
+}
+
+async function fetchBalanceSheetData() {
+  // Implement data fetching logic for balance sheet
+  return { 
+    title: 'Balance Sheet',
+    date: new Date().toISOString(),
+    assets: {
+      currentAssets: {
+        cash: 12500,
+        accountsReceivable: 7800,
+        inventory: 15600,
+        total: 35900
+      },
+      nonCurrentAssets: {
+        land: 150000,
+        buildings: 120000,
+        equipment: 85000,
+        livestock: 95000,
+        total: 450000
+      },
+      totalAssets: 485900
+    },
+    liabilities: {
+      currentLiabilities: {
+        accountsPayable: 8500,
+        shortTermDebt: 12000,
+        total: 20500
+      },
+      longTermLiabilities: {
+        loans: 85000,
+        mortgages: 120000,
+        total: 205000
+      },
+      totalLiabilities: 225500
+    },
+    equity: {
+      ownersEquity: 260400,
+      totalEquity: 260400
+    }
+  };
+}
+
+async function fetchCashFlowData(dateRange, startDate, endDate) {
+  // Implement data fetching logic for cash flow statement
+  return { 
+    title: 'Cash Flow Statement',
+    period: formatDateRangeForTitle(dateRange, startDate, endDate),
+    operatingActivities: {
+      receipts: 28500,
+      payments: -22000,
+      netCashFromOperations: 6500
+    },
+    investingActivities: {
+      assetSales: 5000,
+      assetPurchases: -12000,
+      netCashFromInvesting: -7000
+    },
+    financingActivities: {
+      loanProceeds: 15000,
+      loanPayments: -8500,
+      netCashFromFinancing: 6500
+    },
+    netCashFlow: 6000,
+    beginningCash: 6500,
+    endingCash: 12500
+  };
+}
+
+async function fetchExpenseReportData(dateRange, startDate, endDate) {
+  // Implement data fetching logic for expense report
+  return { 
+    title: 'Expense Report',
+    period: formatDateRangeForTitle(dateRange, startDate, endDate),
+    expenses: [
+      { category: 'Feed', amount: 7500, percentage: 35 },
+      { category: 'Labor', amount: 6000, percentage: 28 },
+      { category: 'Veterinary', amount: 2200, percentage: 10 },
+      { category: 'Utilities', amount: 1800, percentage: 8 },
+      { category: 'Maintenance', amount: 2500, percentage: 12 },
+      { category: 'Other', amount: 1500, percentage: 7 }
+    ],
+    summary: {
+      totalExpenses: 21500,
+      averageMonthly: 7167,
+      largestCategory: 'Feed',
+      largestAmount: 7500
+    }
+  };
+}
+
+async function fetchRevenueReportData(dateRange, startDate, endDate) {
+  // Implement data fetching logic for revenue report
+  return { 
+    title: 'Revenue Report',
+    period: formatDateRangeForTitle(dateRange, startDate, endDate),
+    revenue: [
+      { source: 'Milk Sales', amount: 15000, percentage: 58 },
+      { source: 'Livestock Sales', amount: 8500, percentage: 33 },
+      { source: 'Other Income', amount: 2500, percentage: 9 }
+    ],
+    summary: {
+      totalRevenue: 26000,
+      averageMonthly: 8667,
+      highestSource: 'Milk Sales',
+      highestAmount: 15000,
+      growthRate: 5.2
+    }
+  };
+}
+
+async function fetchTaxReportData(dateRange, startDate, endDate) {
+  // Implement data fetching logic for tax report
+  return { 
+    title: 'Tax Report',
+    period: formatDateRangeForTitle(dateRange, startDate, endDate),
+    taxableIncome: {
+      grossRevenue: 26000,
+      allowableDeductions: 21500,
+      netTaxableIncome: 4500
+    },
+    deductions: [
+      { category: 'Feed Expenses', amount: 7500 },
+      { category: 'Labor Costs', amount: 6000 },
+      { category: 'Veterinary Services', amount: 2200 },
+      { category: 'Utilities', amount: 1800 },
+      { category: 'Maintenance', amount: 2500 },
+      { category: 'Depreciation', amount: 1500 }
+    ],
+    taxLiability: {
+      federalTax: 675,
+      stateTax: 225,
+      totalTaxDue: 900,
+      effectiveTaxRate: 20
+    }
+  };
+}
+
+// Generate PDF report for financial data
+function createFinancialPdfReport(reportType, data) {
+  // Create PDF document
+  const doc = new jsPDF();
+  
+  // Add title and info
+  doc.setFontSize(20);
+  doc.text(data.title, 20, 20);
+  doc.setFontSize(12);
+  doc.text('Period: ' + data.period, 20, 30);
+  doc.text('Generated: ' + new Date().toLocaleDateString(), 20, 40);
+  doc.line(20, 45, 190, 45);
+  
+  // Add content based on report type
+  let y = 55; // Start position for content
+  
+  switch (reportType) {
+    case 'incomeStatement':
+      // Revenue section
+      doc.setFontSize(16);
+      doc.text('Revenue', 20, y);
+      y += 10;
+      
+      const revenueData = [
+        ['Milk Sales', `$${data.revenue.milkSales.toLocaleString()}`],
+        ['Livestock Sales', `$${data.revenue.livestockSales.toLocaleString()}`],
+        ['Other Sales', `$${data.revenue.otherSales.toLocaleString()}`],
+        ['Total Revenue', `$${data.revenue.total.toLocaleString()}`]
+      ];
+      
+      autoTable(doc, {
+        startY: y,
+        head: [['Source', 'Amount']],
+        body: revenueData,
+        theme: 'striped',
+        headStyles: { fillColor: [76, 175, 80] }
+      });
+      
+      y = doc.lastAutoTable.finalY + 15;
+      
+      // Expenses section
+      doc.setFontSize(16);
+      doc.text('Expenses', 20, y);
+      y += 10;
+      
+      const expensesData = [
+        ['Feed Costs', `$${data.expenses.feedCosts.toLocaleString()}`],
+        ['Labor', `$${data.expenses.labor.toLocaleString()}`],
+        ['Veterinary', `$${data.expenses.veterinary.toLocaleString()}`],
+        ['Utilities', `$${data.expenses.utilities.toLocaleString()}`],
+        ['Maintenance', `$${data.expenses.maintenance.toLocaleString()}`],
+        ['Other', `$${data.expenses.other.toLocaleString()}`],
+        ['Total Expenses', `$${data.expenses.total.toLocaleString()}`]
+      ];
+      
+      autoTable(doc, {
+        startY: y,
+        head: [['Category', 'Amount']],
+        body: expensesData,
+        theme: 'striped',
+        headStyles: { fillColor: [76, 175, 80] }
+      });
+      
+      y = doc.lastAutoTable.finalY + 15;
+      
+      // Net Income
+      doc.setFontSize(16);
+      doc.text('Net Income', 20, y);
+      y += 10;
+      
+      const netIncomeData = [
+        ['Net Income', `$${data.netIncome.toLocaleString()}`]
+      ];
+      
+      autoTable(doc, {
+        startY: y,
+        body: netIncomeData,
+        theme: 'grid',
+        styles: { fontSize: 12, fontStyle: 'bold' }
+      });
+      break;
+      
+    case 'balanceSheet':
+      // Assets section
+      doc.setFontSize(16);
+      doc.text('Assets', 20, y);
+      y += 10;
+      
+      const currentAssetsData = [
+        ['Current Assets', ''],
+        ['Cash', `$${data.assets.currentAssets.cash.toLocaleString()}`],
+        ['Accounts Receivable', `$${data.assets.currentAssets.accountsReceivable.toLocaleString()}`],
+        ['Inventory', `$${data.assets.currentAssets.inventory.toLocaleString()}`],
+        ['Total Current Assets', `$${data.assets.currentAssets.total.toLocaleString()}`]
+      ];
+      
+      const nonCurrentAssetsData = [
+        ['Non-Current Assets', ''],
+        ['Land', `$${data.assets.nonCurrentAssets.land.toLocaleString()}`],
+        ['Buildings', `$${data.assets.nonCurrentAssets.buildings.toLocaleString()}`],
+        ['Equipment', `$${data.assets.nonCurrentAssets.equipment.toLocaleString()}`],
+        ['Livestock', `$${data.assets.nonCurrentAssets.livestock.toLocaleString()}`],
+        ['Total Non-Current Assets', `$${data.assets.nonCurrentAssets.total.toLocaleString()}`]
+      ];
+      
+      const totalAssetsData = [
+        ['Total Assets', `$${data.assets.totalAssets.toLocaleString()}`]
+      ];
+      
+      autoTable(doc, {
+        startY: y,
+        body: currentAssetsData.concat(nonCurrentAssetsData).concat(totalAssetsData),
+        theme: 'striped'
+      });
+      
+      y = doc.lastAutoTable.finalY + 15;
+      
+      // Liabilities section
+      doc.setFontSize(16);
+      doc.text('Liabilities', 20, y);
+      y += 10;
+      
+      const liabilitiesData = [
+        ['Current Liabilities', ''],
+        ['Accounts Payable', `$${data.liabilities.currentLiabilities.accountsPayable.toLocaleString()}`],
+        ['Short Term Debt', `$${data.liabilities.currentLiabilities.shortTermDebt.toLocaleString()}`],
+        ['Total Current Liabilities', `$${data.liabilities.currentLiabilities.total.toLocaleString()}`],
+        ['Long Term Liabilities', ''],
+        ['Loans', `$${data.liabilities.longTermLiabilities.loans.toLocaleString()}`],
+        ['Mortgages', `$${data.liabilities.longTermLiabilities.mortgages.toLocaleString()}`],
+        ['Total Long Term Liabilities', `$${data.liabilities.longTermLiabilities.total.toLocaleString()}`],
+        ['Total Liabilities', `$${data.liabilities.totalLiabilities.toLocaleString()}`]
+      ];
+      
+      autoTable(doc, {
+        startY: y,
+        body: liabilitiesData,
+        theme: 'striped'
+      });
+      
+      y = doc.lastAutoTable.finalY + 15;
+      
+      // Equity section
+      doc.setFontSize(16);
+      doc.text('Equity', 20, y);
+      y += 10;
+      
+      const equityData = [
+        ['Owners Equity', `$${data.equity.ownersEquity.toLocaleString()}`],
+        ['Total Equity', `$${data.equity.totalEquity.toLocaleString()}`]
+      ];
+      
+      autoTable(doc, {
+        startY: y,
+        body: equityData,
+        theme: 'striped'
+      });
+      break;
+      
+    case 'expenseReport':
+      // Expense Summary
+      doc.setFontSize(16);
+      doc.text('Expense Summary', 20, y);
+      y += 10;
+      
+      const summaryData = [
+        ['Total Expenses', `$${data.summary.totalExpenses.toLocaleString()}`],
+        ['Average Monthly', `$${data.summary.averageMonthly.toLocaleString()}`],
+        ['Largest Category', data.summary.largestCategory],
+        ['Largest Amount', `$${data.summary.largestAmount.toLocaleString()}`]
+      ];
+      
+      autoTable(doc, {
+        startY: y,
+        body: summaryData,
+        theme: 'grid'
+      });
+      
+      y = doc.lastAutoTable.finalY + 15;
+      
+      // Expense Breakdown
+      doc.setFontSize(16);
+      doc.text('Expense Breakdown', 20, y);
+      y += 10;
+      
+      const expenseBreakdown = data.expenses.map(exp => [
+        exp.category,
+        `$${exp.amount.toLocaleString()}`,
+        `${exp.percentage}%`
+      ]);
+      
+      autoTable(doc, {
+        startY: y,
+        head: [['Category', 'Amount', 'Percentage']],
+        body: expenseBreakdown,
+        theme: 'striped',
+        headStyles: { fillColor: [76, 175, 80] }
+      });
+      break;
+      
+    case 'revenueReport':
+      // Revenue Summary
+      doc.setFontSize(16);
+      doc.text('Revenue Summary', 20, y);
+      y += 10;
+      
+      const revSummaryData = [
+        ['Total Revenue', `$${data.summary.totalRevenue.toLocaleString()}`],
+        ['Average Monthly', `$${data.summary.averageMonthly.toLocaleString()}`],
+        ['Highest Source', data.summary.highestSource],
+        ['Highest Amount', `$${data.summary.highestAmount.toLocaleString()}`],
+        ['Growth Rate', `${data.summary.growthRate}%`]
+      ];
+      
+      autoTable(doc, {
+        startY: y,
+        body: revSummaryData,
+        theme: 'grid'
+      });
+      
+      y = doc.lastAutoTable.finalY + 15;
+      
+      // Revenue Breakdown
+      doc.setFontSize(16);
+      doc.text('Revenue Breakdown', 20, y);
+      y += 10;
+      
+      const revenueBreakdown = data.revenue.map(rev => [
+        rev.source,
+        `$${rev.amount.toLocaleString()}`,
+        `${rev.percentage}%`
+      ]);
+      
+      autoTable(doc, {
+        startY: y,
+        head: [['Source', 'Amount', 'Percentage']],
+        body: revenueBreakdown,
+        theme: 'striped',
+        headStyles: { fillColor: [76, 175, 80] }
+      });
+      break;
+      
+    case 'taxReport':
+      // Taxable Income
+      doc.setFontSize(16);
+      doc.text('Taxable Income', 20, y);
+      y += 10;
+      
+      const taxableIncomeData = [
+        ['Gross Revenue', `$${data.taxableIncome.grossRevenue.toLocaleString()}`],
+        ['Allowable Deductions', `$${data.taxableIncome.allowableDeductions.toLocaleString()}`],
+        ['Net Taxable Income', `$${data.taxableIncome.netTaxableIncome.toLocaleString()}`]
+      ];
+      
+      autoTable(doc, {
+        startY: y,
+        body: taxableIncomeData,
+        theme: 'grid'
+      });
+      
+      y = doc.lastAutoTable.finalY + 15;
+      
+      // Deductions
+      doc.setFontSize(16);
+      doc.text('Deductions', 20, y);
+      y += 10;
+      
+      const deductionsData = data.deductions.map(ded => [
+        ded.category,
+        `$${ded.amount.toLocaleString()}`
+      ]);
+      
+      autoTable(doc, {
+        startY: y,
+        head: [['Category', 'Amount']],
+        body: deductionsData,
+        theme: 'striped',
+        headStyles: { fillColor: [76, 175, 80] }
+      });
+      
+      y = doc.lastAutoTable.finalY + 15;
+      
+      // Tax Liability
+      doc.setFontSize(16);
+      doc.text('Tax Liability', 20, y);
+      y += 10;
+      
+      const taxLiabilityData = [
+        ['Federal Tax', `$${data.taxLiability.federalTax.toLocaleString()}`],
+        ['State Tax', `$${data.taxLiability.stateTax.toLocaleString()}`],
+        ['Total Tax Due', `$${data.taxLiability.totalTaxDue.toLocaleString()}`],
+        ['Effective Tax Rate', `${data.taxLiability.effectiveTaxRate}%`]
+      ];
+      
+      autoTable(doc, {
+        startY: y,
+        body: taxLiabilityData,
+        theme: 'grid'
+      });
+      break;
+      
+    case 'cashFlow':
+      // Operating Activities
+      doc.setFontSize(16);
+      doc.text('Operating Activities', 20, y);
+      y += 10;
+      
+      const operatingData = [
+        ['Receipts', `$${data.operatingActivities.receipts.toLocaleString()}`],
+        ['Payments', `$${data.operatingActivities.payments.toLocaleString()}`],
+        ['Net Cash from Operations', `$${data.operatingActivities.netCashFromOperations.toLocaleString()}`]
+      ];
+      
+      autoTable(doc, {
+        startY: y,
+        body: operatingData,
+        theme: 'striped'
+      });
+      
+      y = doc.lastAutoTable.finalY + 15;
+      
+      // Investing Activities
+      doc.setFontSize(16);
+      doc.text('Investing Activities', 20, y);
+      y += 10;
+      
+      const investingData = [
+        ['Asset Sales', `$${data.investingActivities.assetSales.toLocaleString()}`],
+        ['Asset Purchases', `$${data.investingActivities.assetPurchases.toLocaleString()}`],
+        ['Net Cash from Investing', `$${data.investingActivities.netCashFromInvesting.toLocaleString()}`]
+      ];
+      
+      autoTable(doc, {
+        startY: y,
+        body: investingData,
+        theme: 'striped'
+      });
+      
+      y = doc.lastAutoTable.finalY + 15;
+      
+      // Financing Activities
+      doc.setFontSize(16);
+      doc.text('Financing Activities', 20, y);
+      y += 10;
+      
+      const financingData = [
+        ['Loan Proceeds', `$${data.financingActivities.loanProceeds.toLocaleString()}`],
+        ['Loan Payments', `$${data.financingActivities.loanPayments.toLocaleString()}`],
+        ['Net Cash from Financing', `$${data.financingActivities.netCashFromFinancing.toLocaleString()}`]
+      ];
+      
+      autoTable(doc, {
+        startY: y,
+        body: financingData,
+        theme: 'striped'
+      });
+      
+      y = doc.lastAutoTable.finalY + 15;
+      
+      // Cash Summary
+      doc.setFontSize(16);
+      doc.text('Cash Summary', 20, y);
+      y += 10;
+      
+      const cashSummaryData = [
+        ['Net Cash Flow', `$${data.netCashFlow.toLocaleString()}`],
+        ['Beginning Cash', `$${data.beginningCash.toLocaleString()}`],
+        ['Ending Cash', `$${data.endingCash.toLocaleString()}`]
+      ];
+      
+      autoTable(doc, {
+        startY: y,
+        body: cashSummaryData,
+        theme: 'grid',
+        styles: { fontStyle: 'bold' }
+      });
+      break;
+      
+    default:
+      doc.setFontSize(16);
+      doc.text('Report Data', 20, y);
+      y += 10;
+      doc.setFontSize(12);
+      doc.text(`This is a ${reportType} report.`, 20, y);
+  }
+  
+  // Footer
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.text(
+      `Page ${i} of ${pageCount} - Generated by Dairy Farm Management System`,
+      doc.internal.pageSize.getWidth() / 2,
+      doc.internal.pageSize.getHeight() - 10,
+      { align: 'center' }
+    );
+  }
+  
+  return doc.output('arraybuffer');
+}
+
+// Generate Excel report for financial data
+function createFinancialExcelReport(reportType, data) {
+  // Create workbook
+  const wb = XLSX.utils.book_new();
+  
+  switch (reportType) {
+    case 'incomeStatement': {
+      // Summary sheet
+      const summaryData = [
+        ['Income Statement'],
+        ['Period', data.period],
+        ['Generated', new Date().toLocaleDateString()],
+        [''],
+        ['Revenue'],
+        ['Milk Sales', data.revenue.milkSales],
+        ['Livestock Sales', data.revenue.livestockSales],
+        ['Other Sales', data.revenue.otherSales],
+        ['Total Revenue', data.revenue.total],
+        [''],
+        ['Expenses'],
+        ['Feed Costs', data.expenses.feedCosts],
+        ['Labor', data.expenses.labor],
+        ['Veterinary', data.expenses.veterinary],
+        ['Utilities', data.expenses.utilities],
+        ['Maintenance', data.expenses.maintenance],
+        ['Other', data.expenses.other],
+        ['Total Expenses', data.expenses.total],
+        [''],
+        ['Net Income', data.netIncome]
+      ];
+      
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, summarySheet, 'Income Statement');
+      break;
+    }
+    
+    case 'balanceSheet': {
+      // Assets sheet
+      const assetsData = [
+        ['Balance Sheet'],
+        ['Date', new Date(data.date).toLocaleDateString()],
+        ['Generated', new Date().toLocaleDateString()],
+        [''],
+        ['Assets'],
+        ['Current Assets'],
+        ['Cash', data.assets.currentAssets.cash],
+        ['Accounts Receivable', data.assets.currentAssets.accountsReceivable],
+        ['Inventory', data.assets.currentAssets.inventory],
+        ['Total Current Assets', data.assets.currentAssets.total],
+        [''],
+        ['Non-Current Assets'],
+        ['Land', data.assets.nonCurrentAssets.land],
+        ['Buildings', data.assets.nonCurrentAssets.buildings],
+        ['Equipment', data.assets.nonCurrentAssets.equipment],
+        ['Livestock', data.assets.nonCurrentAssets.livestock],
+        ['Total Non-Current Assets', data.assets.nonCurrentAssets.total],
+        [''],
+        ['Total Assets', data.assets.totalAssets]
+      ];
+      
+      const assetsSheet = XLSX.utils.aoa_to_sheet(assetsData);
+      XLSX.utils.book_append_sheet(wb, assetsSheet, 'Assets');
+      
+      // Liabilities & Equity sheet
+      const liabilitiesData = [
+        ['Liabilities and Equity'],
+        ['Date', new Date(data.date).toLocaleDateString()],
+        [''],
+        ['Current Liabilities'],
+        ['Accounts Payable', data.liabilities.currentLiabilities.accountsPayable],
+        ['Short Term Debt', data.liabilities.currentLiabilities.shortTermDebt],
+        ['Total Current Liabilities', data.liabilities.currentLiabilities.total],
+        [''],
+        ['Long Term Liabilities'],
+        ['Loans', data.liabilities.longTermLiabilities.loans],
+        ['Mortgages', data.liabilities.longTermLiabilities.mortgages],
+        ['Total Long Term Liabilities', data.liabilities.longTermLiabilities.total],
+        [''],
+        ['Total Liabilities', data.liabilities.totalLiabilities],
+        [''],
+        ['Equity'],
+        ['Owners Equity', data.equity.ownersEquity],
+        ['Total Equity', data.equity.totalEquity]
+      ];
+      
+      const liabilitiesSheet = XLSX.utils.aoa_to_sheet(liabilitiesData);
+      XLSX.utils.book_append_sheet(wb, liabilitiesSheet, 'Liabilities & Equity');
+      break;
+    }
+    
+    case 'cashFlow': {
+      // Cash Flow Statement sheet
+      const cashFlowData = [
+        ['Cash Flow Statement'],
+        ['Period', data.period],
+        ['Generated', new Date().toLocaleDateString()],
+        [''],
+        ['Operating Activities'],
+        ['Receipts', data.operatingActivities.receipts],
+        ['Payments', data.operatingActivities.payments],
+        ['Net Cash from Operations', data.operatingActivities.netCashFromOperations],
+        [''],
+        ['Investing Activities'],
+        ['Asset Sales', data.investingActivities.assetSales],
+        ['Asset Purchases', data.investingActivities.assetPurchases],
+        ['Net Cash from Investing', data.investingActivities.netCashFromInvesting],
+        [''],
+        ['Financing Activities'],
+        ['Loan Proceeds', data.financingActivities.loanProceeds],
+        ['Loan Payments', data.financingActivities.loanPayments],
+        ['Net Cash from Financing', data.financingActivities.netCashFromFinancing],
+        [''],
+        ['Cash Summary'],
+        ['Net Cash Flow', data.netCashFlow],
+        ['Beginning Cash', data.beginningCash],
+        ['Ending Cash', data.endingCash]
+      ];
+      
+      const cashFlowSheet = XLSX.utils.aoa_to_sheet(cashFlowData);
+      XLSX.utils.book_append_sheet(wb, cashFlowSheet, 'Cash Flow');
+      break;
+    }
+    
+    case 'expenseReport': {
+      // Summary sheet
+      const summaryData = [
+        ['Expense Report'],
+        ['Period', data.period],
+        ['Generated', new Date().toLocaleDateString()],
+        [''],
+        ['Summary'],
+        ['Total Expenses', data.summary.totalExpenses],
+        ['Average Monthly', data.summary.averageMonthly],
+        ['Largest Category', data.summary.largestCategory],
+        ['Largest Amount', data.summary.largestAmount]
+      ];
+      
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+      
+      // Expense Breakdown sheet
+      const expenseHeaders = [['Category', 'Amount', 'Percentage']];
+      const expenseRows = data.expenses.map(exp => [
+        exp.category,
+        exp.amount,
+        exp.percentage
+      ]);
+      
+      const expenseSheet = XLSX.utils.aoa_to_sheet([...expenseHeaders, ...expenseRows]);
+      XLSX.utils.book_append_sheet(wb, expenseSheet, 'Expense Breakdown');
+      break;
+    }
+    
+    case 'revenueReport': {
+      // Summary sheet
+      const summaryData = [
+        ['Revenue Report'],
+        ['Period', data.period],
+        ['Generated', new Date().toLocaleDateString()],
+        [''],
+        ['Summary'],
+        ['Total Revenue', data.summary.totalRevenue],
+        ['Average Monthly', data.summary.averageMonthly],
+        ['Highest Source', data.summary.highestSource],
+        ['Highest Amount', data.summary.highestAmount],
+        ['Growth Rate', data.summary.growthRate + '%']
+      ];
+      
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+      
+      // Revenue Breakdown sheet
+      const revenueHeaders = [['Source', 'Amount', 'Percentage']];
+      const revenueRows = data.revenue.map(rev => [
+        rev.source,
+        rev.amount,
+        rev.percentage
+      ]);
+      
+      const revenueSheet = XLSX.utils.aoa_to_sheet([...revenueHeaders, ...revenueRows]);
+      XLSX.utils.book_append_sheet(wb, revenueSheet, 'Revenue Breakdown');
+      break;
+    }
+    
+    case 'taxReport': {
+      // Tax Report sheet
+      const taxableIncomeData = [
+        ['Tax Report'],
+        ['Period', data.period],
+        ['Generated', new Date().toLocaleDateString()],
+        [''],
+        ['Taxable Income'],
+        ['Gross Revenue', data.taxableIncome.grossRevenue],
+        ['Allowable Deductions', data.taxableIncome.allowableDeductions],
+        ['Net Taxable Income', data.taxableIncome.netTaxableIncome],
+        [''],
+        ['Tax Liability'],
+        ['Federal Tax', data.taxLiability.federalTax],
+        ['State Tax', data.taxLiability.stateTax],
+        ['Total Tax Due', data.taxLiability.totalTaxDue],
+        ['Effective Tax Rate', data.taxLiability.effectiveTaxRate + '%']
+      ];
+      
+      const taxSheet = XLSX.utils.aoa_to_sheet(taxableIncomeData);
+      XLSX.utils.book_append_sheet(wb, taxSheet, 'Tax Summary');
+      
+      // Deductions sheet
+      const deductionHeaders = [['Category', 'Amount']];
+      const deductionRows = data.deductions.map(ded => [
+        ded.category,
+        ded.amount
+      ]);
+      
+      const deductionsSheet = XLSX.utils.aoa_to_sheet([...deductionHeaders, ...deductionRows]);
+      XLSX.utils.book_append_sheet(wb, deductionsSheet, 'Deductions');
+      break;
+    }
+    
+    default: {
+      const demoSheet = XLSX.utils.aoa_to_sheet([
+        [`${reportType} Report`],
+        ['Generated', new Date().toLocaleDateString()],
+        ['Sample Data', 'This would contain real data in a full implementation']
+      ]);
+      XLSX.utils.book_append_sheet(wb, demoSheet, 'Report Data');
+    }
+  }
+  
+  // Convert to binary
+  return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+}
+
+// Generate CSV report for financial data
+function createFinancialCsvReport(reportType, data) {
+  let csvContent = '';
+  
+  switch (reportType) {
+    case 'incomeStatement':
+      // Income Statement CSV
+      csvContent = 'Income Statement\n';
+      csvContent += `Period,${data.period}\n`;
+      csvContent += `Generated,${new Date().toISOString()}\n\n`;
+      
+      csvContent += 'Revenue\n';
+      csvContent += `Milk Sales,${data.revenue.milkSales}\n`;
+      csvContent += `Livestock Sales,${data.revenue.livestockSales}\n`;
+      csvContent += `Other Sales,${data.revenue.otherSales}\n`;
+      csvContent += `Total Revenue,${data.revenue.total}\n\n`;
+      
+      csvContent += 'Expenses\n';
+      csvContent += `Feed Costs,${data.expenses.feedCosts}\n`;
+      csvContent += `Labor,${data.expenses.labor}\n`;
+      csvContent += `Veterinary,${data.expenses.veterinary}\n`;
+      csvContent += `Utilities,${data.expenses.utilities}\n`;
+      csvContent += `Maintenance,${data.expenses.maintenance}\n`;
+      csvContent += `Other,${data.expenses.other}\n`;
+      csvContent += `Total Expenses,${data.expenses.total}\n\n`;
+      
+      csvContent += `Net Income,${data.netIncome}\n`;
+      break;
+      
+    case 'balanceSheet':
+      // Balance Sheet CSV
+      csvContent = 'Balance Sheet\n';
+      csvContent += `Date,${new Date(data.date).toLocaleDateString()}\n`;
+      csvContent += `Generated,${new Date().toISOString()}\n\n`;
+      
+      csvContent += 'Assets\n';
+      csvContent += 'Current Assets\n';
+      csvContent += `Cash,${data.assets.currentAssets.cash}\n`;
+      csvContent += `Accounts Receivable,${data.assets.currentAssets.accountsReceivable}\n`;
+      csvContent += `Inventory,${data.assets.currentAssets.inventory}\n`;
+      csvContent += `Total Current Assets,${data.assets.currentAssets.total}\n\n`;
+      
+      csvContent += 'Non-Current Assets\n';
+      csvContent += `Land,${data.assets.nonCurrentAssets.land}\n`;
+      csvContent += `Buildings,${data.assets.nonCurrentAssets.buildings}\n`;
+      csvContent += `Equipment,${data.assets.nonCurrentAssets.equipment}\n`;
+      csvContent += `Livestock,${data.assets.nonCurrentAssets.livestock}\n`;
+      csvContent += `Total Non-Current Assets,${data.assets.nonCurrentAssets.total}\n\n`;
+      
+      csvContent += `Total Assets,${data.assets.totalAssets}\n\n`;
+      
+      csvContent += 'Liabilities\n';
+      csvContent += 'Current Liabilities\n';
+      csvContent += `Accounts Payable,${data.liabilities.currentLiabilities.accountsPayable}\n`;
+      csvContent += `Short Term Debt,${data.liabilities.currentLiabilities.shortTermDebt}\n`;
+      csvContent += `Total Current Liabilities,${data.liabilities.currentLiabilities.total}\n\n`;
+      
+      csvContent += 'Long Term Liabilities\n';
+      csvContent += `Loans,${data.liabilities.longTermLiabilities.loans}\n`;
+      csvContent += `Mortgages,${data.liabilities.longTermLiabilities.mortgages}\n`;
+      csvContent += `Total Long Term Liabilities,${data.liabilities.longTermLiabilities.total}\n\n`;
+      
+      csvContent += `Total Liabilities,${data.liabilities.totalLiabilities}\n\n`;
+      
+      csvContent += 'Equity\n';
+      csvContent += `Owners Equity,${data.equity.ownersEquity}\n`;
+      csvContent += `Total Equity,${data.equity.totalEquity}\n`;
+      break;
+      
+    case 'cashFlow':
+      // Cash Flow Statement CSV
+      csvContent = 'Cash Flow Statement\n';
+      csvContent += `Period,${data.period}\n`;
+      csvContent += `Generated,${new Date().toISOString()}\n\n`;
+      
+      csvContent += 'Operating Activities\n';
+      csvContent += `Receipts,${data.operatingActivities.receipts}\n`;
+      csvContent += `Payments,${data.operatingActivities.payments}\n`;
+      csvContent += `Net Cash from Operations,${data.operatingActivities.netCashFromOperations}\n\n`;
+      
+      csvContent += 'Investing Activities\n';
+      csvContent += `Asset Sales,${data.investingActivities.assetSales}\n`;
+      csvContent += `Asset Purchases,${data.investingActivities.assetPurchases}\n`;
+      csvContent += `Net Cash from Investing,${data.investingActivities.netCashFromInvesting}\n\n`;
+      
+      csvContent += 'Financing Activities\n';
+      csvContent += `Loan Proceeds,${data.financingActivities.loanProceeds}\n`;
+      csvContent += `Loan Payments,${data.financingActivities.loanPayments}\n`;
+      csvContent += `Net Cash from Financing,${data.financingActivities.netCashFromFinancing}\n\n`;
+      
+      csvContent += 'Cash Summary\n';
+      csvContent += `Net Cash Flow,${data.netCashFlow}\n`;
+      csvContent += `Beginning Cash,${data.beginningCash}\n`;
+      csvContent += `Ending Cash,${data.endingCash}\n`;
+      break;
+      
+    case 'expenseReport':
+      // Expense Report CSV
+      csvContent = 'Expense Report\n';
+      csvContent += `Period,${data.period}\n`;
+      csvContent += `Generated,${new Date().toISOString()}\n\n`;
+      
+      csvContent += 'Summary\n';
+      csvContent += `Total Expenses,${data.summary.totalExpenses}\n`;
+      csvContent += `Average Monthly,${data.summary.averageMonthly}\n`;
+      csvContent += `Largest Category,${data.summary.largestCategory}\n`;
+      csvContent += `Largest Amount,${data.summary.largestAmount}\n\n`;
+      
+      csvContent += 'Expense Breakdown\n';
+      csvContent += 'Category,Amount,Percentage\n';
+      
+      data.expenses.forEach(exp => {
+        csvContent += `${exp.category},${exp.amount},${exp.percentage}\n`;
+      });
+      break;
+      
+    case 'revenueReport':
+      // Revenue Report CSV
+      csvContent = 'Revenue Report\n';
+      csvContent += `Period,${data.period}\n`;
+      csvContent += `Generated,${new Date().toISOString()}\n\n`;
+      
+      csvContent += 'Summary\n';
+      csvContent += `Total Revenue,${data.summary.totalRevenue}\n`;
+      csvContent += `Average Monthly,${data.summary.averageMonthly}\n`;
+      csvContent += `Highest Source,${data.summary.highestSource}\n`;
+      csvContent += `Highest Amount,${data.summary.highestAmount}\n`;
+      csvContent += `Growth Rate,${data.summary.growthRate}%\n\n`;
+      
+      csvContent += 'Revenue Breakdown\n';
+      csvContent += 'Source,Amount,Percentage\n';
+      
+      data.revenue.forEach(rev => {
+        csvContent += `${rev.source},${rev.amount},${rev.percentage}\n`;
+      });
+      break;
+      
+    case 'taxReport':
+      // Tax Report CSV
+      csvContent = 'Tax Report\n';
+      csvContent += `Period,${data.period}\n`;
+      csvContent += `Generated,${new Date().toISOString()}\n\n`;
+      
+      csvContent += 'Taxable Income\n';
+      csvContent += `Gross Revenue,${data.taxableIncome.grossRevenue}\n`;
+      csvContent += `Allowable Deductions,${data.taxableIncome.allowableDeductions}\n`;
+      csvContent += `Net Taxable Income,${data.taxableIncome.netTaxableIncome}\n\n`;
+      
+      csvContent += 'Tax Liability\n';
+      csvContent += `Federal Tax,${data.taxLiability.federalTax}\n`;
+      csvContent += `State Tax,${data.taxLiability.stateTax}\n`;
+      csvContent += `Total Tax Due,${data.taxLiability.totalTaxDue}\n`;
+      csvContent += `Effective Tax Rate,${data.taxLiability.effectiveTaxRate}%\n\n`;
+      
+      csvContent += 'Deductions\n';
+      csvContent += 'Category,Amount\n';
+      
+      data.deductions.forEach(ded => {
+        csvContent += `${ded.category},${ded.amount}\n`;
+      });
+      break;
+      
+    default:
+      csvContent = `${reportType} Report\nGenerated,${new Date().toISOString()}\n\nSample financial data for ${reportType}`;
+  }
+  
+  return new TextEncoder().encode(csvContent);
+}
+
+// Generate PDF report for milk production data
 function createPdfReport(reportType, data) {
   // Create PDF document
   const doc = new jsPDF();
   
-  // Format date strings consistently for display
-  const formatDateStr = (dateString) => {
-    if (!dateString) return 'N/A';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric' 
-    });
-  };
-  
-  // Add title and info
-  let title;
+  // Add title
+  let title = '';
   switch (reportType) {
     case 'daily':
       title = `Daily Production Report - ${formatDateStr(data.date)}`;
       break;
     case 'weekly':
-      title = `Weekly Summary Report - ${formatDateStr(data.weekStart)} to ${formatDateStr(data.weekEnd)}`;
+      title = `Weekly Production Report - ${formatDateStr(data.weekStart)} to ${formatDateStr(data.weekEnd)}`;
       break;
     case 'monthly':
-      title = `Monthly Analysis Report - ${formatDateStr(data.monthStart)} to ${formatDateStr(data.monthEnd)}`;
+      title = `Monthly Production Report - ${formatDateStr(data.monthStart)} to ${formatDateStr(data.monthEnd)}`;
       break;
     case 'quality':
-      title = `Quality Metrics Report - ${formatDateStr(data.periodStart)} to ${formatDateStr(data.periodEnd)}`;
+      title = `Milk Quality Report - ${formatDateStr(data.periodStart)} to ${formatDateStr(data.periodEnd)}`;
       break;
     case 'compliance':
       title = `Compliance Report - ${formatDateStr(data.periodStart)} to ${formatDateStr(data.periodEnd)}`;
       break;
     default:
-      title = `Milk Production Report`;
+      title = `Milk Production Report - ${new Date().toLocaleDateString()}`;
   }
   
-  // Set title
+  // Add title and info
   doc.setFontSize(20);
   doc.text(title, 20, 20);
   doc.setFontSize(12);
-  doc.text('Generated: ' + new Date().toLocaleDateString(), 20, 30);
+  doc.text(`Generated: ${new Date().toLocaleDateString()}`, 20, 30);
   doc.line(20, 35, 190, 35);
   
   // Add content based on report type
@@ -837,13 +1956,13 @@ function createPdfReport(reportType, data) {
       
       y = doc.lastAutoTable.finalY + 15;
       
-      // Collections - ENSURE DATE COLUMN IS INCLUDED
+      // Collections
       doc.setFontSize(16);
       doc.text('Collection Records', 20, y);
       y += 10;
       
       const collectionsData = data.collections.map(c => [
-        formatDateStr(c.date), // Include formatted date
+        formatDateStr(c.date),
         c.shift,
         c.cowName,
         c.cowTag,
@@ -853,7 +1972,7 @@ function createPdfReport(reportType, data) {
       
       autoTable(doc, {
         startY: y,
-        head: [['Date', 'Shift', 'Cow', 'Tag', 'Amount', 'Quality']],  // Include Date in header
+        head: [['Date', 'Shift', 'Cow', 'Tag', 'Amount', 'Quality']],
         body: collectionsData,
         theme: 'striped',
         headStyles: { fillColor: [76, 175, 80] }
@@ -861,7 +1980,7 @@ function createPdfReport(reportType, data) {
       break;
     
     case 'weekly':
-      // Add week summary content
+      // Weekly summary
       doc.setFontSize(16);
       doc.text('Weekly Summary', 20, y);
       y += 10;
@@ -876,7 +1995,7 @@ function createPdfReport(reportType, data) {
       y += 10;
       
       const dailyData = data.dailyBreakdown.map(day => [
-        formatDateStr(day.date), // Ensure date is formatted properly
+        formatDateStr(day.date),
         `${day.morningAmount.toFixed(1)} L`,
         `${day.eveningAmount.toFixed(1)} L`,
         `${day.totalAmount.toFixed(1)} L`
@@ -884,7 +2003,7 @@ function createPdfReport(reportType, data) {
       
       autoTable(doc, {
         startY: y,
-        head: [['Date', 'Morning', 'Evening', 'Total']],  // Include Date in header
+        head: [['Date', 'Morning', 'Evening', 'Total']],
         body: dailyData,
         theme: 'striped',
         headStyles: { fillColor: [76, 175, 80] }
@@ -913,7 +2032,7 @@ function createPdfReport(reportType, data) {
       break;
       
     case 'monthly':
-      // Monthly report implementation
+      // Monthly report
       doc.setFontSize(16);
       doc.text('Monthly Production Analysis', 20, y);
       y += 10;
@@ -967,7 +2086,7 @@ function createPdfReport(reportType, data) {
       break;
     
     case 'quality':
-      // Quality report implementation
+      // Quality report
       doc.setFontSize(16);
       doc.text('Milk Quality Analysis', 20, y);
       y += 10;
@@ -1024,7 +2143,7 @@ function createPdfReport(reportType, data) {
       break;
       
     case 'compliance':
-      // Compliance report implementation
+      // Compliance report
       doc.setFontSize(16);
       doc.text('Milk Quality Compliance Report', 20, y);
       y += 10;
@@ -1105,17 +2224,19 @@ function createPdfReport(reportType, data) {
   return doc.output('arraybuffer');
 }
 
-// Generate Excel report
+// Create Excel report for milk production data
 function createExcelReport(reportType, data) {
   // Create workbook
   const wb = XLSX.utils.book_new();
   
-  // Add data based on report type
   switch (reportType) {
     case 'daily': {
       // Summary sheet
       const summaryData = [
-        ['Date', new Date(data.date).toLocaleDateString()],
+        ['Daily Production Report'],
+        ['Date', formatDateStr(data.date)],
+        ['Generated', new Date().toLocaleDateString()],
+        [''],
         ['Total Milk Production', data.totalMilk],
         ['Morning Production', data.morningMilk],
         ['Evening Production', data.eveningMilk],
@@ -1125,28 +2246,29 @@ function createExcelReport(reportType, data) {
       const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
       XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
       
-      // Top Producers sheet
-      const topProducersData = [
-        ['Cow Name', 'Tag Number', 'Total Production (L)']
-      ];
+      // Top producers sheet
+      const topHeaders = [['Cow Name', 'Tag Number', 'Total Production (L)']];
+      const topRows = data.topProducers.map(cow => [
+        cow.name,
+        cow.tagNumber,
+        cow.totalAmount
+      ]);
       
-      data.topProducers.forEach(cow => {
-        topProducersData.push([cow.name, cow.tagNumber, cow.totalAmount]);
-      });
-      
-      const topProducersSheet = XLSX.utils.aoa_to_sheet(topProducersData);
-      XLSX.utils.book_append_sheet(wb, topProducersSheet, 'Top Producers');
+      const topSheet = XLSX.utils.aoa_to_sheet([...topHeaders, ...topRows]);
+      XLSX.utils.book_append_sheet(wb, topSheet, 'Top Producers');
       
       // Collections sheet
-      const collectionsData = [
-        ['Shift', 'Cow Name', 'Tag Number', 'Amount (L)', 'Quality']
-      ];
+      const collectionHeaders = [['Date', 'Shift', 'Cow', 'Tag', 'Amount (L)', 'Quality']];
+      const collectionRows = data.collections.map(c => [
+        formatDateStr(c.date),
+        c.shift,
+        c.cowName,
+        c.cowTag,
+        c.amount,
+        c.quality
+      ]);
       
-      data.collections.forEach(c => {
-        collectionsData.push([c.shift, c.cowName, c.cowTag, c.amount, c.quality]);
-      });
-      
-      const collectionsSheet = XLSX.utils.aoa_to_sheet(collectionsData);
+      const collectionsSheet = XLSX.utils.aoa_to_sheet([...collectionHeaders, ...collectionRows]);
       XLSX.utils.book_append_sheet(wb, collectionsSheet, 'Collections');
       break;
     }
@@ -1154,7 +2276,10 @@ function createExcelReport(reportType, data) {
     case 'weekly': {
       // Summary sheet
       const summaryData = [
-        ['Week Period', `${new Date(data.weekStart).toLocaleDateString()} to ${new Date(data.weekEnd).toLocaleDateString()}`],
+        ['Weekly Production Report'],
+        ['Period', `${formatDateStr(data.weekStart)} to ${formatDateStr(data.weekEnd)}`],
+        ['Generated', new Date().toLocaleDateString()],
+        [''],
         ['Total Weekly Production', data.totalMilk],
         ['Average Daily Production', data.averageDailyMilk]
       ];
@@ -1162,81 +2287,315 @@ function createExcelReport(reportType, data) {
       const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
       XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
       
-      // Daily breakdown sheet
-      const dailyData = [
-        ['Date', 'Morning (L)', 'Evening (L)', 'Total (L)']
-      ];
+      // Daily breakdown
+      const dailyHeaders = [['Date', 'Morning (L)', 'Evening (L)', 'Total (L)']];
+      const dailyRows = data.dailyBreakdown.map(day => [
+        formatDateStr(day.date),
+        day.morningAmount,
+        day.eveningAmount,
+        day.totalAmount
+      ]);
       
-      data.dailyBreakdown.forEach(day => {
-        dailyData.push([
-          new Date(day.date).toLocaleDateString(),
-          day.morningAmount,
-          day.eveningAmount,
-          day.totalAmount
-        ]);
-      });
-      
-      const dailySheet = XLSX.utils.aoa_to_sheet(dailyData);
+      const dailySheet = XLSX.utils.aoa_to_sheet([...dailyHeaders, ...dailyRows]);
       XLSX.utils.book_append_sheet(wb, dailySheet, 'Daily Breakdown');
       
-      // Top producers sheet
-      const producersData = [
-        ['Cow Name', 'Tag Number', 'Total Production (L)']
-      ];
+      // Top producers
+      const topHeaders = [['Cow Name', 'Tag Number', 'Total Production (L)']];
+      const topRows = data.topProducers.map(cow => [
+        cow.name,
+        cow.tagNumber,
+        cow.totalAmount
+      ]);
       
-      data.topProducers.forEach(cow => {
-        producersData.push([cow.name, cow.tagNumber, cow.totalAmount]);
-      });
-      
-      const producersSheet = XLSX.utils.aoa_to_sheet(producersData);
-      XLSX.utils.book_append_sheet(wb, producersSheet, 'Top Producers');
+      const topSheet = XLSX.utils.aoa_to_sheet([...topHeaders, ...topRows]);
+      XLSX.utils.book_append_sheet(wb, topSheet, 'Top Producers');
       break;
     }
     
-    // Implement other report types similarly
-    case 'monthly':
-    case 'quality':
-    case 'compliance':
-      // For brevity, these are not fully implemented
+    case 'monthly': {
+      // Summary sheet
+      const summaryData = [
+        ['Monthly Production Report'],
+        ['Period', `${formatDateStr(data.monthStart)} to ${formatDateStr(data.monthEnd)}`],
+        ['Generated', new Date().toLocaleDateString()],
+        [''],
+        ['Total Monthly Production', data.totalMilk],
+        ['Average Daily Production', data.averageDailyMilk]
+      ];
+      
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+      
+      // Weekly breakdown
+      const weeklyHeaders = [['Week', 'Start Date', 'End Date', 'Total Production (L)']];
+      const weeklyRows = data.weeklyBreakdown.map(week => [
+        `Week ${week.week} (${week.year})`,
+        formatDateStr(week.startDate),
+        formatDateStr(week.endDate),
+        week.totalAmount
+      ]);
+      
+      const weeklySheet = XLSX.utils.aoa_to_sheet([...weeklyHeaders, ...weeklyRows]);
+      XLSX.utils.book_append_sheet(wb, weeklySheet, 'Weekly Breakdown');
+      
+      // Cow performance
+      const cowHeaders = [['Cow Name', 'Tag Number', 'Total (L)', 'Avg Per Day (L)', 'Days Collected']];
+      const cowRows = data.cowPerformance.map(cow => [
+        cow.name,
+        cow.tagNumber,
+        cow.totalAmount,
+        cow.avgPerDay,
+        cow.collectionDays
+      ]);
+      
+      const cowSheet = XLSX.utils.aoa_to_sheet([...cowHeaders, ...cowRows]);
+      XLSX.utils.book_append_sheet(wb, cowSheet, 'Cow Performance');
+      break;
+    }
+    
+    case 'quality': {
+      // Summary sheet
+      const summaryData = [
+        ['Milk Quality Report'],
+        ['Period', `${formatDateStr(data.periodStart)} to ${formatDateStr(data.periodEnd)}`],
+        ['Generated', new Date().toLocaleDateString()],
+        [''],
+        ['Total Samples', data.sampleCount],
+        ['Overall Compliance', `${data.compliance.overall.toFixed(1)}%`]
+      ];
+      
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+      
+      // Quality parameters
+      const qualityHeaders = [['Parameter', 'Average', 'Standard Min', 'Standard Max', 'Compliance Rate']];
+      const qualityRows = [
+        ['Fat Content', data.qualityAverages.fat, data.standards.fat.min, data.standards.fat.max, data.compliance.fat],
+        ['Protein Content', data.qualityAverages.protein, data.standards.protein.min, data.standards.protein.max, data.compliance.protein],
+        ['Lactose Content', data.qualityAverages.lactose, data.standards.lactose.min, data.standards.lactose.max, data.compliance.lactose],
+        ['Somatic Cell Count', data.qualityAverages.somatic, 0, data.standards.somatic.max, data.compliance.somatic],
+        ['Bacteria Count', data.qualityAverages.bacteria, 0, data.standards.bacteria.max, data.compliance.bacteria]
+      ];
+      
+      const qualitySheet = XLSX.utils.aoa_to_sheet([...qualityHeaders, ...qualityRows]);
+      XLSX.utils.book_append_sheet(wb, qualitySheet, 'Quality Parameters');
+      
+      // Daily trends
+      const trendsHeaders = [['Date', 'Fat %', 'Protein %', 'Lactose %', 'SCC', 'Bacteria']];
+      const trendsRows = data.dailyTrends.map(day => [
+        formatDateStr(day.date),
+        day.fatAvg,
+        day.proteinAvg,
+        day.lactoseAvg,
+        day.somaticAvg,
+        day.bacteriaAvg
+      ]);
+      
+      const trendsSheet = XLSX.utils.aoa_to_sheet([...trendsHeaders, ...trendsRows]);
+      XLSX.utils.book_append_sheet(wb, trendsSheet, 'Daily Trends');
+      break;
+    }
+    
+    case 'compliance': {
+      // Summary sheet
+      const summaryData = [
+        ['Compliance Report'],
+        ['Period', `${formatDateStr(data.periodStart)} to ${formatDateStr(data.periodEnd)}`],
+        ['Generated', new Date().toLocaleDateString()],
+        [''],
+        ['Total Samples', data.compliance.totalSamples],
+        ['Compliant Samples', data.compliance.compliantSamples],
+        ['Compliance Rate', `${data.compliance.complianceRate.toFixed(1)}%`],
+        ['Non-Compliant Samples', data.compliance.violationCount]
+      ];
+      
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+      
+      // Compliance by parameter
+      const complianceHeaders = [['Parameter', 'Compliance Rate']];
+      const complianceRows = [
+        ['Fat Content', `${data.compliance.fat.toFixed(1)}%`],
+        ['Protein Content', `${data.compliance.protein.toFixed(1)}%`],
+        ['Lactose Content', `${data.compliance.lactose.toFixed(1)}%`],
+        ['Somatic Cell Count', `${data.compliance.somatic.toFixed(1)}%`],
+        ['Bacteria Count', `${data.compliance.bacteria.toFixed(1)}%`],
+        ['Overall', `${data.compliance.overall.toFixed(1)}%`]
+      ];
+      
+      const complianceSheet = XLSX.utils.aoa_to_sheet([...complianceHeaders, ...complianceRows]);
+      XLSX.utils.book_append_sheet(wb, complianceSheet, 'Compliance Rates');
+      
+      // Violations
+      if (data.compliance.violations && data.compliance.violations.length > 0) {
+        const violationsHeaders = [['Date', 'Number of Violations', 'Details']];
+        const violationsRows = data.compliance.violations.map(v => [
+          formatDateStr(v.date),
+          v.violationCount,
+          v.violations.join("; ")
+        ]);
+        
+        const violationsSheet = XLSX.utils.aoa_to_sheet([...violationsHeaders, ...violationsRows]);
+        XLSX.utils.book_append_sheet(wb, violationsSheet, 'Violations');
+      }
+      break;
+    }
+    
+    default: {
       const demoSheet = XLSX.utils.aoa_to_sheet([
         [`${reportType} Report`],
         ['Generated', new Date().toLocaleDateString()],
         ['Sample Data', 'This would contain real data in a full implementation']
       ]);
       XLSX.utils.book_append_sheet(wb, demoSheet, 'Report Data');
-      break;
+    }
   }
   
   // Convert to binary
   return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
 }
 
-// Generate CSV report
+// Generate CSV report for milk production data
 function createCsvReport(reportType, data) {
   let csvContent = '';
   
   switch (reportType) {
     case 'daily':
-      // Create a simple CSV with collections data
-      csvContent = 'Date,Shift,Cow Name,Cow Tag,Amount (L),Quality\n';
+      // Daily Report CSV
+      csvContent = 'Daily Production Report\n';
+      csvContent += `Date,${formatDateStr(data.date)}\n`;
+      csvContent += `Generated,${new Date().toISOString()}\n\n`;
+      
+      csvContent += 'Summary\n';
+      csvContent += `Total Milk Production,${data.totalMilk}\n`;
+      csvContent += `Morning Production,${data.morningMilk}\n`;
+      csvContent += `Evening Production,${data.eveningMilk}\n`;
+      csvContent += `Number of Cows,${data.numberOfCows}\n\n`;
+      
+      csvContent += 'Top Producers\n';
+      csvContent += 'Cow Name,Tag Number,Total Production (L)\n';
+      
+      data.topProducers.forEach(cow => {
+        csvContent += `${cow.name},${cow.tagNumber},${cow.totalAmount}\n`;
+      });
+      
+      csvContent += '\nCollection Records\n';
+      csvContent += 'Date,Shift,Cow,Tag,Amount (L),Quality\n';
       
       data.collections.forEach(c => {
-        csvContent += `${c.date},${c.shift},"${c.cowName}",${c.cowTag},${c.amount},${c.quality}\n`;
+        csvContent += `${formatDateStr(c.date)},${c.shift},${c.cowName},${c.cowTag},${c.amount},${c.quality}\n`;
       });
       break;
       
     case 'weekly':
-      // Daily breakdown
-      csvContent = 'Date,Morning (L),Evening (L),Total (L)\n';
+      // Weekly Report CSV
+      csvContent = 'Weekly Production Report\n';
+      csvContent += `Period,${formatDateStr(data.weekStart)} to ${formatDateStr(data.weekEnd)}\n`;
+      csvContent += `Generated,${new Date().toISOString()}\n\n`;
+      
+      csvContent += 'Summary\n';
+      csvContent += `Total Weekly Production,${data.totalMilk}\n`;
+      csvContent += `Average Daily Production,${data.averageDailyMilk}\n\n`;
+      
+      csvContent += 'Daily Breakdown\n';
+      csvContent += 'Date,Morning (L),Evening (L),Total (L)\n';
       
       data.dailyBreakdown.forEach(day => {
-        csvContent += `${day.date},${day.morningAmount},${day.eveningAmount},${day.totalAmount}\n`;
+        csvContent += `${formatDateStr(day.date)},${day.morningAmount},${day.eveningAmount},${day.totalAmount}\n`;
+      });
+      
+      csvContent += '\nTop Producers\n';
+      csvContent += 'Cow Name,Tag Number,Total Production (L)\n';
+      
+      data.topProducers.forEach(cow => {
+        csvContent += `${cow.name},${cow.tagNumber},${cow.totalAmount}\n`;
       });
       break;
       
-    // Other report types similarly
+    case 'monthly':
+      // Monthly Report CSV
+      csvContent = 'Monthly Production Report\n';
+      csvContent += `Period,${formatDateStr(data.monthStart)} to ${formatDateStr(data.monthEnd)}\n`;
+      csvContent += `Generated,${new Date().toISOString()}\n\n`;
+      
+      csvContent += 'Summary\n';
+      csvContent += `Total Monthly Production,${data.totalMilk}\n`;
+      csvContent += `Average Daily Production,${data.averageDailyMilk}\n\n`;
+      
+      csvContent += 'Weekly Breakdown\n';
+      csvContent += 'Week,Start Date,End Date,Total Production (L)\n';
+      
+      data.weeklyBreakdown.forEach(week => {
+        csvContent += `Week ${week.week} (${week.year}),${formatDateStr(week.startDate)},${formatDateStr(week.endDate)},${week.totalAmount}\n`;
+      });
+      
+      csvContent += '\nCow Performance\n';
+      csvContent += 'Cow Name,Tag Number,Total (L),Avg Per Day (L),Days Collected\n';
+      
+      data.cowPerformance.forEach(cow => {
+        csvContent += `${cow.name},${cow.tagNumber},${cow.totalAmount},${cow.avgPerDay},${cow.collectionDays}\n`;
+      });
+      break;
+      
+    case 'quality':
+      // Quality Report CSV
+      csvContent = 'Milk Quality Report\n';
+      csvContent += `Period,${formatDateStr(data.periodStart)} to ${formatDateStr(data.periodEnd)}\n`;
+      csvContent += `Generated,${new Date().toISOString()}\n\n`;
+      
+      csvContent += 'Summary\n';
+      csvContent += `Total Samples,${data.sampleCount}\n`;
+      csvContent += `Overall Compliance,${data.compliance.overall.toFixed(1)}%\n\n`;
+      
+      csvContent += 'Quality Parameters\n';
+      csvContent += 'Parameter,Average,Standard Min,Standard Max,Compliance Rate\n';
+      csvContent += `Fat Content,${data.qualityAverages.fat},${data.standards.fat.min},${data.standards.fat.max},${data.compliance.fat}\n`;
+      csvContent += `Protein Content,${data.qualityAverages.protein},${data.standards.protein.min},${data.standards.protein.max},${data.compliance.protein}\n`;
+      csvContent += `Lactose Content,${data.qualityAverages.lactose},${data.standards.lactose.min},${data.standards.lactose.max},${data.compliance.lactose}\n`;
+      csvContent += `Somatic Cell Count,${data.qualityAverages.somatic},0,${data.standards.somatic.max},${data.compliance.somatic}\n`;
+      csvContent += `Bacteria Count,${data.qualityAverages.bacteria},0,${data.standards.bacteria.max},${data.compliance.bacteria}\n\n`;
+      
+      csvContent += 'Daily Trends\n';
+      csvContent += 'Date,Fat %,Protein %,Lactose %,SCC,Bacteria\n';
+      
+      data.dailyTrends.forEach(day => {
+        csvContent += `${formatDateStr(day.date)},${day.fatAvg.toFixed(2)},${day.proteinAvg.toFixed(2)},${day.lactoseAvg.toFixed(2)},${day.somaticAvg},${day.bacteriaAvg}\n`;
+      });
+      break;
+      
+    case 'compliance':
+      // Compliance Report CSV
+      csvContent = 'Compliance Report\n';
+      csvContent += `Period,${formatDateStr(data.periodStart)} to ${formatDateStr(data.periodEnd)}\n`;
+      csvContent += `Generated,${new Date().toISOString()}\n\n`;
+      
+      csvContent += 'Summary\n';
+      csvContent += `Total Samples,${data.compliance.totalSamples}\n`;
+      csvContent += `Compliant Samples,${data.compliance.compliantSamples}\n`;
+      csvContent += `Compliance Rate,${data.compliance.complianceRate.toFixed(1)}%\n`;
+      csvContent += `Non-Compliant Samples,${data.compliance.violationCount}\n\n`;
+      
+      csvContent += 'Compliance by Parameter\n';
+      csvContent += 'Parameter,Compliance Rate\n';
+      csvContent += `Fat Content,${data.compliance.fat.toFixed(1)}%\n`;
+      csvContent += `Protein Content,${data.compliance.protein.toFixed(1)}%\n`;
+      csvContent += `Lactose Content,${data.compliance.lactose.toFixed(1)}%\n`;
+      csvContent += `Somatic Cell Count,${data.compliance.somatic.toFixed(1)}%\n`;
+      csvContent += `Bacteria Count,${data.compliance.bacteria.toFixed(1)}%\n`;
+      csvContent += `Overall,${data.compliance.overall.toFixed(1)}%\n\n`;
+      
+      if (data.compliance.violations && data.compliance.violations.length > 0) {
+        csvContent += 'Violations\n';
+        csvContent += 'Date,Number of Violations,Details\n';
+        
+        data.compliance.violations.forEach(v => {
+          csvContent += `${formatDateStr(v.date)},${v.violationCount},"${v.violations.join('; ')}"\n`;
+        });
+      }
+      break;
+      
     default:
-      csvContent = `${reportType} Report\nGenerated,${new Date().toISOString()}\n\nThis is a sample CSV export.\nIn a full implementation, this would contain properly formatted data.`;
+      csvContent = `${reportType} Report\nGenerated,${new Date().toISOString()}\n\nSample milk production data for ${reportType}`;
   }
   
   return new TextEncoder().encode(csvContent);
@@ -1303,3 +2662,10 @@ export const downloadReport = (fileData, fileName, fileType) => {
     throw error;
   }
 };
+
+// Helper function to format date string consistently
+function formatDateStr(dateStr) {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  return date.toLocaleDateString();
+}

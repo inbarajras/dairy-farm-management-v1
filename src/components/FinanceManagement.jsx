@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Download, DollarSign, CreditCard, Briefcase, Calendar, ChevronDown, TrendingUp, TrendingDown, PieChart, IndianRupee,X,AlertCircle } from 'lucide-react';
+import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Download, DollarSign, CreditCard, Briefcase, Calendar, ChevronDown, TrendingUp, TrendingDown, PieChart, IndianRupee, X, AlertCircle, FileText } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, Pie } from 'recharts';
 import { getFinancialDashboardData, addCustomer, addExpense, addInvoice,
    processPayroll, updateExpense, deleteExpense, getExpensesByPage, getEmployeePayrollHistory,
@@ -7,6 +7,7 @@ import { getFinancialDashboardData, addCustomer, addExpense, addInvoice,
    updateInvoiceStatus, deleteInvoice, getInvoiceAgingSummary, generateInvoiceNumber, getCustomers, updateCustomer,
    deleteCustomer, getRevenueData, getRevenueCategoriesData, getRevenueSummary, getCustomersWithRevenue, 
    updateUpcomingPayroll } from './services/financialService';
+import { generateFinancialReport } from './services/reportService';
 import { supabase } from '../lib/supabase';
 import LoadingSpinner from './LoadingSpinner';
 
@@ -152,6 +153,16 @@ const FinancesManagement = () => {
     ]
   });
   const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
+  const [reportData, setReportData] = useState({
+    reportType: 'incomeStatement',
+    dateRange: 'thisMonth',
+    format: 'pdf',
+    startDate: '',
+    endDate: ''
+  });
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [generatedReports, setGeneratedReports] = useState([]);
+  const [reportError, setReportError] = useState(null);
 
 
   const toggleViewPayrollHistoryModal = async (employee = null) => {
@@ -941,6 +952,106 @@ const FinancesManagement = () => {
       }))
       .sort((a, b) => b.value - a.value);
   }, [topCustomers]);
+  // Handle report generation
+  const handleGenerateReport = async () => {
+    try {
+      setIsGeneratingReport(true);
+      setReportError(null);
+      
+      const { reportType, dateRange, format, startDate, endDate } = reportData;
+      
+      // Call the generateFinancialReport function from reportService
+      const report = await generateFinancialReport(
+        reportType, 
+        format, 
+        dateRange,
+        dateRange === 'custom' ? startDate : null, 
+        dateRange === 'custom' ? endDate : null
+      );
+      
+      // Add the new report to the list of generated reports
+      setGeneratedReports(prevReports => [report, ...prevReports]);
+      
+      // Show success message or notification
+      console.log('Report generated successfully', report);
+      
+      return report;
+    } catch (err) {
+      console.error('Error generating report:', err);
+      setReportError('Failed to generate report. Please try again.');
+      return null;
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+  
+  // Handle date range change for reports
+  const handleReportDateRangeChange = (e) => {
+    const value = e.target.value;
+    setReportData({
+      ...reportData,
+      dateRange: value
+    });
+    
+    // Reset custom date range if not on custom
+    if (value !== 'custom') {
+      setReportData(prev => ({
+        ...prev,
+        startDate: '',
+        endDate: ''
+      }));
+    }
+  };
+  
+  // Handle custom date range change for reports
+  const handleReportCustomDateChange = (field, value) => {
+    setReportData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+  
+  // Handle report format change
+  const handleReportFormatChange = (format) => {
+    setReportData(prev => ({
+      ...prev,
+      format
+    }));
+  };
+  
+  // Download generated report
+  const handleDownloadReport = (report) => {
+    try {
+      // Create a blob from the report file data
+      const blob = new Blob([report.fileData], { 
+        type: report.format === 'pdf' 
+          ? 'application/pdf' 
+          : report.format === 'excel' || report.format === 'xlsx'
+            ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            : 'text/csv'
+      });
+      
+      // Create a URL for the blob
+      const url = URL.createObjectURL(blob);
+      
+      // Create a temporary link element to trigger the download
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = report.file_path.split('/').pop() || `report-${new Date().toISOString().split('T')[0]}.${report.format}`;
+      document.body.appendChild(link);
+      
+      // Trigger the download
+      link.click();
+      
+      // Clean up
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error downloading report:', err);
+      setReportError('Failed to download report. Please try again.');
+    }
+  };
+
   // Handle expense submission from modal
   const handleExpenseSubmit = async (expenseData) => {
     try {
@@ -3064,8 +3175,7 @@ const FinancesManagement = () => {
         
         {/* Invoices Tab */}
         {activeTab === 'invoices' && renderInvoicesTab()}
-        
-        {/* Reports Tab */}
+         {/* Reports Tab */}
         {activeTab === 'reports' && (
           <div className="space-y-6">
           {/* Report Generation Panel */}
@@ -3073,94 +3183,177 @@ const FinancesManagement = () => {
             <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
             <div className="px-6 py-6">
               <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">Generate Financial Reports</h2>
-              <div className="grid grid-cols-1 gap-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor="reportType" className="block text-sm font-medium text-gray-700 mb-1">
-                      Report Type
-                    </label>
-                    <select
-                      id="reportType"
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                    >
-                      <option value="incomeStatement">Income Statement</option>
-                      <option value="balanceSheet">Balance Sheet</option>
-                      <option value="cashFlow">Cash Flow Statement</option>
-                      <option value="expenseReport">Expense Report</option>
-                      <option value="revenueReport">Revenue Report</option>
-                      <option value="taxReport">Tax Report</option>
-                    </select>
+              {isGeneratingReport ? (
+                <div className="px-6 py-8 text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-500 mx-auto mb-4"></div>
+                  <p className="text-gray-600">Generating report...</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="reportType" className="block text-sm font-medium text-gray-700 mb-1">
+                        Report Type
+                      </label>
+                      <select
+                        id="reportType"
+                        value={reportData.reportType}
+                        onChange={(e) => setReportData({...reportData, reportType: e.target.value})}
+                        className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                      >
+                        <option value="incomeStatement">Income Statement</option>
+                        <option value="balanceSheet">Balance Sheet</option>
+                        <option value="cashFlow">Cash Flow Statement</option>
+                        <option value="expenseReport">Expense Report</option>
+                        <option value="revenueReport">Revenue Report</option>
+                        <option value="taxReport">Tax Report</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="dateRange" className="block text-sm font-medium text-gray-700 mb-1">
+                        Date Range
+                      </label>
+                      <select
+                        id="dateRange"
+                        value={reportData.dateRange}
+                        onChange={handleReportDateRangeChange}
+                        className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                      >
+                        <option value="thisMonth">Current Month</option>
+                        <option value="lastMonth">Previous Month</option>
+                        <option value="thisQuarter">Current Quarter</option>
+                        <option value="lastQuarter">Previous Quarter</option>
+                        <option value="thisYear">Year to Date</option>
+                        <option value="lastYear">Last Year</option>
+                        <option value="custom">Custom Range...</option>
+                      </select>
+                    </div>
                   </div>
                   
-                  <div>
-                    <label htmlFor="dateRange" className="block text-sm font-medium text-gray-700 mb-1">
-                      Date Range
-                    </label>
-                    <select
-                      id="dateRange"
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                    >
-                      <option value="currentMonth">Current Month</option>
-                      <option value="previousMonth">Previous Month</option>
-                      <option value="currentQuarter">Current Quarter</option>
-                      <option value="previousQuarter">Previous Quarter</option>
-                      <option value="ytd">Year to Date</option>
-                      <option value="lastYear">Last Year</option>
-                      <option value="custom">Custom Range...</option>
-                    </select>
-                  </div>
-                </div>
+                  {reportData.dateRange === 'custom' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">
+                          Start Date
+                        </label>
+                        <input
+                          type="date"
+                          id="startDate"
+                          value={reportData.startDate}
+                          onChange={(e) => handleReportCustomDateChange('startDate', e.target.value)}
+                          className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                          required={reportData.dateRange === 'custom'}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">
+                          End Date
+                        </label>
+                        <input
+                          type="date"
+                          id="endDate"
+                          value={reportData.endDate}
+                          onChange={(e) => handleReportCustomDateChange('endDate', e.target.value)}
+                          className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                          required={reportData.dateRange === 'custom'}
+                        />
+                      </div>
+                    </div>
+                  )}
                 
-                <div>
-                  <label htmlFor="format" className="block text-sm font-medium text-gray-700 mb-1">
-                    Output Format
-                  </label>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2">
-                    <div className="flex items-center">
-                      <input
-                        id="pdf"
-                        name="format"
-                        type="radio"
-                        defaultChecked
-                        className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
-                      />
-                      <label htmlFor="pdf" className="ml-2 block text-sm text-gray-700">
-                        PDF
-                      </label>
-                    </div>
-                    <div className="flex items-center">
-                      <input
-                        id="excel"
-                        name="format"
-                        type="radio"
-                        className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
-                      />
-                      <label htmlFor="excel" className="ml-2 block text-sm text-gray-700">
-                        Excel
-                      </label>
-                    </div>
-                    <div className="flex items-center">
-                      <input
-                        id="csv"
-                        name="format"
-                        type="radio"
-                        className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
-                      />
-                      <label htmlFor="csv" className="ml-2 block text-sm text-gray-700">
-                        CSV
-                      </label>
+                  <div>
+                    <label htmlFor="format" className="block text-sm font-medium text-gray-700 mb-1">
+                      Output Format
+                    </label>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2">
+                      <div className="flex items-center">
+                        <input
+                          id="pdf"
+                          name="format"
+                          type="radio"
+                          checked={reportData.format === 'pdf'}
+                          onChange={() => handleReportFormatChange('pdf')}
+                          className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
+                        />
+                        <label htmlFor="pdf" className="ml-2 block text-sm text-gray-700">
+                          PDF
+                        </label>
+                      </div>
+                      <div className="flex items-center">
+                        <input
+                          id="excel"
+                          name="format"
+                          type="radio"
+                          checked={reportData.format === 'excel'}
+                          onChange={() => handleReportFormatChange('excel')}
+                          className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
+                        />
+                        <label htmlFor="excel" className="ml-2 block text-sm text-gray-700">
+                          Excel
+                        </label>
+                      </div>
+                      <div className="flex items-center">
+                        <input
+                          id="csv"
+                          name="format"
+                          type="radio"
+                          checked={reportData.format === 'csv'}
+                          onChange={() => handleReportFormatChange('csv')}
+                          className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
+                        />
+                        <label htmlFor="csv" className="ml-2 block text-sm text-gray-700">
+                          CSV
+                        </label>
+                      </div>
                     </div>
                   </div>
+                  
+                  {reportError && (
+                    <div className="rounded-md bg-red-50 p-4">
+                      <div className="flex">
+                        <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
+                        <div className="text-sm text-red-700">{reportError}</div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="mt-6">
+                    <button 
+                      onClick={handleGenerateReport}
+                      className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 transition-opacity"
+                      disabled={reportData.dateRange === 'custom' && (!reportData.startDate || !reportData.endDate)}
+                    >
+                      Generate Report
+                    </button>
+                  </div>
                 </div>
-              </div>
-              
-              <div className="mt-6">
-                <button className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 transition-opacity">
-                  Generate Report
-                </button>
-              </div>
+              )}
             </div>
           </div>
+          
+          {/* Generated Reports */}
+          {generatedReports.length > 0 && (
+            <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
+              <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Generated Reports</h2>
+              </div>
+              <ul className="divide-y divide-gray-200">
+                {generatedReports.map((report, index) => (
+                  <ReportItem 
+                    key={report.id || index}
+                    title={report.title}
+                    type={report.report_type}
+                    date={report.created_at}
+                    format={report.format}
+                    size={report.file_size}
+                    onDownload={() => handleDownloadReport(report)}
+                  />
+                ))}
+              </ul>
+            </div>
+          )}
           </div>
         )}
       </div>
@@ -3795,40 +3988,46 @@ const PayrollDetailsModal = ({ payrollData, isLoading, onClose, onVoid }) => {
 };
 
 // Report Item Component
-const ReportItem = ({ title, type, date, format, size }) => {
+const ReportItem = ({ title, type, date, format, size, onDownload }) => {
   return (
     <li className="px-4 sm:px-6 py-4 hover:bg-gray-50">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-start">
           <div className="flex-shrink-0">
-            {format === 'PDF' ? (
-              <div className="w-10 h-12 bg-red-100 text-red-600 flex items-center justify-center rounded">
-                <span className="text-xs font-medium">PDF</span>
+            {format === 'PDF' || format === 'pdf' ? (
+              <div className="h-10 w-10 flex items-center justify-center rounded-md bg-red-100 text-red-600">
+                <FileText size={20} />
               </div>
-            ) : format === 'Excel' ? (
-              <div className="w-10 h-12 bg-green-100 text-green-600 flex items-center justify-center rounded">
-                <span className="text-xs font-medium">XLS</span>
+            ) : format === 'Excel' || format === 'excel' || format === 'xlsx' ? (
+              <div className="h-10 w-10 flex items-center justify-center rounded-md bg-green-100 text-green-600">
+                <FileText size={20} />
               </div>
             ) : (
-              <div className="w-10 h-12 bg-blue-100 text-blue-600 flex items-center justify-center rounded">
-                <span className="text-xs font-medium">CSV</span>
+              <div className="h-10 w-10 flex items-center justify-center rounded-md bg-blue-100 text-blue-600">
+                <FileText size={20} />
               </div>
             )}
           </div>
-          <div className="ml-4 overflow-hidden">
-            <h3 className="text-sm font-medium text-gray-800 break-words">{title}</h3>
-            <div className="mt-1 flex flex-wrap items-center text-xs text-gray-500 gap-x-1">
+          <div className="ml-4">
+            <h3 className="text-sm font-medium text-gray-900">{title}</h3>
+            <div className="flex items-center text-xs text-gray-500 mt-1">
               <span>{type}</span>
-              <span className="hidden sm:inline">•</span>
-              <span>{formatDate(date)}</span>
-              <span className="hidden sm:inline">•</span>
+              <span className="mx-1.5">•</span>
+              <span>{new Date(date).toLocaleDateString()}</span>
+              <span className="mx-1.5">•</span>
+              <span className="uppercase">{format}</span>
+              <span className="mx-1.5">•</span>
               <span>{size}</span>
             </div>
           </div>
         </div>
-        <div className="ml-auto">
-          <button className="p-2 text-gray-400 hover:text-gray-600 rounded-full">
-            <Download size={16} />
+        <div>
+          <button
+            onClick={onDownload}
+            className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 transition-all duration-300"
+          >
+            <Download size={14} className="mr-1" />
+            Download
           </button>
         </div>
       </div>
