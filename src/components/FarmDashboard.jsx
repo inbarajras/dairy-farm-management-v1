@@ -616,13 +616,13 @@ const FarmDashboard = () => {
               trend="2 new alerts today"
               positive={false}
             />
-            <KpiCard
+            {/* <KpiCard
               title="Active Tasks"
               value={dashboardData.kpiData.activeTasks}
               icon={<Clipboard className="text-amber-500" />}
               trend="3 tasks due today"
               positive={true}
-            />
+            /> */}
             <KpiCard
               title="Revenue (MTD)"
               value={`₹${dashboardData.kpiData.revenue}`}
