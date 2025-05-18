@@ -1,6 +1,5 @@
 // This function updates the revenue_data table with calculated monthly data
 import { supabase } from '../../lib/supabase';
-import { initRevenueTablesSchema } from '../../lib/revenueSchema';
 
 export const updateRevenueData = async () => {
   try {
@@ -215,8 +214,6 @@ export const updateRevenueCategories = async () => {
 // Initialize both revenue tables with data if they're empty
 export const initializeRevenueTables = async () => {
   try {
-    // First, ensure the tables have the correct schema
-    await initRevenueTablesSchema();
     
     // Check if revenue_data table has records
     const { data: revenueData, error: revenueDataError } = await supabase
