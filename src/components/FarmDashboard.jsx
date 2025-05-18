@@ -173,20 +173,34 @@ const FarmDashboard = () => {
     // Process 7 days data
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const dailyMap = {};
+    const dateMap = {}; // Store actual dates to match records precisely
     
     // Initialize all days with 0
     for (let i = 6; i >= 0; i--) {
       const date = new Date();
       date.setDate(date.getDate() - i);
       const dayName = days[date.getDay()];
+      
+      // Store unique date key in YYYY-MM-DD format for exact matching
+      const dateKey = date.toISOString().split('T')[0];
+      
+      // Set initial values for both maps
       dailyMap[dayName] = 0;
+      dateMap[dateKey] = { day: dayName, production: 0 };
     }
     
-    // Sum milk quantities by day
+    // Sum milk quantities by day using exact date matching
     milkData.forEach(record => {
-      const date = new Date(record.date);
-      const dayName = days[date.getDay()];
-      dailyMap[dayName] += parseFloat(record.totalQuantity || 0);
+      // Get date in YYYY-MM-DD format for exact matching
+      const dateKey = new Date(record.date).toISOString().split('T')[0];
+      
+      // Only add to the map if it's within our 7-day range
+      if (dateMap[dateKey]) {
+        dateMap[dateKey].production += parseFloat(record.totalQuantity || 0);
+        // Also update the day name map to keep both in sync
+        const dayName = dateMap[dateKey].day;
+        dailyMap[dayName] = dateMap[dateKey].production;
+      }
     });
     
     const sevenDaysData = Object.keys(dailyMap).map(day => ({
@@ -828,7 +842,7 @@ const FarmDashboard = () => {
             </div>
 
             {/* Weather and Quick Stats */}
-            <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100">
+            {/* <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100">
                 <WeatherConditions location="Farm Location" />
 
                 <div className="mt-6">
@@ -849,7 +863,7 @@ const FarmDashboard = () => {
                     </svg>
                   </button>
                 </div>
-              </div>
+              </div> */}
           </div>
         </main>
       </div>

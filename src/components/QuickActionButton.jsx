@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Plus,
   Clipboard, 
@@ -7,7 +7,8 @@ import {
   Package, 
   IndianRupee, 
   Users,
-  Search
+  Search,
+  X
 } from 'lucide-react';
 
 const QuickActionButton = ({ 
@@ -19,7 +20,22 @@ const QuickActionButton = ({
   onAddEmployee,
   onSearch
 }) => {
-  const [isHovered, setIsHovered] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const buttonRef = useRef(null);
+  
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (buttonRef.current && !buttonRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
   
   // Define our action buttons with direct modal opening actions
   const actionButtons = [
@@ -34,18 +50,20 @@ const QuickActionButton = ({
   return (
     <div 
       className="fixed bottom-6 right-6 z-50 flex flex-col items-end"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      ref={buttonRef}
     >
-      {/* Action buttons that appear on hover with a vertical layout */}
+      {/* Action buttons that appear on click with a vertical layout */}
       <div 
-        className={`mb-4 transition-all duration-300 ease-in-out flex flex-col-reverse items-end gap-3 ${isHovered ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'}`}
+        className={`mb-4 transition-all duration-300 ease-in-out flex flex-col-reverse items-end gap-3 ${isOpen ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'}`}
       >
         {actionButtons.map((button, index) => (
           <div key={index} className="relative group">
             <button 
               className={`${button.color} rounded-full h-12 w-12 flex items-center justify-center text-white shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110`}
-              onClick={button.action}
+              onClick={() => {
+                button.action();
+                setIsOpen(false); // Close menu after action
+              }}
               aria-label={button.tooltip}
             >
               {button.icon}
@@ -63,10 +81,11 @@ const QuickActionButton = ({
 
       {/* Main floating action button */}
       <button 
-        className="h-14 w-14 rounded-full bg-gradient-to-r from-green-600 to-blue-600 text-white shadow-lg hover:shadow-xl flex items-center justify-center transition-all duration-300 hover:scale-105"
+        className={`h-14 w-14 rounded-full ${isOpen ? 'bg-gray-700' : 'bg-gradient-to-r from-green-600 to-blue-600'} text-white shadow-lg hover:shadow-xl flex items-center justify-center transition-all duration-300 hover:scale-105`}
+        onClick={() => setIsOpen(!isOpen)}
         aria-label="Quick Actions"
       >
-        <Plus size={28} className="text-white" />
+        {isOpen ? <X size={24} className="text-white" /> : <Plus size={28} className="text-white" />}
       </button>
     </div>
   );
