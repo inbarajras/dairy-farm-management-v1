@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase';
+import { updateRevenueData, updateRevenueCategories } from './revenueUpdateService';
 
 // Date formatting utilities
 export const formatMonth = (month) => {
@@ -186,6 +187,9 @@ export const addExpense = async (expenseData) => {
       .select();
       
     if (error) throw error;
+    
+    // Update revenue_data since expenses affect profit calculations
+    await updateRevenueData();
     
     return data[0];
   } catch (error) {
@@ -1129,6 +1133,9 @@ export const updateExpense = async (expenseId, expenseData) => {
       
     if (error) throw error;
     
+    // Update revenue_data since expenses affect profit calculations
+    await updateRevenueData();
+    
     return data[0];
   } catch (error) {
     console.error('Error updating expense:', error);
@@ -1145,6 +1152,9 @@ export const deleteExpense = async (expenseId) => {
       .eq('id', expenseId);
       
     if (error) throw error;
+    
+    // Update revenue_data since expenses affect profit calculations
+    await updateRevenueData();
     
     return true;
   } catch (error) {
@@ -1698,6 +1708,12 @@ export const addInvoice = async (invoiceData, invoiceItems) => {
       throw itemsError;
     }
     
+    // Update revenue_data and revenue_categories if status is Paid
+    if (invoiceData.status === 'Paid') {
+      await updateRevenueData();
+      await updateRevenueCategories();
+    }
+    
     return invoice[0];
   } catch (error) {
     console.error('Error creating invoice:', error);
@@ -1719,6 +1735,12 @@ export const updateInvoiceStatus = async (invoiceId, status) => {
     
     if (error) throw error;
     
+    // If invoice is marked as paid, update revenue tables
+    if (status === 'Paid') {
+      await updateRevenueData();
+      await updateRevenueCategories();
+    }
+    
     return data[0];
   } catch (error) {
     console.error('Error updating invoice status:', error);
@@ -1729,12 +1751,30 @@ export const updateInvoiceStatus = async (invoiceId, status) => {
 // Delete invoice
 export const deleteInvoice = async (invoiceId) => {
   try {
+    // First, check if the invoice is in Paid status
+    const { data: invoiceData, error: fetchError } = await supabase
+      .from('invoices')
+      .select('status')
+      .eq('id', invoiceId)
+      .single();
+      
+    if (fetchError) throw fetchError;
+    
+    const isPaid = invoiceData && invoiceData.status === 'Paid';
+    
+    // Delete the invoice
     const { error } = await supabase
       .from('invoices')
       .delete()
       .eq('id', invoiceId);
     
     if (error) throw error;
+    
+    // If the deleted invoice was paid, update revenue tables
+    if (isPaid) {
+      await updateRevenueData();
+      await updateRevenueCategories();
+    }
     
     return true;
   } catch (error) {
@@ -1879,78 +1919,45 @@ export const getRevenueData = async (dateRange = 'month') => {
         startDate = new Date(now.getFullYear() - 1, now.getMonth(), 1);
     }
     
-    const formattedStartDate = startDate.toISOString().split('T')[0];
+    // Get month and year values for filtering
+    const startYear = startDate.getFullYear();
+    const startMonth = (startDate.getMonth() + 1).toString();
     
-    // Fetch revenue data based on invoices
-    const { data: invoiceData, error: invoiceError } = await supabase
-      .from('invoices')
-      .select('date, amount, status')
-      .gte('date', formattedStartDate)
-      .order('date', { ascending: true });
+    // Try to fetch from revenue_data table first
+    const { data, error } = await supabase
+      .from('revenue_data')
+      .select('*')
+      .or(`year.gt.${startYear-1}, and(year.eq.${startYear}, month.gte.${startMonth})`) // Filter for data after startDate
+      .order('year', { ascending: true })
+      .order('month', { ascending: true });
     
-    if (invoiceError) throw invoiceError;
+    if (error) throw error;
     
-    // Fetch expenses for the same period for profit calculation
-    const { data: expenseData, error: expenseError } = await supabase
-      .from('expenses')
-      .select('date, amount')
-      .gte('date', formattedStartDate)
-      .order('date', { ascending: true });
+    // If we have data in the table, use it
+    if (data && data.length > 0) {
+      return data.map(item => ({
+        ...item,
+        month: formatMonth(item.month) // Format month name
+      }));
+    }
     
-    if (expenseError) throw expenseError;
+    // If no data found in table, update the tables and then fetch again
+    await updateRevenueData();
     
-    // Group by month
-    const monthlyData = {};
+    // Try fetching again
+    const { data: updatedData, error: updateError } = await supabase
+      .from('revenue_data')
+      .select('*')
+      .or(`year.gt.${startYear-1}, and(year.eq.${startYear}, month.gte.${startMonth})`) // Filter for data after startDate
+      .order('year', { ascending: true })
+      .order('month', { ascending: true });
     
-    // Process invoice data (revenue)
-    invoiceData.forEach(invoice => {
-      // Only count paid or completed invoices as revenue
-      if (invoice.status !== 'Paid' && invoice.status !== 'Completed') return;
-      
-      const date = new Date(invoice.date);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      
-      if (!monthlyData[monthKey]) {
-        monthlyData[monthKey] = {
-          month: formatMonth(date.getMonth() + 1),
-          year: date.getFullYear(),
-          income: 0,
-          expenses: 0,
-          profit: 0
-        };
-      }
-      
-      monthlyData[monthKey].income += parseFloat(invoice.amount);
-    });
+    if (updateError) throw updateError;
     
-    // Process expense data
-    expenseData.forEach(expense => {
-      const date = new Date(expense.date);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      
-      if (!monthlyData[monthKey]) {
-        monthlyData[monthKey] = {
-          month: formatMonth(date.getMonth() + 1),
-          year: date.getFullYear(),
-          income: 0,
-          expenses: 0,
-          profit: 0
-        };
-      }
-      
-      monthlyData[monthKey].expenses += parseFloat(expense.amount);
-    });
-    
-    // Calculate profit for each month
-    Object.keys(monthlyData).forEach(key => {
-      monthlyData[key].profit = monthlyData[key].income - monthlyData[key].expenses;
-    });
-    
-    // Convert to array and sort by date
-    return Object.values(monthlyData).sort((a, b) => {
-      if (a.year !== b.year) return a.year - b.year;
-      return a.month.localeCompare(b.month);
-    });
+    return (updatedData || []).map(item => ({
+      ...item,
+      month: formatMonth(item.month) // Format month name
+    }));
   } catch (error) {
     console.error('Error fetching revenue data:', error);
     return [];
@@ -1960,88 +1967,31 @@ export const getRevenueData = async (dateRange = 'month') => {
 // Get revenue breakdown by category
 export const getRevenueCategoriesData = async () => {
   try {
-    // Get current year
-    const currentYear = new Date().getFullYear();
-    const startOfYear = new Date(currentYear, 0, 1).toISOString().split('T')[0];
+    // Try to fetch from revenue_categories table
+    const { data, error } = await supabase
+      .from('revenue_categories')
+      .select('*')
+      .order('value', { ascending: false });
     
-    // Fetch all invoices with their items
-    const { data: invoices, error: invoicesError } = await supabase
-      .from('invoices')
-      .select(`
-        id,
-        amount,
-        status,
-        invoice_items (description, amount)
-      `)
-      .eq('status', 'Paid')
-      .gte('date', startOfYear);
+    if (error) throw error;
     
-    if (invoicesError) throw invoicesError;
+    // If we have data in the table, use it
+    if (data && data.length > 0) {
+      return data;
+    }
     
-    // Group by categories based on descriptions (this assumes descriptions contain category information)
-    const categoryMap = {
-      'milk': 'Milk Sales',
-      'dairy': 'Milk Sales',
-      'cattle': 'Cattle Sales',
-      'animal': 'Cattle Sales',
-      'cow': 'Cattle Sales',
-      'manure': 'Manure Sales',
-      'fertilizer': 'Manure Sales'
-    };
+    // If no data found in table, update the tables and then fetch again
+    await updateRevenueCategories();
     
-    const categories = {
-      'Milk Sales': 0,
-      'Cattle Sales': 0,
-      'Manure Sales': 0,
-      'Other': 0
-    };
+    // Try fetching again
+    const { data: updatedData, error: updateError } = await supabase
+      .from('revenue_categories')
+      .select('*')
+      .order('value', { ascending: false });
     
-    let totalRevenue = 0;
+    if (updateError) throw updateError;
     
-    invoices.forEach(invoice => {
-      if (invoice.invoice_items && invoice.invoice_items.length > 0) {
-        // If we have line items, categorize them
-        invoice.invoice_items.forEach(item => {
-          let categoryFound = false;
-          const description = item.description.toLowerCase();
-          
-          // Try to match description to a category
-          for (const [keyword, category] of Object.entries(categoryMap)) {
-            if (description.includes(keyword)) {
-              categories[category] += parseFloat(item.amount);
-              categoryFound = true;
-              break;
-            }
-          }
-          
-          // If no category match, put in "Other"
-          if (!categoryFound) {
-            categories['Other'] += parseFloat(item.amount);
-          }
-          
-          totalRevenue += parseFloat(item.amount);
-        });
-      } else {
-        // If no line items, just add the full amount to "Other"
-        categories['Other'] += parseFloat(invoice.amount);
-        totalRevenue += parseFloat(invoice.amount);
-      }
-    });
-    
-    // Format the data for charts
-    const categoryColors = {
-      'Milk Sales': '#2E7D32',
-      'Cattle Sales': '#1565C0',
-      'Manure Sales': '#FFA000',
-      'Other': '#6D4C41'
-    };
-    
-    return Object.entries(categories).map(([name, value]) => ({
-      name,
-      value,
-      percentage: totalRevenue > 0 ? Math.round((value / totalRevenue) * 100) : 0,
-      color: categoryColors[name] || '#607D8B'
-    })).sort((a, b) => b.value - a.value);
+    return updatedData || [];
   } catch (error) {
     console.error('Error fetching revenue categories:', error);
     

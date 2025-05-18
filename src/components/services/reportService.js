@@ -920,166 +920,707 @@ const getDateRangeEnd = (dateRange) => {
   }
 };
 
-// Data fetching functions for different report types
-async function fetchIncomeStatementData(dateRange, startDate, endDate) {
-  // Implement data fetching logic for income statement
-  // This would typically query your database for revenue and expense data
-  return { 
-    title: 'Income Statement',
-    period: formatDateRangeForTitle(dateRange, startDate, endDate),
-    revenue: {
-      milkSales: 15000,
-      livestockSales: 8500,
-      otherSales: 2500,
-      total: 26000
-    },
-    expenses: {
-      feedCosts: 7500,
-      labor: 6000,
-      veterinary: 2200,
-      utilities: 1800,
-      maintenance: 2500,
-      other: 1500,
-      total: 21500
-    },
-    netIncome: 4500
-  };
+// Helper function to convert date ranges to actual start and end dates
+function getDateRangeValues(dateRange, startDate, endDate) {
+  // If specific dates are provided, use those
+  if (startDate && endDate) {
+    return { from: startDate, to: endDate };
+  }
+  
+  // Otherwise, determine dates based on the range
+  const from = getDateRangeStart(dateRange);
+  const to = getDateRangeEnd(dateRange);
+  
+  return { from, to };
 }
 
+// Data fetching functions for different report types
+async function fetchIncomeStatementData(dateRange, startDate, endDate) {
+  try {
+    // Convert date range to actual dates if necessary
+    const { from, to } = getDateRangeValues(dateRange, startDate, endDate);
+    
+    // Fetch revenue data from the database
+    const { data: revenueData, error: revenueError } = await supabase
+      .from('revenue_data')
+      .select('*')
+      .gte('date', from)
+      .lte('date', to);
+    
+    if (revenueError) throw revenueError;
+    
+    // Fetch expense data from the database
+    const { data: expenseData, error: expenseError } = await supabase
+      .from('expenses')
+      .select('*')
+      .gte('date', from)
+      .lte('date', to);
+    
+    if (expenseError) throw expenseError;
+    
+    // Calculate revenue by category
+    const revenue = {
+      milkSales: 0,
+      livestockSales: 0,
+      otherSales: 0,
+      total: 0
+    };
+    
+    // Process revenue data
+    revenueData.forEach(item => {
+      if (item.category === 'Milk Sales') {
+        revenue.milkSales += Number(item.amount);
+      } else if (item.category === 'Livestock Sales') {
+        revenue.livestockSales += Number(item.amount);
+      } else {
+        revenue.otherSales += Number(item.amount);
+      }
+    });
+    
+    revenue.total = revenue.milkSales + revenue.livestockSales + revenue.otherSales;
+    
+    // Calculate expenses by category
+    const expenses = {
+      feedCosts: 0,
+      labor: 0,
+      veterinary: 0,
+      utilities: 0,
+      maintenance: 0,
+      other: 0,
+      total: 0
+    };
+    
+    // Process expense data
+    expenseData.forEach(item => {
+      if (item.category === 'Feed') {
+        expenses.feedCosts += Number(item.amount);
+      } else if (item.category === 'Labor' || item.category === 'Payroll') {
+        expenses.labor += Number(item.amount);
+      } else if (item.category === 'Veterinary' || item.category === 'Medical') {
+        expenses.veterinary += Number(item.amount);
+      } else if (item.category === 'Utilities') {
+        expenses.utilities += Number(item.amount);
+      } else if (item.category === 'Maintenance' || item.category === 'Repairs') {
+        expenses.maintenance += Number(item.amount);
+      } else {
+        expenses.other += Number(item.amount);
+      }
+    });
+    
+    expenses.total = expenses.feedCosts + expenses.labor + expenses.veterinary + 
+                     expenses.utilities + expenses.maintenance + expenses.other;
+    
+    // Calculate net income
+    const netIncome = revenue.total - expenses.total;
+    
+    return { 
+      title: 'Income Statement',
+      period: formatDateRangeForTitle(dateRange, startDate, endDate),
+      revenue,
+      expenses,
+      netIncome
+    };
+  } catch (error) {
+    console.error('Error fetching income statement data:', error);
+    // Return a default structure with zeros in case of error
+    return { 
+      title: 'Income Statement',
+      period: formatDateRangeForTitle(dateRange, startDate, endDate),
+      revenue: {
+        milkSales: 0,
+        livestockSales: 0,
+        otherSales: 0,
+        total: 0
+      },
+      expenses: {
+        feedCosts: 0,
+        labor: 0,
+        veterinary: 0,
+        utilities: 0,
+        maintenance: 0,
+        other: 0,
+        total: 0
+      },
+      netIncome: 0,
+      error: error.message
+    };
+  }
+};
+
 async function fetchBalanceSheetData() {
-  // Implement data fetching logic for balance sheet
-  return { 
-    title: 'Balance Sheet',
-    date: new Date().toISOString(),
-    assets: {
-      currentAssets: {
-        cash: 12500,
-        accountsReceivable: 7800,
-        inventory: 15600,
-        total: 35900
+  try {
+    // Fetch asset data from the database
+    const { data: assetData, error: assetError } = await supabase
+      .from('assets')
+      .select('*');
+    
+    if (assetError) throw assetError;
+    
+    // Fetch liability data from the database
+    const { data: liabilityData, error: liabilityError } = await supabase
+      .from('liabilities')
+      .select('*');
+    
+    if (liabilityError) throw liabilityError;
+    
+    // Calculate current assets totals
+    const currentAssets = {
+      cash: 0,
+      accountsReceivable: 0,
+      inventory: 0,
+      total: 0
+    };
+    
+    // Calculate non-current assets totals
+    const nonCurrentAssets = {
+      land: 0,
+      buildings: 0,
+      equipment: 0,
+      livestock: 0,
+      total: 0
+    };
+    
+    // Process asset data
+    assetData.forEach(asset => {
+      if (asset.asset_type === 'Cash') {
+        currentAssets.cash += Number(asset.value);
+      } else if (asset.asset_type === 'Accounts Receivable') {
+        currentAssets.accountsReceivable += Number(asset.value);
+      } else if (asset.asset_type === 'Inventory') {
+        currentAssets.inventory += Number(asset.value);
+      } else if (asset.asset_type === 'Land') {
+        nonCurrentAssets.land += Number(asset.value);
+      } else if (asset.asset_type === 'Buildings') {
+        nonCurrentAssets.buildings += Number(asset.value);
+      } else if (asset.asset_type === 'Equipment') {
+        nonCurrentAssets.equipment += Number(asset.value);
+      } else if (asset.asset_type === 'Livestock') {
+        nonCurrentAssets.livestock += Number(asset.value);
+      }
+    });
+    
+    // Calculate totals
+    currentAssets.total = currentAssets.cash + currentAssets.accountsReceivable + currentAssets.inventory;
+    nonCurrentAssets.total = nonCurrentAssets.land + nonCurrentAssets.buildings + 
+                             nonCurrentAssets.equipment + nonCurrentAssets.livestock;
+    
+    const totalAssets = currentAssets.total + nonCurrentAssets.total;
+    
+    // Calculate liability totals
+    const currentLiabilities = {
+      accountsPayable: 0,
+      shortTermDebt: 0,
+      total: 0
+    };
+    
+    const longTermLiabilities = {
+      loans: 0,
+      mortgages: 0,
+      total: 0
+    };
+    
+    // Process liability data
+    liabilityData.forEach(liability => {
+      if (liability.liability_type === 'Accounts Payable') {
+        currentLiabilities.accountsPayable += Number(liability.value);
+      } else if (liability.liability_type === 'Short Term Debt') {
+        currentLiabilities.shortTermDebt += Number(liability.value);
+      } else if (liability.liability_type === 'Loans') {
+        longTermLiabilities.loans += Number(liability.value);
+      } else if (liability.liability_type === 'Mortgages') {
+        longTermLiabilities.mortgages += Number(liability.value);
+      }
+    });
+    
+    // Calculate totals
+    currentLiabilities.total = currentLiabilities.accountsPayable + currentLiabilities.shortTermDebt;
+    longTermLiabilities.total = longTermLiabilities.loans + longTermLiabilities.mortgages;
+    
+    const totalLiabilities = currentLiabilities.total + longTermLiabilities.total;
+    
+    // Calculate equity
+    const ownersEquity = totalAssets - totalLiabilities;
+    
+    return { 
+      title: 'Balance Sheet',
+      date: new Date().toISOString(),
+      assets: {
+        currentAssets,
+        nonCurrentAssets,
+        totalAssets
       },
-      nonCurrentAssets: {
-        land: 150000,
-        buildings: 120000,
-        equipment: 85000,
-        livestock: 95000,
-        total: 450000
+      liabilities: {
+        currentLiabilities,
+        longTermLiabilities,
+        totalLiabilities
       },
-      totalAssets: 485900
-    },
-    liabilities: {
-      currentLiabilities: {
-        accountsPayable: 8500,
-        shortTermDebt: 12000,
-        total: 20500
+      equity: {
+        ownersEquity,
+        totalEquity: ownersEquity
+      }
+    };
+  } catch (error) {
+    console.error('Error fetching balance sheet data:', error);
+    // Return default structure with zeros in case of error
+    return { 
+      title: 'Balance Sheet',
+      date: new Date().toISOString(),
+      assets: {
+        currentAssets: {
+          cash: 0,
+          accountsReceivable: 0,
+          inventory: 0,
+          total: 0
+        },
+        nonCurrentAssets: {
+          land: 0,
+          buildings: 0,
+          equipment: 0,
+          livestock: 0,
+          total: 0
+        },
+        totalAssets: 0
       },
-      longTermLiabilities: {
-        loans: 85000,
-        mortgages: 120000,
-        total: 205000
+      liabilities: {
+        currentLiabilities: {
+          accountsPayable: 0,
+          shortTermDebt: 0,
+          total: 0
+        },
+        longTermLiabilities: {
+          loans: 0,
+          mortgages: 0,
+          total: 0
+        },
+        totalLiabilities: 0
       },
-      totalLiabilities: 225500
-    },
-    equity: {
-      ownersEquity: 260400,
-      totalEquity: 260400
-    }
-  };
+      equity: {
+        ownersEquity: 0,
+        totalEquity: 0
+      },
+      error: error.message
+    };
+  }
 }
 
 async function fetchCashFlowData(dateRange, startDate, endDate) {
-  // Implement data fetching logic for cash flow statement
-  return { 
-    title: 'Cash Flow Statement',
-    period: formatDateRangeForTitle(dateRange, startDate, endDate),
-    operatingActivities: {
-      receipts: 28500,
-      payments: -22000,
-      netCashFromOperations: 6500
-    },
-    investingActivities: {
-      assetSales: 5000,
-      assetPurchases: -12000,
-      netCashFromInvesting: -7000
-    },
-    financingActivities: {
-      loanProceeds: 15000,
-      loanPayments: -8500,
-      netCashFromFinancing: 6500
-    },
-    netCashFlow: 6000,
-    beginningCash: 6500,
-    endingCash: 12500
-  };
+  try {
+    // Convert date range to actual dates if necessary
+    const { from, to } = getDateRangeValues(dateRange, startDate, endDate);
+    
+    // Fetch cash flow data from the database
+    const { data: cashFlowData, error: cashFlowError } = await supabase
+      .from('cash_flow')
+      .select('*')
+      .gte('date', from)
+      .lte('date', to);
+    
+    if (cashFlowError) throw cashFlowError;
+    
+    // Initialize categories
+    const operatingActivities = {
+      receipts: 0,
+      payments: 0,
+      netCashFromOperations: 0
+    };
+    
+    const investingActivities = {
+      assetSales: 0,
+      assetPurchases: 0,
+      netCashFromInvesting: 0
+    };
+    
+    const financingActivities = {
+      loanProceeds: 0,
+      loanPayments: 0,
+      netCashFromFinancing: 0
+    };
+    
+    // Process cash flow data
+    cashFlowData.forEach(item => {
+      if (item.category === 'Operating Receipts') {
+        operatingActivities.receipts += Number(item.amount);
+      } else if (item.category === 'Operating Payments') {
+        operatingActivities.payments += Number(item.amount);
+      } else if (item.category === 'Asset Sales') {
+        investingActivities.assetSales += Number(item.amount);
+      } else if (item.category === 'Asset Purchases') {
+        investingActivities.assetPurchases += Number(item.amount);
+      } else if (item.category === 'Loan Proceeds') {
+        financingActivities.loanProceeds += Number(item.amount);
+      } else if (item.category === 'Loan Payments') {
+        financingActivities.loanPayments += Number(item.amount);
+      }
+    });
+    
+    // Calculate net values
+    operatingActivities.netCashFromOperations = operatingActivities.receipts + operatingActivities.payments;
+    investingActivities.netCashFromInvesting = investingActivities.assetSales + investingActivities.assetPurchases;
+    financingActivities.netCashFromFinancing = financingActivities.loanProceeds + financingActivities.loanPayments;
+    
+    // Calculate total cash flow
+    const netCashFlow = operatingActivities.netCashFromOperations + 
+                        investingActivities.netCashFromInvesting + 
+                        financingActivities.netCashFromFinancing;
+    
+    // Get beginning cash
+    const { data: beginningCashData, error: beginningCashError } = await supabase
+      .from('financial_stats')
+      .select('value')
+      .eq('key', 'beginning_cash')
+      .single();
+    
+    if (beginningCashError) throw beginningCashError;
+    
+    const beginningCash = beginningCashData ? Number(beginningCashData.value) : 0;
+    const endingCash = beginningCash + netCashFlow;
+    
+    return { 
+      title: 'Cash Flow Statement',
+      period: formatDateRangeForTitle(dateRange, startDate, endDate),
+      operatingActivities,
+      investingActivities,
+      financingActivities,
+      netCashFlow,
+      beginningCash,
+      endingCash
+    };
+  } catch (error) {
+    console.error('Error fetching cash flow data:', error);
+    // Return default structure with zeros in case of error
+    return { 
+      title: 'Cash Flow Statement',
+      period: formatDateRangeForTitle(dateRange, startDate, endDate),
+      operatingActivities: {
+        receipts: 0,
+        payments: 0,
+        netCashFromOperations: 0
+      },
+      investingActivities: {
+        assetSales: 0,
+        assetPurchases: 0,
+        netCashFromInvesting: 0
+      },
+      financingActivities: {
+        loanProceeds: 0,
+        loanPayments: 0,
+        netCashFromFinancing: 0
+      },
+      netCashFlow: 0,
+      beginningCash: 0,
+      endingCash: 0,
+      error: error.message
+    };
+  }
 }
 
 async function fetchExpenseReportData(dateRange, startDate, endDate) {
-  // Implement data fetching logic for expense report
-  return { 
-    title: 'Expense Report',
-    period: formatDateRangeForTitle(dateRange, startDate, endDate),
-    expenses: [
-      { category: 'Feed', amount: 7500, percentage: 35 },
-      { category: 'Labor', amount: 6000, percentage: 28 },
-      { category: 'Veterinary', amount: 2200, percentage: 10 },
-      { category: 'Utilities', amount: 1800, percentage: 8 },
-      { category: 'Maintenance', amount: 2500, percentage: 12 },
-      { category: 'Other', amount: 1500, percentage: 7 }
-    ],
-    summary: {
-      totalExpenses: 21500,
-      averageMonthly: 7167,
-      largestCategory: 'Feed',
-      largestAmount: 7500
-    }
-  };
+  try {
+    // Convert date range to actual dates if necessary
+    const { from, to } = getDateRangeValues(dateRange, startDate, endDate);
+    
+    // Fetch expense data from the database
+    const { data: expenseData, error: expenseError } = await supabase
+      .from('expenses')
+      .select('*')
+      .gte('date', from)
+      .lte('date', to);
+    
+    if (expenseError) throw expenseError;
+    
+    // Group expenses by category
+    const categories = {};
+    let totalExpenses = 0;
+    
+    // Process expense data
+    expenseData.forEach(expense => {
+      const category = expense.category || 'Other';
+      if (!categories[category]) {
+        categories[category] = 0;
+      }
+      
+      const amount = Number(expense.amount);
+      categories[category] += amount;
+      totalExpenses += amount;
+    });
+    
+    // Calculate category percentages and create array format
+    const expenses = Object.keys(categories).map(category => {
+      const amount = categories[category];
+      const percentage = totalExpenses > 0 ? Math.round((amount / totalExpenses) * 100) : 0;
+      
+      return {
+        category,
+        amount,
+        percentage
+      };
+    }).sort((a, b) => b.amount - a.amount);
+    
+    // Calculate monthly averages
+    // Get the number of months covered by the date range
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    const monthDiff = (toDate.getFullYear() - fromDate.getFullYear()) * 12 + 
+                      (toDate.getMonth() - fromDate.getMonth()) + 1;
+    
+    const averageMonthly = totalExpenses / (monthDiff || 1);
+    
+    // Find largest category
+    const largestCategory = expenses.length > 0 ? expenses[0].category : '';
+    const largestAmount = expenses.length > 0 ? expenses[0].amount : 0;
+    
+    return { 
+      title: 'Expense Report',
+      period: formatDateRangeForTitle(dateRange, startDate, endDate),
+      expenses,
+      summary: {
+        totalExpenses,
+        averageMonthly,
+        largestCategory,
+        largestAmount
+      }
+    };
+  } catch (error) {
+    console.error('Error fetching expense report data:', error);
+    // Return default structure with zeros in case of error
+    return { 
+      title: 'Expense Report',
+      period: formatDateRangeForTitle(dateRange, startDate, endDate),
+      expenses: [],
+      summary: {
+        totalExpenses: 0,
+        averageMonthly: 0,
+        largestCategory: '',
+        largestAmount: 0
+      },
+      error: error.message
+    };
+  }
 }
 
 async function fetchRevenueReportData(dateRange, startDate, endDate) {
-  // Implement data fetching logic for revenue report
-  return { 
-    title: 'Revenue Report',
-    period: formatDateRangeForTitle(dateRange, startDate, endDate),
-    revenue: [
-      { source: 'Milk Sales', amount: 15000, percentage: 58 },
-      { source: 'Livestock Sales', amount: 8500, percentage: 33 },
-      { source: 'Other Income', amount: 2500, percentage: 9 }
-    ],
-    summary: {
-      totalRevenue: 26000,
-      averageMonthly: 8667,
-      highestSource: 'Milk Sales',
-      highestAmount: 15000,
-      growthRate: 5.2
+  try {
+    // Convert date range to actual dates if necessary
+    const { from, to } = getDateRangeValues(dateRange, startDate, endDate);
+    
+    // Fetch current period revenue data
+    const { data: revenueData, error: revenueError } = await supabase
+      .from('revenue_data')
+      .select('*')
+      .gte('date', from)
+      .lte('date', to);
+    
+    if (revenueError) throw revenueError;
+    
+    // To calculate growth rate, fetch previous period data
+    // Calculate previous period dates (same length as current period but before)
+    const currentFrom = new Date(from);
+    const currentTo = new Date(to);
+    const periodLength = currentTo.getTime() - currentFrom.getTime();
+    
+    const previousTo = new Date(currentFrom.getTime() - 1); // Day before current period starts
+    const previousFrom = new Date(previousTo.getTime() - periodLength);
+    
+    const { data: previousData, error: previousError } = await supabase
+      .from('revenue_data')
+      .select('*')
+      .gte('date', previousFrom.toISOString())
+      .lte('date', previousTo.toISOString());
+    
+    if (previousError) throw previousError;
+    
+    // Group revenue by source
+    const sources = {};
+    let totalRevenue = 0;
+    
+    // Process revenue data
+    revenueData.forEach(item => {
+      const source = item.category || 'Other Income';
+      if (!sources[source]) {
+        sources[source] = 0;
+      }
+      
+      const amount = Number(item.amount);
+      sources[source] += amount;
+      totalRevenue += amount;
+    });
+    
+    // Calculate source percentages and create array format
+    const revenue = Object.keys(sources).map(source => {
+      const amount = sources[source];
+      const percentage = totalRevenue > 0 ? Math.round((amount / totalRevenue) * 100) : 0;
+      
+      return {
+        source,
+        amount,
+        percentage
+      };
+    }).sort((a, b) => b.amount - a.amount);
+    
+    // Calculate monthly averages
+    // Get the number of months covered by the date range
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    const monthDiff = (toDate.getFullYear() - fromDate.getFullYear()) * 12 + 
+                      (toDate.getMonth() - fromDate.getMonth()) + 1;
+    
+    const averageMonthly = totalRevenue / (monthDiff || 1);
+    
+    // Find highest source
+    const highestSource = revenue.length > 0 ? revenue[0].source : '';
+    const highestAmount = revenue.length > 0 ? revenue[0].amount : 0;
+    
+    // Calculate growth rate
+    let totalPreviousRevenue = 0;
+    previousData.forEach(item => {
+      totalPreviousRevenue += Number(item.amount);
+    });
+    
+    let growthRate = 0;
+    if (totalPreviousRevenue > 0) {
+      growthRate = ((totalRevenue - totalPreviousRevenue) / totalPreviousRevenue) * 100;
+    } else if (totalRevenue > 0) {
+      growthRate = 100; // If previous is 0 and current is positive, 100% growth
     }
-  };
+    
+    return { 
+      title: 'Revenue Report',
+      period: formatDateRangeForTitle(dateRange, startDate, endDate),
+      revenue,
+      summary: {
+        totalRevenue,
+        averageMonthly,
+        highestSource,
+        highestAmount,
+        growthRate: parseFloat(growthRate.toFixed(1))
+      }
+    };
+  } catch (error) {
+    console.error('Error fetching revenue report data:', error);
+    // Return default structure with zeros in case of error
+    return { 
+      title: 'Revenue Report',
+      period: formatDateRangeForTitle(dateRange, startDate, endDate),
+      revenue: [],
+      summary: {
+        totalRevenue: 0,
+        averageMonthly: 0,
+        highestSource: '',
+        highestAmount: 0,
+        growthRate: 0
+      },
+      error: error.message
+    };
+  }
 }
 
 async function fetchTaxReportData(dateRange, startDate, endDate) {
-  // Implement data fetching logic for tax report
-  return { 
-    title: 'Tax Report',
-    period: formatDateRangeForTitle(dateRange, startDate, endDate),
-    taxableIncome: {
-      grossRevenue: 26000,
-      allowableDeductions: 21500,
-      netTaxableIncome: 4500
-    },
-    deductions: [
-      { category: 'Feed Expenses', amount: 7500 },
-      { category: 'Labor Costs', amount: 6000 },
-      { category: 'Veterinary Services', amount: 2200 },
-      { category: 'Utilities', amount: 1800 },
-      { category: 'Maintenance', amount: 2500 },
-      { category: 'Depreciation', amount: 1500 }
-    ],
-    taxLiability: {
-      federalTax: 675,
-      stateTax: 225,
-      totalTaxDue: 900,
-      effectiveTaxRate: 20
-    }
-  };
+  try {
+    // Convert date range to actual dates if necessary
+    const { from, to } = getDateRangeValues(dateRange, startDate, endDate);
+    
+    // Fetch revenue data from the database
+    const { data: revenueData, error: revenueError } = await supabase
+      .from('revenue_data')
+      .select('*')
+      .gte('date', from)
+      .lte('date', to);
+    
+    if (revenueError) throw revenueError;
+    
+    // Fetch expense data from the database
+    const { data: expenseData, error: expenseError } = await supabase
+      .from('expenses')
+      .select('*')
+      .gte('date', from)
+      .lte('date', to);
+    
+    if (expenseError) throw expenseError;
+    
+    // Calculate gross revenue
+    let grossRevenue = 0;
+    revenueData.forEach(item => {
+      grossRevenue += Number(item.amount);
+    });
+    
+    // Group deductions by category
+    const deductionsByCategory = {};
+    let totalDeductions = 0;
+    
+    // Process expense data as deductions
+    expenseData.forEach(expense => {
+      const category = expense.category || 'Other';
+      const deductionCategory = category + ' Expenses';
+      
+      if (!deductionsByCategory[deductionCategory]) {
+        deductionsByCategory[deductionCategory] = 0;
+      }
+      
+      const amount = Number(expense.amount);
+      deductionsByCategory[deductionCategory] += amount;
+      totalDeductions += amount;
+    });
+    
+    // Create deductions array
+    const deductions = Object.keys(deductionsByCategory).map(category => ({
+      category,
+      amount: deductionsByCategory[category]
+    })).sort((a, b) => b.amount - a.amount);
+    
+    // Calculate taxable income
+    const netTaxableIncome = grossRevenue - totalDeductions;
+    
+    // Calculate tax rates (this would typically come from tax tables or settings)
+    const federalRate = 0.15; // 15% federal tax rate for example
+    const stateRate = 0.05;   // 5% state tax rate for example
+    
+    // Calculate tax liability
+    const federalTax = Math.max(0, netTaxableIncome * federalRate);
+    const stateTax = Math.max(0, netTaxableIncome * stateRate);
+    const totalTaxDue = federalTax + stateTax;
+    
+    // Calculate effective tax rate
+    const effectiveTaxRate = netTaxableIncome > 0 
+                             ? Math.round((totalTaxDue / netTaxableIncome) * 100)
+                             : 0;
+    
+    return { 
+      title: 'Tax Report',
+      period: formatDateRangeForTitle(dateRange, startDate, endDate),
+      taxableIncome: {
+        grossRevenue,
+        allowableDeductions: totalDeductions,
+        netTaxableIncome
+      },
+      deductions,
+      taxLiability: {
+        federalTax,
+        stateTax,
+        totalTaxDue,
+        effectiveTaxRate
+      }
+    };
+  } catch (error) {
+    console.error('Error fetching tax report data:', error);
+    // Return default structure with zeros in case of error
+    return { 
+      title: 'Tax Report',
+      period: formatDateRangeForTitle(dateRange, startDate, endDate),
+      taxableIncome: {
+        grossRevenue: 0,
+        allowableDeductions: 0,
+        netTaxableIncome: 0
+      },
+      deductions: [],
+      taxLiability: {
+        federalTax: 0,
+        stateTax: 0,
+        totalTaxDue: 0,
+        effectiveTaxRate: 0
+      },
+      error: error.message
+    };
+  }
 }
 
 // Generate PDF report for financial data
@@ -1749,7 +2290,7 @@ function createFinancialCsvReport(reportType, data) {
       // Balance Sheet CSV
       csvContent = 'Balance Sheet\n';
       csvContent += `Date,${new Date(data.date).toLocaleDateString()}\n`;
-      csvContent += `Generated,${new Date().toISOString()}\n\n`;
+      csvContent += `Generated,${new Date().toLocaleDateString()}\n\n`;
       
       csvContent += 'Assets\n';
       csvContent += 'Current Assets\n';
@@ -1816,7 +2357,7 @@ function createFinancialCsvReport(reportType, data) {
       // Expense Report CSV
       csvContent = 'Expense Report\n';
       csvContent += `Period,${data.period}\n`;
-      csvContent += `Generated,${new Date().toISOString()}\n\n`;
+      csvContent += `Generated,${new Date().toLocaleDateString()}\n\n`;
       
       csvContent += 'Summary\n';
       csvContent += `Total Expenses,${data.summary.totalExpenses}\n`;
@@ -1836,7 +2377,7 @@ function createFinancialCsvReport(reportType, data) {
       // Revenue Report CSV
       csvContent = 'Revenue Report\n';
       csvContent += `Period,${data.period}\n`;
-      csvContent += `Generated,${new Date().toISOString()}\n\n`;
+      csvContent += `Generated,${new Date().toLocaleDateString()}\n\n`;
       
       csvContent += 'Summary\n';
       csvContent += `Total Revenue,${data.summary.totalRevenue}\n`;
@@ -1857,7 +2398,7 @@ function createFinancialCsvReport(reportType, data) {
       // Tax Report CSV
       csvContent = 'Tax Report\n';
       csvContent += `Period,${data.period}\n`;
-      csvContent += `Generated,${new Date().toISOString()}\n\n`;
+      csvContent += `Generated,${new Date().toLocaleDateString()}\n\n`;
       
       csvContent += 'Taxable Income\n';
       csvContent += `Gross Revenue,${data.taxableIncome.grossRevenue}\n`;
@@ -2516,7 +3057,7 @@ function createCsvReport(reportType, data) {
       // Monthly Report CSV
       csvContent = 'Monthly Production Report\n';
       csvContent += `Period,${formatDateStr(data.monthStart)} to ${formatDateStr(data.monthEnd)}\n`;
-      csvContent += `Generated,${new Date().toISOString()}\n\n`;
+      csvContent += `Generated,${new Date().toLocaleDateString()}\n\n`;
       
       csvContent += 'Summary\n';
       csvContent += `Total Monthly Production,${data.totalMilk}\n`;
@@ -2541,7 +3082,7 @@ function createCsvReport(reportType, data) {
       // Quality Report CSV
       csvContent = 'Milk Quality Report\n';
       csvContent += `Period,${formatDateStr(data.periodStart)} to ${formatDateStr(data.periodEnd)}\n`;
-      csvContent += `Generated,${new Date().toISOString()}\n\n`;
+      csvContent += `Generated,${new Date().toLocaleDateString()}\n\n`;
       
       csvContent += 'Summary\n';
       csvContent += `Total Samples,${data.sampleCount}\n`;
@@ -2567,7 +3108,7 @@ function createCsvReport(reportType, data) {
       // Compliance Report CSV
       csvContent = 'Compliance Report\n';
       csvContent += `Period,${formatDateStr(data.periodStart)} to ${formatDateStr(data.periodEnd)}\n`;
-      csvContent += `Generated,${new Date().toISOString()}\n\n`;
+      csvContent += `Generated,${new Date().toLocaleDateString()}\n\n`;
       
       csvContent += 'Summary\n';
       csvContent += `Total Samples,${data.compliance.totalSamples}\n`;
@@ -2595,7 +3136,7 @@ function createCsvReport(reportType, data) {
       break;
       
     default:
-      csvContent = `${reportType} Report\nGenerated,${new Date().toISOString()}\n\nSample milk production data for ${reportType}`;
+      csvContent = `${reportType} Report\nGenerated,${new Date().toLocaleDateString()}\n\nSample milk production data for ${reportType}`;
   }
   
   return new TextEncoder().encode(csvContent);

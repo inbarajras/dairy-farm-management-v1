@@ -7,6 +7,7 @@ import { getFinancialDashboardData, addCustomer, addExpense, addInvoice,
    updateInvoiceStatus, deleteInvoice, getInvoiceAgingSummary, generateInvoiceNumber, getCustomers, updateCustomer,
    deleteCustomer, getRevenueData, getRevenueCategoriesData, getRevenueSummary, getCustomersWithRevenue, 
    updateUpcomingPayroll } from './services/financialService';
+import { initializeRevenueTables } from './services/revenueUpdateService';
 import { generateFinancialReport } from './services/reportService';
 import { supabase } from '../lib/supabase';
 import LoadingSpinner from './LoadingSpinner';
@@ -589,6 +590,10 @@ const FinancesManagement = () => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
+        
+        // Initialize revenue tables before fetching data
+        await initializeRevenueTables();
+        
         const data = await getFinancialDashboardData();
         console.log('Financial dashboard data received:', data);
         console.log('Payroll employees data:', data.payroll.employees);
@@ -898,6 +903,9 @@ const FinancesManagement = () => {
   const fetchRevenueData = async (dateRangeFilter, customDate = null) => {
     try {
       setIsRevenueLoading(true);
+      
+      // Initialize or update the revenue tables first
+      await initializeRevenueTables();
       
       // Use the provided date or current date
       const effectiveDate = customDate || new Date();

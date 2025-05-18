@@ -852,3 +852,33 @@ CREATE TRIGGER update_inventory_item_timestamp
 BEFORE UPDATE ON inventory_items
 FOR EACH ROW
 EXECUTE FUNCTION update_last_updated();
+
+-- Add indexes for revenue_data and revenue_categories tables
+
+-- Add index for revenue_data table
+CREATE INDEX IF NOT EXISTS idx_revenue_data_year_month ON revenue_data(year, month);
+CREATE INDEX IF NOT EXISTS idx_revenue_data_year ON revenue_data(year);
+CREATE INDEX IF NOT EXISTS idx_revenue_data_created_at ON revenue_data(created_at);
+
+-- Add index for revenue_categories table
+CREATE INDEX IF NOT EXISTS idx_revenue_categories_name ON revenue_categories(name);
+CREATE INDEX IF NOT EXISTS idx_revenue_categories_value ON revenue_categories(value);
+CREATE INDEX IF NOT EXISTS idx_revenue_categories_created_at ON revenue_categories(created_at);
+
+-- Alter revenue_data table to add updated_at field with trigger
+ALTER TABLE revenue_data ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE;
+
+-- Add trigger for revenue_data updated_at
+CREATE TRIGGER update_revenue_data_updated_at
+BEFORE UPDATE ON revenue_data
+FOR EACH ROW
+EXECUTE PROCEDURE update_modified_column();
+
+-- Alter revenue_categories table to add updated_at field with trigger
+ALTER TABLE revenue_categories ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE;
+
+-- Add trigger for revenue_categories updated_at
+CREATE TRIGGER update_revenue_categories_updated_at
+BEFORE UPDATE ON revenue_categories
+FOR EACH ROW
+EXECUTE PROCEDURE update_modified_column();
