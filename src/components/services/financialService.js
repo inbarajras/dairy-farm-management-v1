@@ -1298,8 +1298,9 @@ export const processPayroll = async (payrollData) => {
     const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
     const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
     const paymentId = `PAY-${dateStr}-${randomStr}`;
-    console.log(payrollData);
-    // 1. Record the payroll batch
+    console.log('Processing payroll with data:', payrollData);
+    
+    // 1. Record the payroll batch in payroll_payments
     const { data: paymentData, error: paymentError } = await supabase
       .from('payroll_payments')
       .insert({
@@ -1315,6 +1316,62 @@ export const processPayroll = async (payrollData) => {
     if (paymentError) throw paymentError;
     
     const payrollPaymentId = paymentData[0].id;
+    console.log(`Created payroll payment with ID: ${payrollPaymentId}`);
+    
+    // 2. Record individual employee payment items in employee_payroll_items
+    if (payrollData.employees && payrollData.employees.length > 0) {
+      const payrollItems = payrollData.employees.map(emp => {
+        // Calculate pay period (for a monthly payment, it's typically the 1st to last day of month)
+        const paymentDate = new Date(payrollData.payment_date);
+        const payPeriodEnd = new Date(paymentDate);
+        
+        // For monthly payments, use first day of month to last day of month
+        let payPeriodStart;
+        if (payrollData.payment_type === 'Monthly Salary') {
+          payPeriodStart = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), 1);
+        } 
+        // For bi-weekly, use 2 weeks before payment date
+        else {
+          payPeriodStart = new Date(paymentDate);
+          payPeriodStart.setDate(payPeriodStart.getDate() - 14);
+        }
+        
+        return {
+          payroll_payment_id: payrollPaymentId,
+          employee_id: emp.employee_id,
+          salary_amount: emp.is_salaried ? emp.salary / 12 : null, // Monthly portion of annual salary
+          hourly_rate: !emp.is_salaried ? emp.hourly_rate : null,
+          hours_worked: emp.hours_worked || 0,
+          gross_pay: emp.gross_pay,
+          deductions: emp.deductions,
+          net_pay: emp.net_pay,
+          pay_period_start: payPeriodStart.toISOString().split('T')[0],
+          pay_period_end: payPeriodEnd.toISOString().split('T')[0]
+        };
+      });
+      
+      console.log(`Inserting ${payrollItems.length} employee payroll items`);
+      
+      const { data: itemsData, error: itemsError } = await supabase
+        .from('employee_payroll_items')
+        .insert(payrollItems)
+        .select();
+      
+      if (itemsError) {
+        console.error('Error inserting employee payroll items:', itemsError);
+        // If we fail to insert items, rollback the payment by setting status to 'Error'
+        await supabase
+          .from('payroll_payments')
+          .update({ status: 'Error' })
+          .eq('id', payrollPaymentId);
+        
+        throw itemsError;
+      }
+      
+      console.log(`Successfully inserted ${itemsData.length} employee payroll items`);
+    } else {
+      console.warn('No employee data provided for payroll processing');
+    }
     
     return payrollPaymentId;
   } catch (error) {
