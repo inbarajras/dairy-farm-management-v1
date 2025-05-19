@@ -826,9 +826,10 @@ export const generateFinancialReport = async (reportType, format, dateRange, sta
       
     if (error) throw error;
     
+    // Make sure we return the fileData along with the report metadata
     return {
       ...savedReport[0],
-      fileData: reportFile.fileData
+      fileData: reportFile.fileData // This ensures fileData is accessible for download
     };
   } catch (error) {
     console.error('Error generating financial report:', error);
@@ -937,17 +938,31 @@ function getDateRangeValues(dateRange, startDate, endDate) {
 // Data fetching functions for different report types
 async function fetchIncomeStatementData(dateRange, startDate, endDate) {
   try {
+    console.log('Fetching income statement data:', { dateRange, startDate, endDate });
+    
     // Convert date range to actual dates if necessary
     const { from, to } = getDateRangeValues(dateRange, startDate, endDate);
     
-    // Fetch revenue data from the database
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    
+    console.log('Date range converted to:', { fromDate, toDate });
+    
+    // Fetch revenue data from the database - using month and year fields instead of date
+    const revenueQuery = `and(year.eq.${fromDate.getFullYear()},month.gte.${fromDate.getMonth() + 1}),and(year.eq.${toDate.getFullYear()},month.lte.${toDate.getMonth() + 1}),year.gt.${fromDate.getFullYear()},year.lt.${toDate.getFullYear()}`
+    console.log('Revenue data query for income statement:', revenueQuery);
+    
     const { data: revenueData, error: revenueError } = await supabase
       .from('revenue_data')
       .select('*')
-      .gte('date', from)
-      .lte('date', to);
+      .or(revenueQuery);
     
-    if (revenueError) throw revenueError;
+    if (revenueError) {
+      console.error('Error fetching revenue data for income statement:', revenueError);
+      throw revenueError;
+    }
+    
+    console.log(`Retrieved ${revenueData?.length || 0} revenue records for income statement`);
     
     // Fetch expense data from the database
     const { data: expenseData, error: expenseError } = await supabase
@@ -968,12 +983,13 @@ async function fetchIncomeStatementData(dateRange, startDate, endDate) {
     
     // Process revenue data
     revenueData.forEach(item => {
+      // Use income field for revenue (based on revenue_data table structure)
       if (item.category === 'Milk Sales') {
-        revenue.milkSales += Number(item.amount);
+        revenue.milkSales += Number(item.income || 0);
       } else if (item.category === 'Livestock Sales') {
-        revenue.livestockSales += Number(item.amount);
+        revenue.livestockSales += Number(item.income || 0);
       } else {
-        revenue.otherSales += Number(item.amount);
+        revenue.otherSales += Number(item.income || 0);
       }
     });
     
@@ -1400,17 +1416,31 @@ async function fetchExpenseReportData(dateRange, startDate, endDate) {
 
 async function fetchRevenueReportData(dateRange, startDate, endDate) {
   try {
+    console.log('Fetching revenue report data:', { dateRange, startDate, endDate });
+    
     // Convert date range to actual dates if necessary
     const { from, to } = getDateRangeValues(dateRange, startDate, endDate);
     
-    // Fetch current period revenue data
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    
+    console.log('Date range converted to:', { fromDate, toDate });
+    
+    // Fetch current period revenue data - using month and year fields instead of date
+    const revenueQuery = `and(year.eq.${fromDate.getFullYear()},month.gte.${fromDate.getMonth() + 1}),and(year.eq.${toDate.getFullYear()},month.lte.${toDate.getMonth() + 1}),year.gt.${fromDate.getFullYear()},year.lt.${toDate.getFullYear()}`
+    console.log('Revenue data query:', revenueQuery);
+    
     const { data: revenueData, error: revenueError } = await supabase
       .from('revenue_data')
       .select('*')
-      .gte('date', from)
-      .lte('date', to);
+      .or(revenueQuery);
     
-    if (revenueError) throw revenueError;
+    if (revenueError) {
+      console.error('Error fetching revenue data:', revenueError);
+      throw revenueError;
+    }
+    
+    console.log(`Retrieved ${revenueData?.length || 0} revenue records`);
     
     // To calculate growth rate, fetch previous period data
     // Calculate previous period dates (same length as current period but before)
@@ -1421,13 +1451,19 @@ async function fetchRevenueReportData(dateRange, startDate, endDate) {
     const previousTo = new Date(currentFrom.getTime() - 1); // Day before current period starts
     const previousFrom = new Date(previousTo.getTime() - periodLength);
     
-    const { data: previousData, error: previousError } = await supabase
+    // Use month and year fields instead of date
+    let previousData = [];
+    const { data: fetchedPreviousData, error: previousError } = await supabase
       .from('revenue_data')
       .select('*')
-      .gte('date', previousFrom.toISOString())
-      .lte('date', previousTo.toISOString());
+      .or(`and(year.eq.${previousFrom.getFullYear()},month.gte.${previousFrom.getMonth() + 1}),and(year.eq.${previousTo.getFullYear()},month.lte.${previousTo.getMonth() + 1}),year.gt.${previousFrom.getFullYear()},year.lt.${previousTo.getFullYear()}`);
     
-    if (previousError) throw previousError;
+    if (previousError) {
+      console.error('Error fetching previous revenue data:', previousError);
+      // Continue without previous data instead of throwing
+    } else {
+      previousData = fetchedPreviousData || [];
+    }
     
     // Group revenue by source
     const sources = {};
@@ -1435,12 +1471,14 @@ async function fetchRevenueReportData(dateRange, startDate, endDate) {
     
     // Process revenue data
     revenueData.forEach(item => {
+      // Revenue data may have income field instead of amount field
       const source = item.category || 'Other Income';
       if (!sources[source]) {
         sources[source] = 0;
       }
       
-      const amount = Number(item.amount);
+      // Use income field for revenue (based on revenueUpdateService.js structure)
+      const amount = Number(item.income || 0);
       sources[source] += amount;
       totalRevenue += amount;
     });
@@ -1459,8 +1497,6 @@ async function fetchRevenueReportData(dateRange, startDate, endDate) {
     
     // Calculate monthly averages
     // Get the number of months covered by the date range
-    const fromDate = new Date(from);
-    const toDate = new Date(to);
     const monthDiff = (toDate.getFullYear() - fromDate.getFullYear()) * 12 + 
                       (toDate.getMonth() - fromDate.getMonth()) + 1;
     
@@ -1470,10 +1506,11 @@ async function fetchRevenueReportData(dateRange, startDate, endDate) {
     const highestSource = revenue.length > 0 ? revenue[0].source : '';
     const highestAmount = revenue.length > 0 ? revenue[0].amount : 0;
     
-    // Calculate growth rate
+    // Calculate growth rate 
     let totalPreviousRevenue = 0;
     previousData.forEach(item => {
-      totalPreviousRevenue += Number(item.amount);
+      // Use income field for previous revenue data as well
+      totalPreviousRevenue += Number(item.income || 0);
     });
     
     let growthRate = 0;
@@ -1516,17 +1553,31 @@ async function fetchRevenueReportData(dateRange, startDate, endDate) {
 
 async function fetchTaxReportData(dateRange, startDate, endDate) {
   try {
+    console.log('Fetching tax report data:', { dateRange, startDate, endDate });
+    
     // Convert date range to actual dates if necessary
     const { from, to } = getDateRangeValues(dateRange, startDate, endDate);
     
-    // Fetch revenue data from the database
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    
+    console.log('Date range converted to:', { fromDate, toDate });
+    
+    // Fetch revenue data from the database - using month and year fields instead of date
+    const revenueQuery = `and(year.eq.${fromDate.getFullYear()},month.gte.${fromDate.getMonth() + 1}),and(year.eq.${toDate.getFullYear()},month.lte.${toDate.getMonth() + 1}),year.gt.${fromDate.getFullYear()},year.lt.${toDate.getFullYear()}`
+    console.log('Revenue data query for tax report:', revenueQuery);
+    
     const { data: revenueData, error: revenueError } = await supabase
       .from('revenue_data')
       .select('*')
-      .gte('date', from)
-      .lte('date', to);
+      .or(revenueQuery);
     
-    if (revenueError) throw revenueError;
+    if (revenueError) {
+      console.error('Error fetching revenue data for tax report:', revenueError);
+      throw revenueError;
+    }
+    
+    console.log(`Retrieved ${revenueData?.length || 0} revenue records for tax report`);
     
     // Fetch expense data from the database
     const { data: expenseData, error: expenseError } = await supabase
@@ -1540,7 +1591,8 @@ async function fetchTaxReportData(dateRange, startDate, endDate) {
     // Calculate gross revenue
     let grossRevenue = 0;
     revenueData.forEach(item => {
-      grossRevenue += Number(item.amount);
+      // Use income field for revenue (based on revenue_data table structure)
+      grossRevenue += Number(item.income || 0);
     });
     
     // Group deductions by category

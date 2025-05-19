@@ -977,6 +977,11 @@ const FinancesManagement = () => {
         dateRange === 'custom' ? endDate : null
       );
       
+      // Validate report contains fileData
+      if (!report.fileData) {
+        throw new Error('Report generated but file data is missing');
+      }
+      
       // Add the new report to the list of generated reports
       setGeneratedReports(prevReports => [report, ...prevReports]);
       
@@ -1030,14 +1035,30 @@ const FinancesManagement = () => {
   // Download generated report
   const handleDownloadReport = (report) => {
     try {
+      // Check if fileData exists
+      if (!report.fileData) {
+        console.error('Report file data is missing');
+        setReportError('Report data is missing. Please try generating the report again.');
+        return;
+      }
+      
+      // Determine the correct MIME type based on the format
+      let mimeType;
+      let fileExtension;
+      
+      if (report.format === 'pdf') {
+        mimeType = 'application/pdf';
+        fileExtension = 'pdf';
+      } else if (report.format === 'excel' || report.format === 'xlsx') {
+        mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        fileExtension = 'xlsx';
+      } else {
+        mimeType = 'text/csv';
+        fileExtension = 'csv';
+      }
+      
       // Create a blob from the report file data
-      const blob = new Blob([report.fileData], { 
-        type: report.format === 'pdf' 
-          ? 'application/pdf' 
-          : report.format === 'excel' || report.format === 'xlsx'
-            ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            : 'text/csv'
-      });
+      const blob = new Blob([report.fileData], { type: mimeType });
       
       // Create a URL for the blob
       const url = URL.createObjectURL(blob);
@@ -1045,7 +1066,13 @@ const FinancesManagement = () => {
       // Create a temporary link element to trigger the download
       const link = document.createElement('a');
       link.href = url;
-      link.download = report.file_path.split('/').pop() || `report-${new Date().toISOString().split('T')[0]}.${report.format}`;
+      
+      // Create a filename for the download
+      const filename = report.file_path ? 
+        report.file_path.split('/').pop() : 
+        `${report.report_type}-report-${new Date().toISOString().split('T')[0]}.${fileExtension}`;
+      
+      link.download = filename;
       document.body.appendChild(link);
       
       // Trigger the download
@@ -3210,11 +3237,11 @@ const FinancesManagement = () => {
                         className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                       >
                         <option value="incomeStatement">Income Statement</option>
-                        <option value="balanceSheet">Balance Sheet</option>
-                        <option value="cashFlow">Cash Flow Statement</option>
+                        {/* <option value="balanceSheet">Balance Sheet</option>
+                        <option value="cashFlow">Cash Flow Statement</option> */}
                         <option value="expenseReport">Expense Report</option>
-                        <option value="revenueReport">Revenue Report</option>
-                        <option value="taxReport">Tax Report</option>
+                        {/* <option value="revenueReport">Revenue Report</option>
+                        <option value="taxReport">Tax Report</option> */}
                       </select>
                     </div>
                     

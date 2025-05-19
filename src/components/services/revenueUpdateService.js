@@ -70,6 +70,11 @@ export const updateRevenueData = async () => {
     // Calculate profit for each month
     Object.keys(monthlyData).forEach(key => {
       monthlyData[key].profit = monthlyData[key].income - monthlyData[key].expenses;
+      
+      // Add date as the first day of the month for compatibility with existing code
+      const year = monthlyData[key].year;
+      const month = monthlyData[key].month.padStart(2, '0');
+      monthlyData[key].date = `${year}-${month}-01`;
     });
     
     // Upsert data into revenue_data table
@@ -78,7 +83,8 @@ export const updateRevenueData = async () => {
       year: item.year,
       income: item.income,
       expenses: item.expenses,
-      profit: item.profit
+      profit: item.profit,
+      date: item.date
     }));
     
     if (upsertData.length > 0) {
