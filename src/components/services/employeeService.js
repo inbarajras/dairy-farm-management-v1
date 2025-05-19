@@ -392,7 +392,7 @@ export const getEmployeeShifts = async (weekStart) => {
       const weekStartDate = new Date(weekStart);
       // Last day of the week (6 days after the start)
       const weekEndDate = new Date(weekStart);
-      weekEndDate.setDate(weekEndDate.getDate() + 6);
+      weekEndDate.setDate(weekEndDate.getDate() + 7);
       
       // Filter shifts to include only those in the current week
       relevantData.forEach(record => {
@@ -485,8 +485,8 @@ export const getEmployeePerformance = async () => {
       for (const weekStart of weeks) {
         const formattedWeekStart = weekStart.toISOString().split('T')[0];
         
-        // Get the days of this week that fall within the date range and are selected working days
-        const weekDays = getDaysInWeek(weekStart, dateRange.startDate, dateRange.endDate, dateRange.workingDays);
+        // Get all days of this week that fall within the date range, regardless of working days selection
+        const weekDays = getAllDaysInWeek(weekStart, dateRange.startDate, dateRange.endDate);
         
         if (weekDays.length === 0) continue; // Skip if no days in this week
         
@@ -572,9 +572,10 @@ export const getEmployeePerformance = async () => {
     return result;
   };
   
-  // Get days in a week that fall within a date range and are selected working days
+  // Get days in a week that fall within a date range
   const getDaysInWeek = (weekStart, rangeStart, rangeEnd, workingDays) => {
     const result = [];
+    
     const start = new Date(rangeStart);
     const end = new Date(rangeEnd);
     
@@ -585,13 +586,36 @@ export const getEmployeePerformance = async () => {
     for (let i = 0; i < 7; i++) {
       const dayOfWeek = current.getDay(); // 0 = Sunday, 1 = Monday, ...
       const dayName = getDayName(dayOfWeek);
+      const dayAbbr = getDayAbbreviation(dayOfWeek);
       
       // Check if this day is within the date range and is a working day
-      if (
-        current >= start && 
-        current <= end && 
-        workingDays[getDayAbbreviation(dayOfWeek)]
-      ) {
+      if (current >= start && current <= end && workingDays[dayAbbr]) {
+        // This is a working day
+        result.push(new Date(current));
+      }
+      
+      // Move to next day
+      current.setDate(current.getDate() + 1);
+    }
+    
+    return result;
+  };
+  
+  // Get all days in a week that fall within a date range, ignoring working days
+  const getAllDaysInWeek = (weekStart, rangeStart, rangeEnd) => {
+    const result = [];
+    
+    const start = new Date(rangeStart);
+    const end = new Date(rangeEnd);
+    
+    // Clone weekStart to avoid modifying the original
+    const current = new Date(weekStart);
+    
+    // Check each day of the week
+    for (let i = 0; i < 7; i++) {
+      // Check if this day is within the date range
+      if (current >= start && current <= end) {
+        // Add all days within the date range
         result.push(new Date(current));
       }
       

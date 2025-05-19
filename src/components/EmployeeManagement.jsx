@@ -22,6 +22,7 @@ import {
   getEmployeePerformanceReviews
 } from './services/employeeService';
 import { getEmployeePayrollHistory, getEmployeeSalaryHistory } from './services/financialService';
+import { getShiftTemplates, addShiftTemplate, updateShiftTemplate, deleteShiftTemplate } from './services/shiftTemplateService';
 import generatePayslipPDF from '../utils/pdfGenerator';
 import emp from '../assets/images/emp.jpg';
 import LoadingSpinner from './LoadingSpinner';
@@ -3116,11 +3117,8 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
     const [templateToEdit, setTemplateToEdit] = useState(null);
     
     // Shift templates state
-    const [shiftTemplates, setShiftTemplates] = useState([
-      { id: 'morning', name: 'Morning Shift', start_time: '06:00', end_time: '14:00' },
-      { id: 'day', name: 'Day Shift', start_time: '08:00', end_time: '17:00' },
-      { id: 'evening', name: 'Evening Shift', start_time: '14:00', end_time: '22:00' }
-    ]);
+    const [shiftTemplates, setShiftTemplates] = useState([]);
+    const [templatesLoading, setTemplatesLoading] = useState(true);
     
     // Quick Assign state
     const [assignData, setAssignData] = useState({
@@ -3154,6 +3152,23 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
     useEffect(() => {
       setLocalShiftsData(shiftsData);
     }, [shiftsData]);
+    
+    // Load shift templates from the database
+    useEffect(() => {
+      const loadShiftTemplates = async () => {
+        try {
+          setTemplatesLoading(true);
+          const templates = await getShiftTemplates();
+          setShiftTemplates(templates);
+          setTemplatesLoading(false);
+        } catch (error) {
+          console.error('Error loading shift templates:', error);
+          setTemplatesLoading(false);
+        }
+      };
+      
+      loadShiftTemplates();
+    }, []);
     
     // Load shifts data for the selected date
     const loadShiftsForDate = async (date) => {
@@ -3206,24 +3221,41 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
     };
     
     // Add or edit shift template
-    const handleTemplateSubmit = (template) => {
-      if (template.id) {
-        // Edit existing template
-        setShiftTemplates(prev => 
-          prev.map(t => t.id === template.id ? template : t)
-        );
-      } else {
-        // Add new template
-        const newId = Math.random().toString(36).substring(2, 9);
-        setShiftTemplates(prev => [...prev, { ...template, id: newId }]);
+    const handleTemplateSubmit = async (template) => {
+      try {
+        if (template.id) {
+          // Edit existing template
+          await updateShiftTemplate(template.id, template);
+          setShiftTemplates(prev => 
+            prev.map(t => t.id === template.id ? template : t)
+          );
+        } else {
+          // Add new template - remove empty id field to let Supabase generate a UUID
+          const templateData = {...template};
+          delete templateData.id;
+          
+          const newTemplate = await addShiftTemplate(templateData);
+          setShiftTemplates(prev => [...prev, newTemplate]);
+        }
+        setShowTemplateModal(false);
+        setTemplateToEdit(null);
+      } catch (error) {
+        console.error('Error saving shift template:', error);
+        // Show error message to user
+        alert('Failed to save shift template. Please try again.');
       }
-      setShowTemplateModal(false);
-      setTemplateToEdit(null);
     };
     
     // Delete shift template
-    const handleDeleteTemplate = (templateId) => {
-      setShiftTemplates(prev => prev.filter(t => t.id !== templateId));
+    const handleDeleteTemplate = async (templateId) => {
+      try {
+        await deleteShiftTemplate(templateId);
+        setShiftTemplates(prev => prev.filter(t => t.id !== templateId));
+      } catch (error) {
+        console.error('Error deleting shift template:', error);
+        // Show error message to user
+        alert('Failed to delete shift template. Please try again.');
+      }
     };
     
     // Edit shift template
@@ -3235,6 +3267,9 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
     // Handle shift assignment submission
     const handleAssignShift = async (e) => {
       e.preventDefault();
+      
+      // Reset messages at the beginning
+      setAssignMessage({ type: '', text: '' });
       
       // Validate inputs
       if (!assignData.employeeId) {
@@ -3360,6 +3395,7 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
             date: shift.date,
             startTime: formatTime(shift.start_time),
             endTime: formatTime(shift.end_time),
+            shift_type: shift.shift_type,
             colorClass: getShiftColorClass(shift.shift_type)
           });
         });
@@ -3633,12 +3669,15 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
                         </td>
                         {days.map(day => {
                           const shift = employee.shifts.find(s => s.day === day);
+                          console.log("shift");
+                          console.log(employee.shifts);
+                          console.log(shift);
                           return (
                             <td key={day} className="border-b border-gray-200 px-6 py-4">
                               {shift ? (
                                 <div className={`px-2 py-2 rounded border ${shift.colorClass}`}>
                                   <div className="text-sm font-medium text-gray-900 text-center">
-                                    {shift.startTime} - {shift.endTime}
+                                    {`${shift.startTime} - ${shift.endTime}`}
                                   </div>
                                 </div>
                               ) : (
@@ -3732,38 +3771,48 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
               </button>
             </div>
             <div className="space-y-4">
-              {shiftTemplates.map(template => (
-                <div key={template.id} className="border border-gray-200 rounded-lg p-4 hover:border-green-200 transition-all duration-300">
-                  <div className="flex justify-between items-center mb-2">
-                    <h4 className="text-sm font-medium text-gray-800">{template.name}</h4>
-                    <div className="flex space-x-2">
-                      <button 
-                        onClick={() => handleEditTemplate(template)}
-                        className="text-sm text-blue-600 hover:text-blue-800 transition-colors duration-200"
-                      >
-                        Edit
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteTemplate(template.id)}
-                        className="text-sm text-red-600 hover:text-red-800 transition-colors duration-200"
-                      >
-                        Delete
-                      </button>
+              {templatesLoading ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-500"></div>
+                </div>
+              ) : shiftTemplates.length > 0 ? (
+                shiftTemplates.map(template => (
+                  <div key={template.id} className="border border-gray-200 rounded-lg p-4 hover:border-green-200 transition-all duration-300">
+                    <div className="flex justify-between items-center mb-2">
+                      <h4 className="text-sm font-medium text-gray-800">{template.name}</h4>
+                      <div className="flex space-x-2">
+                        <button 
+                          onClick={() => handleEditTemplate(template)}
+                          className="text-sm text-blue-600 hover:text-blue-800 transition-colors duration-200"
+                        >
+                          Edit
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteTemplate(template.id)}
+                          className="text-sm text-red-600 hover:text-red-800 transition-colors duration-200"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-600">
+                      {formatTime(template.start_time)} - {formatTime(template.end_time)}
+                    </p>
+                    <div className="mt-2 flex items-center text-xs text-gray-500">
+                      <span>Assigned to {formattedShifts.filter(e => 
+                        e.shifts.some(s => 
+                          s.startTime === formatTime(template.start_time) && 
+                          s.endTime === formatTime(template.end_time)
+                        )
+                      ).length} employees</span>
                     </div>
                   </div>
-                  <p className="text-sm text-gray-600">
-                    {formatTime(template.start_time)} - {formatTime(template.end_time)}
-                  </p>
-                  <div className="mt-2 flex items-center text-xs text-gray-500">
-                    <span>Assigned to {formattedShifts.filter(e => 
-                      e.shifts.some(s => 
-                        s.startTime === formatTime(template.start_time) && 
-                        s.endTime === formatTime(template.end_time)
-                      )
-                    ).length} employees</span>
-                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  No shift templates found. Click "Add Template" to create your first shift template.
                 </div>
-              ))}
+              )}
             </div>
           </div>
           
@@ -3815,9 +3864,12 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
                   value={assignData.shiftTemplate}
                   onChange={handleAssignChange}
                   className="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md"
+                  disabled={templatesLoading || assignLoading}
                 >
-                  <option value="">Select a shift</option>
-                  {shiftTemplates.map(template => (
+                  <option value="">
+                    {templatesLoading ? 'Loading templates...' : 'Select a shift'}
+                  </option>
+                  {!templatesLoading && shiftTemplates.map(template => (
                     <option key={template.id} value={template.id}>
                       {template.name} ({formatTime(template.start_time)} - {formatTime(template.end_time)})
                     </option>
@@ -3855,7 +3907,7 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
                 </div>
               </div>
               
-              <div>
+              {/* <div>
                 <label htmlFor="days" className="block text-sm font-medium text-gray-700 mb-1">
                   Working Days
                 </label>
@@ -3873,7 +3925,7 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
                     </label>
                   ))}
                 </div>
-              </div>
+              </div> */}
               
               <button 
                 type="submit"
@@ -3918,7 +3970,11 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
       name: template?.name || '',
       start_time: template?.start_time || '08:00',
       end_time: template?.end_time || '17:00',
+      color_class: template?.color_class || 'bg-blue-100 border-blue-300',
+      is_default: template?.is_default || false
     });
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState('');
     
     const handleChange = (e) => {
       const { name, value } = e.target;
@@ -3928,9 +3984,27 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
       }));
     };
     
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
       e.preventDefault();
-      onSubmit(formData);
+      setIsSubmitting(true);
+      setError('');
+      
+      try {
+        // Create a copy of the form data
+        const templateData = {...formData};
+        
+        // Remove the empty id when creating a new template
+        if (!template && templateData.id === '') {
+          delete templateData.id;
+        }
+        
+        await onSubmit(templateData);
+      } catch (err) {
+        setError('Failed to save template. Please try again.');
+        console.error('Template submission error:', err);
+      } finally {
+        setIsSubmitting(false);
+      }
     };
     
     return (
@@ -3941,10 +4015,20 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
             <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">
               {template ? 'Edit Shift Template' : 'Add Shift Template'}
             </h3>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-500 transition-colors duration-200">
+            <button 
+              onClick={onClose} 
+              className="text-gray-400 hover:text-gray-500 transition-colors duration-200"
+              disabled={isSubmitting}
+            >
               <X size={20} />
             </button>
           </div>
+          
+          {error && (
+            <div className="mx-6 mt-4 p-2 bg-red-50 text-red-600 text-sm rounded-md">
+              {error}
+            </div>
+          )}
           
           <form onSubmit={handleSubmit}>
             <div className="px-6 py-4 space-y-4">
@@ -3961,6 +4045,7 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
                   required
                   placeholder="e.g. Morning Shift"
                   className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  disabled={isSubmitting}
                 />
               </div>
               
@@ -3977,6 +4062,7 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
                     onChange={handleChange}
                     required
                     className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                    disabled={isSubmitting}
                   />
                 </div>
                 
@@ -3992,6 +4078,7 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
                     onChange={handleChange}
                     required
                     className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                    disabled={isSubmitting}
                   />
                 </div>
               </div>
@@ -4002,14 +4089,26 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
                 type="button"
                 onClick={onClose}
                 className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none transition-all duration-300"
+                disabled={isSubmitting}
               >
                 Cancel
               </button>
               <button
                 type="submit"
+                disabled={isSubmitting}
                 className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 focus:outline-none transition-all duration-300"
               >
-                {template ? 'Update Template' : 'Create Template'}
+                {isSubmitting ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    {template ? 'Updating...' : 'Creating...'}
+                  </>
+                ) : (
+                  template ? 'Update Template' : 'Create Template'
+                )}
               </button>
             </div>
           </form>
