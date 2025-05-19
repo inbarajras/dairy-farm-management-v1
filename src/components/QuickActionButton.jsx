@@ -54,29 +54,36 @@ const QuickActionButton = ({
     >
       {/* Action buttons that appear on click with a vertical layout */}
       <div 
-        className={`mb-4 transition-all duration-300 ease-in-out flex flex-col-reverse items-end gap-3 ${isOpen ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'}`}
+        className={`mb-4 transition-all duration-300 ease-in-out ${isOpen ? 'max-h-[500px]' : 'max-h-0'} overflow-hidden`}
+        style={{ 
+          opacity: isOpen ? 1 : 0,
+          visibility: isOpen ? 'visible' : 'hidden',
+          pointerEvents: isOpen ? 'auto' : 'none'
+        }}
       >
-        {actionButtons.map((button, index) => (
-          <div key={index} className="relative group">
-            <button 
-              className={`${button.color} rounded-full h-12 w-12 flex items-center justify-center text-white shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110`}
-              onClick={() => {
-                button.action();
-                setIsOpen(false); // Close menu after action
-              }}
-              aria-label={button.tooltip}
-            >
-              {button.icon}
-            </button>
-            
-            {/* Tooltip that appears on hover, positioned to the left of the button */}
-            <div className="absolute right-full mr-3 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-gray-800 text-white text-sm rounded shadow whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-              {button.tooltip}
-              {/* Arrow */}
-              <div className="absolute right-0 top-1/2 -mt-1.5 -mr-1 border-l-4 border-l-gray-800 border-y-4 border-y-transparent"></div>
+        <div className="flex flex-col-reverse items-end gap-3 mb-3">
+          {actionButtons.map((button, index) => (
+            <div key={index} className="relative group">
+              <button 
+                className={`${button.color} rounded-full h-12 w-12 flex items-center justify-center text-white shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110`}
+                onClick={() => {
+                  button.action();
+                  setIsOpen(false); // Close menu after action
+                }}
+                aria-label={button.tooltip}
+              >
+                {button.icon}
+              </button>
+              
+              {/* Tooltip that appears on hover, positioned to the left of the button */}
+              <div className="absolute right-full mr-3 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-gray-800 text-white text-sm rounded shadow whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+                {button.tooltip}
+                {/* Arrow */}
+                <div className="absolute right-0 top-1/2 -mt-1.5 -mr-1 border-l-4 border-l-gray-800 border-y-4 border-y-transparent"></div>
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
       {/* Main floating action button */}
