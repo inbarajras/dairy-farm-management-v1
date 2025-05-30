@@ -77,7 +77,21 @@ const FarmDashboard = () => {
     fetchDashboardData();
     loadCurrentUser();
   }, []);
+
+  // Refetch dashboard data when date range or current date changes
+  useEffect(() => {
+    if (!isLoading) { // Prevent duplicate calls during initial load
+      fetchDashboardData();
+    }
+  }, [dateRange, currentDate]);
   
+  // Refetch data when date range changes from dropdown
+  useEffect(() => {
+    if (!isLoading) { // Prevent duplicate calls during initial load
+      fetchDashboardData();
+    }
+  }, [dateRange]);
+
   // Load current user from Supabase
   const loadCurrentUser = async () => {
     try {
@@ -106,6 +120,40 @@ const FarmDashboard = () => {
     setShowProfileMenu(false); // Close the profile menu when opening profile
   };
   
+  // Calculate date range based on current selection
+  const calculateDateRange = () => {
+    const endDate = new Date(currentDate);
+    const startDate = new Date(currentDate);
+    
+    if (dateRange === 'Today') {
+      // For today, start and end are the same date
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
+    } else if (dateRange === 'Last 7 days') {
+      // Go back 6 days to include today as the 7th day
+      startDate.setDate(startDate.getDate() - 6);
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
+    } else if (dateRange === 'This month') {
+      // First day of the current month to current date
+      startDate.setDate(1);
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
+    } else if (dateRange === 'Last 30 days') {
+      // Go back 29 days to include today as the 30th day
+      startDate.setDate(startDate.getDate() - 29);
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
+    } else {
+      // Default to last 7 days
+      startDate.setDate(startDate.getDate() - 6);
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
+    }
+    
+    return { startDate, endDate };
+  };
+  
   // Fetch dashboard data based on date range
   const fetchDashboardData = async () => {
     setIsLoading(true);
@@ -115,19 +163,22 @@ const FarmDashboard = () => {
       // Get cows data
       const cowsData = await fetchCows();
       
-      // Get milk collections for the last 7 days by default
-      const today = new Date();
-      const sevenDaysAgo = new Date(today);
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      // Calculate date range based on current selection
+      const { startDate, endDate } = calculateDateRange();
       
-      const milkData = await fetchMilkCollections(sevenDaysAgo.toISOString(), today.toISOString());
+      // Get milk collections for the calculated date range
+      const milkData = await fetchMilkCollections(startDate.toISOString(), endDate.toISOString());
       
       // Get monthly milk totals
       const monthlyMilkData = await fetchMonthlyTotals();
       
-      // Get health alerts
+      // Get health alerts (filter by date range)
       const healthEvents = await fetchHealthEvents();
-      const activeHealthAlerts = healthEvents.filter(event => 
+      const filteredHealthEvents = healthEvents.filter(event => {
+        const eventDate = new Date(event.eventDate);
+        return eventDate >= startDate && eventDate <= endDate;
+      });
+      const activeHealthAlerts = filteredHealthEvents.filter(event => 
         event.status === 'In progress' || event.status === 'Monitoring'
       ).length;
       
@@ -140,11 +191,16 @@ const FarmDashboard = () => {
       // Process health data
       const healthData = processHealthData(cowsData);
       
-      // Calculate total milk production for KPI
+      // Calculate total milk production for KPI (within date range)
       const totalMilk = milkData.reduce((sum, record) => sum + parseFloat(record.totalQuantity || 0), 0);
       
-      // Process recent activities
-      const recentActivities = processRecentActivities(healthEvents, milkData, cowsData);
+      // Calculate active tasks within date range
+      const activeTasks = filteredHealthEvents.filter(event => 
+        event.followUp && new Date(event.followUp) >= new Date()
+      ).length;
+      
+      // Process recent activities (use filtered events)
+      const recentActivities = processRecentActivities(filteredHealthEvents, milkData, cowsData);
       
       // Set dashboard data
       setDashboardData({
@@ -152,7 +208,7 @@ const FarmDashboard = () => {
           totalCows: cowsData.length,
           milkProduction: totalMilk,
           healthAlerts: activeHealthAlerts,
-          activeTasks: healthEvents.filter(event => event.followUp && new Date(event.followUp) >= new Date()).length,
+          activeTasks: activeTasks,
           revenue: financialData?.financialStats?.revenue?.current || 0
         },
         milkProductionData: processedMilkData,
