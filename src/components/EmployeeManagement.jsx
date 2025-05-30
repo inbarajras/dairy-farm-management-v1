@@ -3132,8 +3132,8 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
         Wed: true, 
         Thu: true,
         Fri: true,
-        Sat: false,
-        Sun: false
+        Sat: true,
+        Sun: true
       }
     });
     const [assignLoading, setAssignLoading] = useState(false);
@@ -3282,13 +3282,6 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
         return;
       }
       
-      // Check if at least one day is selected
-      const hasSelectedDay = Object.values(assignData.workingDays).some(value => value === true);
-      if (!hasSelectedDay) {
-        setAssignMessage({ type: 'error', text: 'Please select at least one working day' });
-        return;
-      }
-      
       // Check date range validity
       if (new Date(assignData.startDate) > new Date(assignData.endDate)) {
         setAssignMessage({ type: 'error', text: 'End date must be after start date' });
@@ -3333,8 +3326,8 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
             Wed: true, 
             Thu: true,
             Fri: true,
-            Sat: false,
-            Sun: false
+            Sat: true,
+            Sun: true
           }
         });
         
@@ -3430,6 +3423,8 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
           return 'bg-purple-100 border-purple-300';
         case 'night':
           return 'bg-gray-100 border-gray-300';
+        case 'off':
+          return 'bg-gray-50 border-gray-200'; // Light styling for off days
         default:
           return 'bg-blue-100 border-blue-300';
       }
@@ -3669,12 +3664,9 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
                         </td>
                         {days.map(day => {
                           const shift = employee.shifts.find(s => s.day === day);
-                          console.log("shift");
-                          console.log(employee.shifts);
-                          console.log(shift);
                           return (
                             <td key={day} className="border-b border-gray-200 px-6 py-4">
-                              {shift ? (
+                              {shift && shift.shift_type !== 'Off' ? (
                                 <div className={`px-2 py-2 rounded border ${shift.colorClass}`}>
                                   <div className="text-sm font-medium text-gray-900 text-center">
                                     {`${shift.startTime} - ${shift.endTime}`}
@@ -3682,7 +3674,7 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
                                 </div>
                               ) : (
                                 <div className="px-2 py-2">
-                                  <div className="text-sm text-gray-500 text-center">Off</div>
+                                  {/* Empty cell - no shift or off day */}
                                 </div>
                               )}
                             </td>
@@ -3732,7 +3724,7 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
                         {employees.map(employee => {
                           const empShifts = formattedShifts
                             .find(emp => emp.employeeId === employee.id)?.shifts
-                            .filter(shift => shift.date === dateStr) || [];
+                            .filter(shift => shift.date === dateStr && shift.shift_type !== 'Off') || [];
                           
                           return empShifts.length > 0 ? (
                             <div 

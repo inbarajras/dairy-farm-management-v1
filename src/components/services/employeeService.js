@@ -485,19 +485,26 @@ export const getEmployeePerformance = async () => {
       for (const weekStart of weeks) {
         const formattedWeekStart = weekStart.toISOString().split('T')[0];
         
-        // Get all days of this week that fall within the date range, regardless of working days selection
+        // Get all days of this week that fall within the date range (regardless of working days)
         const weekDays = getAllDaysInWeek(weekStart, dateRange.startDate, dateRange.endDate);
         
         if (weekDays.length === 0) continue; // Skip if no days in this week
         
         // Create shift objects for each day
-        const newShifts = weekDays.map(day => ({
-          day: getDayName(day.getDay()),
-          date: day.toISOString().split('T')[0],
-          start_time: shiftData.start_time,
-          end_time: shiftData.end_time,
-          shift_type: shiftData.shift_type || 'Regular'
-        }));
+        const newShifts = weekDays.map(day => {
+          const dayOfWeek = day.getDay();
+          const dayName = getDayName(dayOfWeek);
+          const dayAbbr = getDayAbbreviation(dayOfWeek);
+          
+          // Create regular shifts for all days in the date range
+          return {
+            day: dayName,
+            date: day.toISOString().split('T')[0],
+            start_time: shiftData.start_time,
+            end_time: shiftData.end_time,
+            shift_type: shiftData.shift_type || 'Regular'
+          };
+        });
         
         // Check if record already exists for this week
         const { data: existing } = await supabase
@@ -600,8 +607,8 @@ export const getEmployeePerformance = async () => {
     
     return result;
   };
-  
-  // Get all days in a week that fall within a date range, ignoring working days
+
+  // Get all days in a week within the date range (regardless of working days)
   const getAllDaysInWeek = (weekStart, rangeStart, rangeEnd) => {
     const result = [];
     
@@ -615,7 +622,6 @@ export const getEmployeePerformance = async () => {
     for (let i = 0; i < 7; i++) {
       // Check if this day is within the date range
       if (current >= start && current <= end) {
-        // Add all days within the date range
         result.push(new Date(current));
       }
       
