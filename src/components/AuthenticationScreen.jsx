@@ -15,6 +15,7 @@ const AuthenticationScreen = ({ onAuthenticate }) => {
     otp: ['', '', '', '', '', '']
   });
   
+  const [rememberMe, setRememberMe] = useState(false);
   const [timer, setTimer] = useState(0);
   const [validationErrors, setValidationErrors] = useState({});
   const [authSuccess, setAuthSuccess] = useState(false);
@@ -35,6 +36,15 @@ const AuthenticationScreen = ({ onAuthenticate }) => {
         ...validationErrors,
         [name]: ''
       });
+    }
+  };
+  
+  // Handle remember me checkbox changes
+  const handleRememberMeChange = () => {
+    setRememberMe(!rememberMe);
+    // If unchecking, clear the saved email from localStorage
+    if (rememberMe) {
+      localStorage.removeItem('rememberedEmail');
     }
   };
 
@@ -94,6 +104,18 @@ const AuthenticationScreen = ({ onAuthenticate }) => {
     }
     return () => clearInterval(interval);
   }, [timer, otpSent, resetEmailSent]);
+
+  // Load remembered email from localStorage when component mounts
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('rememberedEmail');
+    if (savedEmail) {
+      setFormData(prevData => ({
+        ...prevData,
+        email: savedEmail
+      }));
+      setRememberMe(true);
+    }
+  }, []);
 
   // Handle successful authentication
   useEffect(() => {
@@ -182,6 +204,13 @@ const AuthenticationScreen = ({ onAuthenticate }) => {
           
           // If successful, set auth success state
           setAuthSuccess(true);
+          
+          // Save email to localStorage if remember me is checked
+          if (rememberMe) {
+            localStorage.setItem('rememberedEmail', formData.email);
+          } else {
+            localStorage.removeItem('rememberedEmail');
+          }
         } catch (error) {
           setAuthError(error.message || 'Failed to verify OTP');
         } finally {
@@ -204,6 +233,13 @@ const AuthenticationScreen = ({ onAuthenticate }) => {
           } else {
             // If sign in was successful, set auth success
             setAuthSuccess(true);
+            
+            // Save or remove email from localStorage based on "Remember me" checkbox
+            if (rememberMe) {
+              localStorage.setItem('rememberedEmail', formData.email);
+            } else {
+              localStorage.removeItem('rememberedEmail');
+            }
           }
         } catch (error) {
           setAuthError(error.message || 'Authentication failed');
@@ -250,6 +286,16 @@ const AuthenticationScreen = ({ onAuthenticate }) => {
       setOtpSent(false);
     }
     setAuthError(null);
+    
+    // Load remembered email if exists
+    const savedEmail = localStorage.getItem('rememberedEmail');
+    if (savedEmail) {
+      setFormData(prevData => ({
+        ...prevData,
+        email: savedEmail
+      }));
+      setRememberMe(true);
+    }
   };
 
   // Animation variants
@@ -638,6 +684,8 @@ const AuthenticationScreen = ({ onAuthenticate }) => {
                             id="remember-me"
                             name="remember-me"
                             type="checkbox"
+                            checked={rememberMe}
+                            onChange={handleRememberMeChange}
                             className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                           />
                           <label htmlFor="remember-me" className="ml-2 block text-sm text-blue-100">
