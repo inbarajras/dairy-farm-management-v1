@@ -13,6 +13,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { supabase } from '../lib/supabase';
 import LoadingSpinner from './LoadingSpinner';
 import {toast} from './utils/ToastContainer';
+import { useRole } from '../contexts/RoleContext';
+import UserRoleBadge from './UserRoleBadge';
 
 // Status badge colors
 const statusColors = {
@@ -49,6 +51,7 @@ const formatDate = (dateString) => {
 
 // Main cow management component
 const CowManagement = () => {
+  const { userRole, hasPermission = () => false } = useRole() || {};
   const [cows, setCows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -533,19 +536,25 @@ const CowManagement = () => {
           toggleRecordMilkModal={toggleRecordMilkModal}
           toggleRecordBreedingEventModal={toggleRecordBreedingEventModal}
           toggleRecordGrowthMilestoneModal={toggleRecordGrowthMilestoneModal}
+          hasPermission={hasPermission}
         />
       ) : (
         <div className="px-4 py-6 sm:px-6 max-w-[1500px] mx-auto">
           <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Cow Management</h1>
-            <button 
-              onClick={toggleAddModal}
-              data-action="add-cow"
-              className="flex items-center px-4 py-2 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm"
-            >
-              <Plus size={20} className="mr-2" />
-              Add New Cow
-            </button>
+            <div className="flex items-center">
+              <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700 mr-3">Cow Management</h1>
+              <UserRoleBadge role={userRole} />
+            </div>
+            {hasPermission('cow:create') && (
+              <button 
+                onClick={toggleAddModal}
+                data-action="add-cow"
+                className="flex items-center px-4 py-2 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm"
+              >
+                <Plus size={20} className="mr-2" />
+                Add New Cow
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
@@ -657,6 +666,7 @@ const CowManagement = () => {
                   onEdit={(e) => toggleEditModal(cow, e)}
                   onDelete={(e) => toggleDeleteModal(cow, e)}
                   checkCowMilkingStatus={checkCowMilkingStatus}
+                  hasPermission={hasPermission}
                 />
               ))}
             </div>
@@ -752,18 +762,22 @@ const CowManagement = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>
-                          <button 
-                            className="text-blue-600 hover:text-blue-900 transition-colors duration-200"
-                            onClick={(e) => toggleEditModal(cow, e)}
-                          >
-                            <Edit size={16} />
-                          </button>
-                          <button 
-                            className="text-red-600 hover:text-red-900 transition-colors duration-200"
-                            onClick={(e) => toggleDeleteModal(cow, e)}
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          {hasPermission('cow:update') && (
+                            <button 
+                              className="text-blue-600 hover:text-blue-900 transition-colors duration-200"
+                              onClick={(e) => toggleEditModal(cow, e)}
+                            >
+                              <Edit size={16} />
+                            </button>
+                          )}
+                          {hasPermission('cow:delete') && (
+                            <button 
+                              className="text-red-600 hover:text-red-900 transition-colors duration-200"
+                              onClick={(e) => toggleDeleteModal(cow, e)}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -866,7 +880,7 @@ const CowManagement = () => {
 };
 
 // Cow Card Component
-const CowCard = ({ cow, onClick, onEdit, onDelete, checkCowMilkingStatus }) => {
+const CowCard = ({ cow, onClick, onEdit, onDelete, checkCowMilkingStatus, hasPermission }) => {
   // Safe method to get latest milk production
   const getLatestMilkProduction = () => {
     if (cow?.milkProduction && cow.milkProduction.length > 0) {
@@ -979,18 +993,22 @@ const CowCard = ({ cow, onClick, onEdit, onDelete, checkCowMilkingStatus }) => {
         </div>
         
         <div className="mt-3 pt-2 border-t flex justify-end space-x-2" onClick={(e) => e.stopPropagation()}>
-          <button 
-            className="p-1 text-blue-600 hover:text-blue-900 transition-colors duration-200 hover:bg-blue-50 rounded-full"
-            onClick={onEdit}
-          >
-            <Edit size={16} />
-          </button>
-          <button 
-            className="p-1 text-red-600 hover:text-red-900 transition-colors duration-200 hover:bg-red-50 rounded-full"
-            onClick={onDelete}
-          >
-            <Trash2 size={16} />
-          </button>
+          {hasPermission('cow:update') && (
+            <button 
+              className="p-1 text-blue-600 hover:text-blue-900 transition-colors duration-200 hover:bg-blue-50 rounded-full"
+              onClick={onEdit}
+            >
+              <Edit size={16} />
+            </button>
+          )}
+          {hasPermission('cow:delete') && (
+            <button 
+              className="p-1 text-red-600 hover:text-red-900 transition-colors duration-200 hover:bg-red-50 rounded-full"
+              onClick={onDelete}
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -998,7 +1016,7 @@ const CowCard = ({ cow, onClick, onEdit, onDelete, checkCowMilkingStatus }) => {
 };
 
 // Employee Profile Component
-const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMilkModal, toggleRecordBreedingEventModal, toggleRecordGrowthMilestoneModal }) => {
+const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMilkModal, toggleRecordBreedingEventModal, toggleRecordGrowthMilestoneModal, hasPermission }) => {
   const [activeTab, setActiveTab] = useState('overview');
   const [healthHistory, setHealthHistory] = useState([]);
   const [breedingEvents, setBreedingEvents] = useState([]);
@@ -1292,21 +1310,25 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                 </div>
                 
                 <div className="mt-6 w-full flex flex-col space-y-2">
-                  <button 
-                    onClick={onEdit}
-                    className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-500 to-blue-600 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300 hover:shadow-md hover:shadow-blue-500/20"
-                  >
-                    Edit Details
-                  </button>
-                  <button 
-                    onClick={onRecordHealthEvent}
-                    className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-cyan-500 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300 hover:shadow-md hover:shadow-blue-500/20"
-                  >
-                    Record Health Event
-                  </button>
+                  {hasPermission('cow:update') && (
+                    <button 
+                      onClick={onEdit}
+                      className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-500 to-blue-600 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300 hover:shadow-md hover:shadow-blue-500/20"
+                    >
+                      Edit Details
+                    </button>
+                  )}
+                  {hasPermission('health:create') && (
+                    <button 
+                      onClick={onRecordHealthEvent}
+                      className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-cyan-500 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300 hover:shadow-md hover:shadow-blue-500/20"
+                    >
+                      Record Health Event
+                    </button>
+                  )}
                   
                   {/* Add transition button for calves/heifers */}
-                  {(isCalf || isHeifer) && (
+                  {(isCalf || isHeifer) && hasPermission('cow:update') && (
                     <button 
                       onClick={toggleTransitionModal}
                       className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all duration-300 hover:shadow-md hover:shadow-purple-500/20"
@@ -1664,10 +1686,12 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                     
                       <div className="px-6 py-4 border-b border-gray-200 flex flex-wrap justify-between items-center gap-3">
                         <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-600">Production Records</h3>
-                        <button className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gradient-to-r from-blue-500 to-blue-600 hover:opacity-90 transition-opacity shadow-sm"
-                        onClick={toggleRecordMilkModal}>
-                          Record New
-                        </button>
+                        {hasPermission('milk:create') && (
+                          <button className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gradient-to-r from-blue-500 to-blue-600 hover:opacity-90 transition-opacity shadow-sm"
+                          onClick={toggleRecordMilkModal}>
+                            Record New
+                          </button>
+                        )}
                       </div>
                       <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200">
@@ -1782,10 +1806,12 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                     <div className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
                       <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
                         <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-purple-600">Development Milestones</h3>
-                        <button className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gradient-to-r from-purple-500 to-purple-600 hover:opacity-90 transition-opacity shadow-sm"
-                        onClick={handleRecordGrowthMilestone}>
-                          Record Milestone
-                        </button>
+                        {hasPermission('growth:create') && (
+                          <button className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gradient-to-r from-purple-500 to-purple-600 hover:opacity-90 transition-opacity shadow-sm"
+                          onClick={handleRecordGrowthMilestone}>
+                            Record Milestone
+                          </button>
+                        )}
                       </div>
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gradient-to-r from-purple-50/40 via-gray-50 to-pink-50/30">
@@ -1841,12 +1867,14 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                     <div className="bg-white shadow-lg rounded-lg p-6 mb-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
                       <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-600">Health Status</h3>
-                        <button 
-                          onClick={onRecordHealthEvent}
-                          className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gradient-to-r from-green-500 to-blue-600 hover:opacity-90 transition-opacity shadow-sm"
-                        >
-                          Record Health Event
-                        </button>
+                        {hasPermission('health:create') && (
+                          <button 
+                            onClick={onRecordHealthEvent}
+                            className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gradient-to-r from-green-500 to-blue-600 hover:opacity-90 transition-opacity shadow-sm"
+                          >
+                            Record Health Event
+                          </button>
+                        )}
                       </div>
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1978,10 +2006,12 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                   <div className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition-all duration-300">
                     <div className="px-6 py-4 border-b border-gray-200 flex flex-wrap justify-between items-center gap-3">
                       <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-700 to-blue-700">Breeding Events</h3>
-                      <button className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105"
-                      onClick={toggleRecordBreedingEventModal}>
-                        Record New Event
-                      </button>
+                      {hasPermission('breeding:create') && (
+                        <button className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105"
+                        onClick={toggleRecordBreedingEventModal}>
+                          Record New Event
+                        </button>
+                      )}
                     </div>
                     <div className="overflow-x-auto">  
                     {loading.breeding ? (

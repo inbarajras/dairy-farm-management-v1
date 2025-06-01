@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Users, Clipboard, Droplet, Thermometer, DollarSign, Settings, LogOut, X, Menu, IndianRupee, Package, Leaf } from 'lucide-react';
+import { Home, Users, Clipboard, Droplet, Thermometer, DollarSign, Settings, LogOut, X, Menu, IndianRupee, Package, Leaf, AlertTriangle } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
 
 import AuthenticationScreen from './components/AuthenticationScreen';
@@ -14,12 +14,34 @@ import SettingsScreen from './components/Settings';
 import ResetPasswordPage from '../src/pages/ResetPasswordPage';
 import ToastContainer from './components/utils/ToastContainer';
 import QuickActionButton from './components/QuickActionButton';
+import { AuthProvider } from './contexts/AuthContext';
+import { RoleProvider, useRole } from './contexts/RoleContext';
 
-const App = () => {
+const AccessDenied = () => (
+  <div className="flex flex-col items-center justify-center h-full bg-gray-50">
+    <AlertTriangle size={64} className="text-yellow-500 mb-4" />
+    <h1 className="text-2xl font-bold text-gray-800 mb-2">Access Denied</h1>
+    <p className="text-gray-600 text-center max-w-md mb-4">You don't have permission to access this page. Please contact your administrator if you believe this is an error.</p>
+  </div>
+);
+
+// Main App wrapper with context providers
+const AppWithProviders = () => {
+  return (
+    <AuthProvider>
+      <RoleProvider>
+        <AppContent />
+      </RoleProvider>
+    </AuthProvider>
+  );
+};
+
+const AppContent = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeModule, setActiveModule] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [currentPage, setCurrentPage] = useState(null);
+  const { hasAccess, userRole, loading } = useRole();
   
   // Refs for modal actions
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
@@ -135,6 +157,11 @@ const App = () => {
 
   // Render module based on active state
   const renderModule = () => {
+    // Check if user has access to the active module
+    if (!hasAccess(activeModule)) {
+      return <AccessDenied />;
+    }
+
     switch (activeModule) {
       case 'dashboard':
         return <FarmDashboard />;
@@ -153,7 +180,8 @@ const App = () => {
       case 'settings':
         return <SettingsScreen/>;
       default:
-        return <FarmDashboard />;
+        // If default is dashboard and user doesn't have access, show cows management
+        return hasAccess('dashboard') ? <FarmDashboard /> : <CowManagement />;
     }
   };
 
@@ -165,6 +193,15 @@ const App = () => {
   // If not authenticated, show login screen
   if (!isAuthenticated) {
     return <AuthenticationScreen onAuthenticate={handleAuthentication} />;
+  }
+
+  // Display loading state while role information is being fetched
+  if (loading) {
+    return (
+      <div className="h-screen bg-gray-100 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+      </div>
+    );
   }
 
   return (
@@ -179,18 +216,13 @@ const App = () => {
           {sidebarOpen ? (
             <div className="flex items-center flex-grow">
               <svg viewBox="0 0 24 24" className="h-7 w-7 mr-2.5 text-white" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                <path d="M9 22V12h6v10" />
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
               </svg>
-              <div>
-                <span className="font-bold text-lg tracking-wide">DairyFarm Pro</span>
-                <div className="text-xs text-green-100 opacity-90 -mt-0.5"> Dairy Farm Management</div>
-              </div>
+              <span className="font-semibold text-lg">Dairy Farm</span>
             </div>
           ) : (
             <svg viewBox="0 0 24 24" className="h-7 w-7 mx-auto text-white" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-              <path d="M9 22V12h6v10" />
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
             </svg>
           )}
           <button 
@@ -203,62 +235,93 @@ const App = () => {
         
         {/* Improved navigation area with subtle background */}
         <div className="flex flex-col flex-grow p-4 space-y-1.5 overflow-y-auto bg-gradient-to-b from-gray-50 to-white">
-          <NavItem 
-            icon={<Home size={20} />} 
-            label="Dashboard" 
-            active={activeModule === 'dashboard'} 
-            collapsed={!sidebarOpen} 
-            onClick={() => setActiveModule('dashboard')}
-          />
-          <NavItem 
-            icon={<Clipboard size={20} />} 
-            label="Cow Management" 
-            active={activeModule === 'cows'} 
-            collapsed={!sidebarOpen} 
-            onClick={() => setActiveModule('cows')}
-          />
-          <NavItem 
-            icon={<Droplet size={20} />} 
-            label="Milk Production" 
-            active={activeModule === 'milk'} 
-            collapsed={!sidebarOpen} 
-            onClick={() => setActiveModule('milk')}
-          />
-          <NavItem 
-            icon={<Thermometer size={20} />} 
-            label="Health Records" 
-            active={activeModule === 'health'} 
-            collapsed={!sidebarOpen} 
-            onClick={() => setActiveModule('health')}
-          />
-          <NavItem 
-            icon={<Package size={20} />} 
-            label="Inventory" 
-            active={activeModule === 'inventory'} 
-            collapsed={!sidebarOpen} 
-            onClick={() => setActiveModule('inventory')}
-          />
-          <NavItem 
-            icon={<Users size={20} />} 
-            label="Employees" 
-            active={activeModule === 'employees'} 
-            collapsed={!sidebarOpen} 
-            onClick={() => setActiveModule('employees')}
-          />
-          <NavItem 
-            icon={<IndianRupee size={20} />} 
-            label="Finances" 
-            active={activeModule === 'finances'} 
-            collapsed={!sidebarOpen} 
-            onClick={() => setActiveModule('finances')}
-          />
-          <NavItem 
-            icon={<Settings size={20} />} 
-            label="Settings" 
-            active={activeModule === 'settings'} 
-            collapsed={!sidebarOpen} 
-            onClick={() => setActiveModule('settings')}
-          />
+          {/* Show Dashboard only to Admins */}
+          {hasAccess('dashboard') && (
+            <NavItem 
+              icon={<Home size={20} />} 
+              label="Dashboard" 
+              active={activeModule === 'dashboard'} 
+              collapsed={!sidebarOpen} 
+              onClick={() => setActiveModule('dashboard')}
+            />
+          )}
+          
+          {/* Cow Management - ALL roles */}
+          {hasAccess('cows') && (
+            <NavItem 
+              icon={<Clipboard size={20} />} 
+              label="Cow Management" 
+              active={activeModule === 'cows'} 
+              collapsed={!sidebarOpen} 
+              onClick={() => setActiveModule('cows')}
+            />
+          )}
+          
+          {/* Milk Production - ALL roles */}
+          {hasAccess('milk') && (
+            <NavItem 
+              icon={<Droplet size={20} />} 
+              label="Milk Production" 
+              active={activeModule === 'milk'} 
+              collapsed={!sidebarOpen} 
+              onClick={() => setActiveModule('milk')}
+            />
+          )}
+          
+          {/* Health Records - Admin, Manager */}
+          {hasAccess('health') && (
+            <NavItem 
+              icon={<Thermometer size={20} />} 
+              label="Health Records" 
+              active={activeModule === 'health'} 
+              collapsed={!sidebarOpen} 
+              onClick={() => setActiveModule('health')}
+            />
+          )}
+          
+          {/* Inventory - Admin, Manager */}
+          {hasAccess('inventory') && (
+            <NavItem 
+              icon={<Package size={20} />} 
+              label="Inventory" 
+              active={activeModule === 'inventory'} 
+              collapsed={!sidebarOpen} 
+              onClick={() => setActiveModule('inventory')}
+            />
+          )}
+          
+          {/* Employees - Admin, Manager */}
+          {hasAccess('employees') && (
+            <NavItem 
+              icon={<Users size={20} />} 
+              label="Employees" 
+              active={activeModule === 'employees'} 
+              collapsed={!sidebarOpen} 
+              onClick={() => setActiveModule('employees')}
+            />
+          )}
+          
+          {/* Finances - Admin only */}
+          {hasAccess('finances') && (
+            <NavItem 
+              icon={<IndianRupee size={20} />} 
+              label="Finances" 
+              active={activeModule === 'finances'} 
+              collapsed={!sidebarOpen} 
+              onClick={() => setActiveModule('finances')}
+            />
+          )}
+          
+          {/* Settings - Admin only */}
+          {hasAccess('settings') && (
+            <NavItem 
+              icon={<Settings size={20} />} 
+              label="Settings" 
+              active={activeModule === 'settings'} 
+              collapsed={!sidebarOpen} 
+              onClick={() => setActiveModule('settings')}
+            />
+          )}
         </div>
 
         {/* Enhanced footer with stronger gradient */}
@@ -313,4 +376,4 @@ const NavItem = ({ icon, label, active = false, collapsed = false, onClick, spec
   );
 };
 
-export default App;
+export default AppWithProviders;

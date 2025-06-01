@@ -1,6 +1,7 @@
 // src/contexts/AuthContext.jsx
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { auth } from '../lib/supabase';
+import { auth, supabase } from '../lib/supabase';
+import { fetchCurrentUser } from '../components/services/userService';
 
 // Create the context
 const AuthContext = createContext();
@@ -8,6 +9,7 @@ const AuthContext = createContext();
 // Create a provider component
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -24,8 +26,17 @@ export const AuthProvider = ({ children }) => {
         if (session) {
           const { user: currentUser } = await auth.getCurrentUser();
           setUser(currentUser);
+          
+          // Fetch complete user profile with role information
+          try {
+            const profile = await fetchCurrentUser();
+            setUserProfile(profile);
+          } catch (profileError) {
+            console.error('Error fetching user profile:', profileError);
+          }
         } else {
           setUser(null);
+          setUserProfile(null);
         }
         
         setError(null);
@@ -33,6 +44,7 @@ export const AuthProvider = ({ children }) => {
         console.error('Error checking authentication:', err);
         setError(err.message);
         setUser(null);
+        setUserProfile(null);
       } finally {
         setLoading(false);
       }
@@ -42,12 +54,13 @@ export const AuthProvider = ({ children }) => {
     checkUser();
     
     // Subscribe to auth changes
-    const { data: { subscription } } = auth.supabase.auth.onAuthStateChange(
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === 'SIGNED_IN' && session) {
           checkUser();
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
+          setUserProfile(null);
         }
       }
     );
@@ -65,6 +78,7 @@ export const AuthProvider = ({ children }) => {
       const { error } = await auth.signOut();
       if (error) throw error;
       setUser(null);
+      setUserProfile(null);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -75,10 +89,12 @@ export const AuthProvider = ({ children }) => {
   // Provide auth context value
   const value = {
     user,
+    userProfile,
     loading,
     error,
     signOut,
-    isAuthenticated: !!user
+    isAuthenticated: !!user,
+    role: userProfile?.role || null
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

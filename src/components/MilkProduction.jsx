@@ -21,6 +21,8 @@ import {
 } from './services/reportService';
 import LoadingSpinner from './LoadingSpinner';
 import {toast} from './utils/ToastContainer';
+import { useRole } from '../contexts/RoleContext';
+import UserRoleBadge from './UserRoleBadge';
 
 
 
@@ -1458,7 +1460,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                     value={formData.date}
                     onChange={handleChange}
                     required
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                   />
                 </div>
                 
@@ -1472,7 +1474,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                     value={formData.shift}
                     onChange={handleChange}
                     required
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                   >
                     <option value="Morning">Morning</option>
                     <option value="Evening">Evening</option>
@@ -1493,7 +1495,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                   required
                   min="0"
                   step="0.1"
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                 />
               </div>
   
@@ -1506,7 +1508,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                   name="quality"
                   value={formData.quality}
                   onChange={handleChange}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                 >
                   <option value="Excellent">Excellent</option>
                   <option value="Good">Good</option>
@@ -1530,7 +1532,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                       onChange={handleChange}
                       min="0"
                       step="0.1"
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                     />
                   </div>
                   
@@ -1546,7 +1548,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                       onChange={handleChange}
                       min="0"
                       step="0.1"
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                     />
                   </div>
                   
@@ -1562,7 +1564,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                       onChange={handleChange}
                       min="0"
                       step="0.1"
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                     />
                   </div>
                   
@@ -1577,7 +1579,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                       value={formData.somatic}
                       onChange={handleChange}
                       min="0"
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                     />
                   </div>
                   
@@ -1592,7 +1594,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                       value={formData.bacteria}
                       onChange={handleChange}
                       min="0"
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                     />
                   </div>
                 </div>
@@ -1608,7 +1610,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                   rows={3}
                   value={formData.notes}
                   onChange={handleChange}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                   placeholder="Any additional information about this collection..."
                 ></textarea>
               </div>
@@ -1636,7 +1638,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                     </svg>
                     Saving...
                   </>
-                ) : 'Save Changes'}
+                ) : 'Save'}
               </button>
             </div>
           </form>
@@ -1684,6 +1686,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
             bacteriaCount: 0
           };
         }
+        
         
         // Add fat data
         let fatValue = null;

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Bell, 
   Menu, 
@@ -22,6 +22,8 @@ import {
   ChevronsLeft,
   ChevronsRight
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { useRole } from '../contexts/RoleContext';
 import { 
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell,Area 
@@ -35,9 +37,13 @@ import { getFinancialDashboardData } from './services/financialService';
 import { supabase } from '../lib/supabase';
 import UserProfile from './UserProfile';
 import LoadingSpinner from './LoadingSpinner';
+import UserRoleBadge from './UserRoleBadge';
 
 // Main farm dashboard component
 const FarmDashboard = () => {
+  const { userProfile } = useAuth();
+  const { userRole, hasAccess } = useRole();
+  
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentWeather, setCurrentWeather] = useState({ temp: 24, condition: 'Sunny' });
   const [showNotifications, setShowNotifications] = useState(false);
@@ -578,7 +584,10 @@ const FarmDashboard = () => {
                 {showProfileMenu && (
                   <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl py-2 z-10 border border-gray-100">
                     <div className="px-4 py-3 border-b border-gray-100">
-                      <p className="text-sm font-semibold text-gray-800">{currentUser?.name}</p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold text-gray-800">{currentUser?.name}</p>
+                        <UserRoleBadge />
+                      </div>
                       <p className="text-xs text-gray-500 mt-1">{currentUser?.email}</p>
                     </div>
                     <div className="py-1">
@@ -1661,7 +1670,7 @@ const AddTaskModal = ({ onClose }) => {
                 className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm"
                 placeholder="Enter task description"
               ></textarea>
-            </div>
+                       </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>

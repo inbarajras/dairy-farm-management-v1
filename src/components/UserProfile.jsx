@@ -20,6 +20,7 @@ import {
 import { supabase } from '../lib/supabase';
 import emp from '../assets/images/emp.jpg'
 import { toast } from '../components/utils/ToastContainer';
+import UserRoleBadge from './UserRoleBadge';
 
 const UserProfile = ({ userData: initialUserData }) => {
   const [activeTab, setActiveTab] = useState('profile');
@@ -294,6 +295,9 @@ const UserProfile = ({ userData: initialUserData }) => {
                       alt="Profile" 
                       className="w-24 h-24 sm:w-32 sm:h-32 rounded-full object-cover border-4 border-white shadow"
                     />
+                    <div className="absolute top-0 right-0">
+                      <UserRoleBadge className="shadow-sm" />
+                    </div>
                     {isEditing && (
                       <label htmlFor="avatar-upload" className="absolute bottom-0 right-0 bg-gradient-to-r from-green-600 to-blue-600 text-white p-2 rounded-full cursor-pointer hover:opacity-90 transition-opacity shadow-sm">
                         <Camera size={16} />
