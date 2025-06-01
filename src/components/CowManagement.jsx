@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Calendar, Clock, Mail, Phone, MapPin, Users, Award, FileText, Briefcase, User,Download,DollarSign,Droplet,Thermometer } from 'lucide-react';
+import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Calendar, Clock, Mail, Phone, MapPin, Users, Award, FileText, Briefcase, User,Download,DollarSign,Droplet,Thermometer, QrCode, Camera } from 'lucide-react';
 import { fetchCows, addCow, updateCow, deleteCow, recordHealthEvent, recordMilkProduction, recordBreedingEvent,
   fetchRecentActivity,fetchBreedingEvents,fetchHealthHistory,fetchReproductiveStatus,
   fetchGrowthMilestones, recordGrowthMilestone
@@ -8,6 +8,8 @@ import RecordGrowthMilestoneModal from './RecordGrowthMilestoneModal';
 import GrowthChart from './GrowthChart';
 import GrowthMilestoneSummary from './GrowthMilestoneSummary';
 import NextMilestoneReminder from './NextMilestoneReminder';
+import CowQRCode from './CowQRCode';
+import QRScanner from './QRScanner';
 import cowSample from '../assets/images/cow.jpg';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area } from 'recharts';
 import { supabase } from '../lib/supabase';
@@ -78,6 +80,13 @@ const CowManagement = () => {
   const [view, setView] = useState('grid'); // 'grid' or 'table'
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  
+  // QR Code states
+  const [showQRCode, setShowQRCode] = useState(false);
+  const [selectedCowForQR, setSelectedCowForQR] = useState(null);
+  const [showQRScanner, setShowQRScanner] = useState(false);
+  const [showQuickRecordModal, setShowQuickRecordModal] = useState(false);
+  const [scannedCowData, setScannedCowData] = useState(null);
 
   // Fetch cows on component mount
   useEffect(() => {
@@ -479,6 +488,55 @@ const CowManagement = () => {
       setLoading(false);
     }
   };
+  
+  // QR Code handler functions
+  const handleShowQRCode = (cow) => {
+    setSelectedCowForQR(cow);
+    setShowQRCode(true);
+  };
+  
+  const handleCloseQRCode = () => {
+    setShowQRCode(false);
+    setSelectedCowForQR(null);
+  };
+  
+  const handleShowQRScanner = () => {
+    setShowQRScanner(true);
+  };
+  
+  const handleCloseQRScanner = () => {
+    setShowQRScanner(false);
+  };
+  
+  const handleQRScan = (cowData) => {
+    setScannedCowData(cowData);
+    setShowQRScanner(false);
+    
+    // Find the cow in our local data
+    const scannedCow = cows.find(cow => cow.id === cowData.id);
+    if (scannedCow) {
+      setSelectedCow(scannedCow);
+      setShowQuickRecordModal(true);
+    } else {
+      setErrorMessage('Cow not found in the system.');
+      setTimeout(() => setErrorMessage(''), 3000);
+    }
+  };
+  
+  const handleQuickRecord = (recordType) => {
+    setShowQuickRecordModal(false);
+    
+    if (recordType === 'milk') {
+      setIsRecordMilkModalOpen(true);
+    } else if (recordType === 'health') {
+      setIsRecordHealthEventModalOpen(true);
+    }
+  };
+  
+  const handleCloseQuickRecord = () => {
+    setShowQuickRecordModal(false);
+    setScannedCowData(null);
+  };
 
   // We're now using the global checkCowMilkingStatus function consistently
   
@@ -545,16 +603,25 @@ const CowManagement = () => {
               <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700 mr-3">Cow Management</h1>
               <UserRoleBadge role={userRole} />
             </div>
-            {hasPermission('cow:create') && (
+            <div className="flex items-center space-x-3">
               <button 
-                onClick={toggleAddModal}
-                data-action="add-cow"
-                className="flex items-center px-4 py-2 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm"
+                onClick={handleShowQRScanner}
+                className="flex items-center px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm"
               >
-                <Plus size={20} className="mr-2" />
-                Add New Cow
+                <Camera size={20} className="mr-2" />
+                Scan QR
               </button>
-            )}
+              {hasPermission('cow:create') && (
+                <button 
+                  onClick={toggleAddModal}
+                  data-action="add-cow"
+                  className="flex items-center px-4 py-2 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm"
+                >
+                  <Plus size={20} className="mr-2" />
+                  Add New Cow
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
@@ -667,6 +734,7 @@ const CowManagement = () => {
                   onDelete={(e) => toggleDeleteModal(cow, e)}
                   checkCowMilkingStatus={checkCowMilkingStatus}
                   hasPermission={hasPermission}
+                  onShowQRCode={handleShowQRCode}
                 />
               ))}
             </div>
@@ -762,6 +830,16 @@ const CowManagement = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>
+                          <button 
+                            className="text-purple-600 hover:text-purple-900 transition-colors duration-200"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleShowQRCode(cow);
+                            }}
+                            title="Generate QR Code"
+                          >
+                            <QrCode size={16} />
+                          </button>
                           {hasPermission('cow:update') && (
                             <button 
                               className="text-blue-600 hover:text-blue-900 transition-colors duration-200"
@@ -875,12 +953,39 @@ const CowManagement = () => {
           onSubmit={(id,record) => handleRecordGrowthMilestone(id, record)}
         />
       )}
+
+      {/* QR Code Modals */}
+      {showQRCode && selectedCowForQR && (
+        <CowQRCode 
+          cow={selectedCowForQR} 
+          onClose={handleCloseQRCode}
+        />
+      )}
+
+      {showQRScanner && (
+        <QRScanner 
+          onScan={handleQRScan}
+          onClose={handleCloseQRScanner}
+          onError={(error) => {
+            setErrorMessage(`Scanner error: ${error.message}`);
+            setTimeout(() => setErrorMessage(''), 3000);
+          }}
+        />
+      )}
+
+      {showQuickRecordModal && selectedCow && (
+        <QuickRecordModal 
+          cow={selectedCow}
+          onClose={handleCloseQuickRecord}
+          onRecord={handleQuickRecord}
+        />
+      )}
     </div>
   );
 };
 
 // Cow Card Component
-const CowCard = ({ cow, onClick, onEdit, onDelete, checkCowMilkingStatus, hasPermission }) => {
+const CowCard = ({ cow, onClick, onEdit, onDelete, checkCowMilkingStatus, hasPermission, onShowQRCode }) => {
   // Safe method to get latest milk production
   const getLatestMilkProduction = () => {
     if (cow?.milkProduction && cow.milkProduction.length > 0) {
@@ -993,6 +1098,16 @@ const CowCard = ({ cow, onClick, onEdit, onDelete, checkCowMilkingStatus, hasPer
         </div>
         
         <div className="mt-3 pt-2 border-t flex justify-end space-x-2" onClick={(e) => e.stopPropagation()}>
+          <button 
+            className="p-1 text-purple-600 hover:text-purple-900 transition-colors duration-200 hover:bg-purple-50 rounded-full"
+            onClick={(e) => {
+              e.stopPropagation();
+              onShowQRCode(cow);
+            }}
+            title="Generate QR Code"
+          >
+            <QrCode size={16} />
+          </button>
           {hasPermission('cow:update') && (
             <button 
               className="p-1 text-blue-600 hover:text-blue-900 transition-colors duration-200 hover:bg-blue-50 rounded-full"
@@ -4317,6 +4432,74 @@ const RecordBreedingEventModal = ({ cow, onClose, onSubmit }) => {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+};
+
+// Quick Record Modal Component for QR Scanned Cows
+const QuickRecordModal = ({ cow, onClose, onRecord }) => {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div className="flex justify-between items-center p-6 border-b">
+          <h3 className="text-lg font-medium text-gray-900 flex items-center">
+            <QrCode className="mr-2 text-purple-600" size={20} />
+            Quick Record for {cow?.name}
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="p-6">
+          <div className="flex items-center mb-4">
+            <img 
+              src={cowSample} 
+              alt={cow?.name}
+              className="w-16 h-16 object-cover rounded-full bg-gray-200 border-2 border-purple-100 mr-4"
+            />
+            <div>
+              <h4 className="text-lg font-semibold text-gray-800">{cow?.name}</h4>
+              <p className="text-sm text-gray-600">Tag: {cow?.tagNumber}</p>
+              <p className="text-sm text-gray-600">{cow?.breed} • {cow?.status}</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600 mb-4">What would you like to record for this cow?</p>
+            
+            <button
+              onClick={() => onRecord('milk')}
+              className="w-full flex items-center justify-center px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200"
+            >
+              <Droplet className="mr-2" size={20} />
+              Record Milk Production
+            </button>
+            
+            <button
+              onClick={() => onRecord('health')}
+              className="w-full flex items-center justify-center px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all duration-200"
+            >
+              <Thermometer className="mr-2" size={20} />
+              Record Health Event
+            </button>
+          </div>
+        </div>
+
+        <div className="flex justify-end px-6 py-4 border-t bg-gray-50">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+          >
+            Cancel
+          </button>
+        </div>
       </div>
     </div>
   );

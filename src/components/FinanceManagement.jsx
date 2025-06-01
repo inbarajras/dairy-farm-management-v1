@@ -199,6 +199,27 @@ const FinancesManagement = () => {
     setSelectedCustomer(customer);
     setIsViewCustomerModalOpen(!isViewCustomerModalOpen);
   };
+
+// Component to handle empty employee data
+const EmptyEmployeeSection = ({ onRetry }) => {
+  return (
+    <div className="px-6 py-8 text-center">
+      <div className="mb-4">
+        <AlertCircle size={40} className="mx-auto text-amber-500" />
+      </div>
+      <h3 className="text-lg font-medium text-gray-800 mb-2">No Employee Data Available</h3>
+      <p className="text-sm text-gray-600 mb-6">
+        Could not retrieve employee payroll information from the database.
+      </p>
+      <button 
+        onClick={onRetry}
+        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+      >
+        Retry Loading
+      </button>
+    </div>
+  );
+};
   
   const toggleEditCustomerModal = (customer = null) => {
     setSelectedCustomer(customer);
@@ -6100,27 +6121,6 @@ const EditCustomerModal = ({ customer, onClose, onSubmit }) => {
           </div>
         </form>
       </div>
-    </div>
-  );
-};
-
-// Component to handle empty employee data
-const EmptyEmployeeSection = ({ onRetry }) => {
-  return (
-    <div className="px-6 py-8 text-center">
-      <div className="mb-4">
-        <AlertCircle size={40} className="mx-auto text-amber-500" />
-      </div>
-      <h3 className="text-lg font-medium text-gray-800 mb-2">No Employee Data Available</h3>
-      <p className="text-sm text-gray-600 mb-6">
-        Could not retrieve employee payroll information from the database.
-      </p>
-      <button 
-        onClick={onRetry}
-        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-      >
-        Retry Loading
-      </button>
     </div>
   );
 };
