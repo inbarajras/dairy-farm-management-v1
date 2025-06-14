@@ -12,6 +12,39 @@ import { generateFinancialReport } from './services/reportService';
 import { supabase } from '../lib/supabase';
 import LoadingSpinner from './LoadingSpinner';
 
+// Color scheme constants for charts and UI elements
+const CHART_COLORS = {
+  primary: ['#4CAF50', '#2196F3', '#FFC107', '#F44336', '#9C27B0', '#00BCD4', '#FF9800'],
+  status: {
+    paid: '#4CAF50',
+    pending: '#FFC107', 
+    overdue: '#F44336',
+    cancelled: '#9E9E9E'
+  },
+  gradients: {
+    green: { from: '#10B981', to: '#059669' },
+    blue: { from: '#3B82F6', to: '#1D4ED8' },
+    red: { from: '#EF4444', to: '#DC2626' },
+    yellow: { from: '#F59E0B', to: '#D97706' },
+    purple: { from: '#8B5CF6', to: '#7C3AED' }
+  }
+};
+
+// Default constants to avoid hardcoded values
+const DEFAULT_VALUES = {
+  currency: '₹0.00',
+  dateError: 'Invalid Date',
+  noDataMessage: 'N/A',
+  defaultPageSize: 10,
+  errorMessages: {
+    general: 'An error occurred while processing your request',
+    dataLoad: 'Failed to load data',
+    save: 'Failed to save changes',
+    delete: 'Failed to delete item',
+    validation: 'Please check the form for errors'
+  }
+};
+
 
 const statusColors = {
   'Active': 'bg-green-100 text-green-800',
@@ -27,10 +60,10 @@ const statusColors = {
 };
 
 // Formatting utility functions
-// Format currency values with dollar sign and commas
+// Format currency values with INR symbol and commas
 const formatCurrency = (amount) => {
-  if (amount === null || amount === undefined) return '$0.00';
-  return new Intl.NumberFormat('en-US', { 
+  if (amount === null || amount === undefined || isNaN(amount)) return DEFAULT_VALUES.currency;
+  return new Intl.NumberFormat('en-IN', { 
     style: 'currency', 
     currency: 'INR',
     minimumFractionDigits: 2,
@@ -40,20 +73,20 @@ const formatCurrency = (amount) => {
 
 // Format dates from ISO to readable format
 const formatDate = (dateString) => {
-  if (!dateString) return 'N/A';
+  if (!dateString) return DEFAULT_VALUES.noDataMessage;
   
   try {
     const date = new Date(dateString);
-    if (isNaN(date.getTime())) return 'Invalid Date';
+    if (isNaN(date.getTime())) return DEFAULT_VALUES.dateError;
     
-    return new Intl.DateTimeFormat('en-US', {
+    return new Intl.DateTimeFormat('en-IN', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
     }).format(date);
   } catch (error) {
     console.error('Error formatting date:', error);
-    return 'Invalid Date';
+    return DEFAULT_VALUES.dateError;
   }
 };
 
@@ -137,21 +170,20 @@ const FinancesManagement = () => {
   });
   const [topCustomers, setTopCustomers] = useState([]);
   const [isRevenueLoading, setIsRevenueLoading] = useState(false);
-  const [invoicesSummary, setInvoicesSummary] = useState({
-    outstanding: 0,
-    outstandingCount: 0,
-    overdue: 0,
-    overdueCount: 0,
-    paidThisMonth: 0,
-    paidCountThisMonth: 0,
-    issuedThisMonth: 0,
-    issuedCountThisMonth: 0,
-    revenueCategories: [],
-    invoiceStatusData: [
-      { name: 'Paid', value: 0, color: '#4CAF50' },
-      { name: 'Pending', value: 0, color: '#FFC107' },
-      { name: 'Overdue', value: 0, color: '#F44336' }
-    ]
+  const [invoicesSummary, setInvoicesSummary] = useState({        outstanding: 0,
+        outstandingCount: 0,
+        overdue: 0,
+        overdueCount: 0,
+        paidThisMonth: 0,
+        paidCountThisMonth: 0,
+        issuedThisMonth: 0,
+        issuedCountThisMonth: 0,
+        revenueCategories: [],
+        invoiceStatusData: [
+          { name: 'Paid', value: 0, color: CHART_COLORS.status.paid },
+          { name: 'Pending', value: 0, color: CHART_COLORS.status.pending },
+          { name: 'Overdue', value: 0, color: CHART_COLORS.status.overdue }
+        ]
   });
   const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
   const [reportData, setReportData] = useState({
@@ -644,16 +676,23 @@ const EmptyEmployeeSection = ({ onRetry }) => {
   // Function to fetch employee data
   const fetchEmployees = async () => {
     try {
-      setIsLoading(true);
-      const data = await getFinancialDashboardData();
-      console.log('Refreshed financial data with employees:', data.payroll.employees);
-      setFinancialData(data);
+      setIsLoadingEmployees(true);
       setError(null);
+      const data = await getFinancialDashboardData();
+      console.log('Refreshed financial data with employees:', data?.payroll?.employees);
+      
+      // Ensure data structure exists before setting
+      if (data && data.payroll) {
+        setFinancialData(data);
+      } else {
+        console.warn('Invalid financial data structure received');
+        setError('Invalid employee data received. Please try again.');
+      }
     } catch (err) {
       console.error('Error loading employee data:', err);
       setError('Failed to load employee data. Please try again.');
     } finally {
-      setIsLoading(false);
+      setIsLoadingEmployees(false);
     }
   };
   
@@ -832,9 +871,8 @@ const EmptyEmployeeSection = ({ onRetry }) => {
       
       // Transform revenueByProduct into an array for the chart
       const revenueCategories = Object.entries(revenueByProduct).map(([name, value], index) => {
-        // Generate a color based on index
-        const colors = ['#4CAF50', '#2196F3', '#FFC107', '#F44336', '#9C27B0', '#00BCD4', '#FF9800'];
-        const color = colors[index % colors.length];
+        // Use defined color scheme
+        const color = CHART_COLORS.primary[index % CHART_COLORS.primary.length];
         
         return { name, value, color };
       });
@@ -850,10 +888,10 @@ const EmptyEmployeeSection = ({ onRetry }) => {
       
       // Create invoice status data for pie chart
       const invoiceStatusData = [
-        { name: 'Paid', value: paidAmount, color: '#4CAF50' },
-        { name: 'Pending', value: pendingAmount, color: '#FFC107' },
-        { name: 'Overdue', value: overdueAmount, color: '#F44336' },
-        { name: 'Cancelled', value: cancelledAmount, color: '#9E9E9E' }
+        { name: 'Paid', value: paidAmount, color: CHART_COLORS.status.paid },
+        { name: 'Pending', value: pendingAmount, color: CHART_COLORS.status.pending },
+        { name: 'Overdue', value: overdueAmount, color: CHART_COLORS.status.overdue },
+        { name: 'Cancelled', value: cancelledAmount, color: CHART_COLORS.status.cancelled }
       ].filter(item => item.value > 0); // Only include non-zero values
       
       return {
@@ -881,9 +919,9 @@ const EmptyEmployeeSection = ({ onRetry }) => {
         issuedCountThisMonth: 0,
         revenueCategories: [],
         invoiceStatusData: [
-          { name: 'Paid', value: 0, color: '#4CAF50' },
-          { name: 'Pending', value: 0, color: '#FFC107' },
-          { name: 'Overdue', value: 0, color: '#F44336' }
+          { name: 'Paid', value: 0, color: CHART_COLORS.status.paid },
+          { name: 'Pending', value: 0, color: CHART_COLORS.status.pending },
+          { name: 'Overdue', value: 0, color: CHART_COLORS.status.overdue }
         ]
       };
     } finally {
@@ -1531,11 +1569,11 @@ const EmptyEmployeeSection = ({ onRetry }) => {
                         contentStyle={{ background: '#fff', border: '1px solid #f1f1f1', borderRadius: '4px' }}
                       />
                       <Legend />
-                      <Bar dataKey="feed" name="Feed" fill="#2E7D32" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="labor" name="Labor" fill="#1565C0" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="utilities" name="Utilities" fill="#FFA000" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="veterinary" name="Veterinary" fill="#F44336" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="maintenance" name="Maintenance" fill="#9E9E9E" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="feed" name="Feed" fill={CHART_COLORS.primary[0]} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="labor" name="Labor" fill={CHART_COLORS.primary[1]} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="utilities" name="Utilities" fill={CHART_COLORS.primary[2]} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="veterinary" name="Veterinary" fill={CHART_COLORS.primary[3]} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="maintenance" name="Maintenance" fill={CHART_COLORS.primary[4]} radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -1964,8 +2002,8 @@ const EmptyEmployeeSection = ({ onRetry }) => {
                           contentStyle={{ background: '#fff', border: '1px solid #f1f1f1', borderRadius: '4px' }}
                         />
                         <Legend />
-                        <Bar dataKey="income" name="Revenue" fill="#4CAF50" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="expenses" name="Expenses" fill="#F44336" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="income" name="Revenue" fill={CHART_COLORS.status.paid} radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="expenses" name="Expenses" fill={CHART_COLORS.status.overdue} radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -2140,7 +2178,7 @@ const EmptyEmployeeSection = ({ onRetry }) => {
                         cy="50%"
                         labelLine={false}
                         outerRadius={80}
-                        fill="#8884d8"
+                        fill={CHART_COLORS.primary[1]}
                         dataKey="value"
                         label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                       >
@@ -2749,9 +2787,9 @@ const EmptyEmployeeSection = ({ onRetry }) => {
                         contentStyle={{ background: '#fff', border: '1px solid #f1f1f1', borderRadius: '4px' }}
                       />
                       <Legend />
-                      <Bar dataKey="income" name="Income" fill="#4CAF50" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="expenses" name="Expenses" fill="#F44336" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="profit" name="Profit" fill="#FFC107" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="income" name="Income" fill={CHART_COLORS.status.paid} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="expenses" name="Expenses" fill={CHART_COLORS.status.overdue} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="profit" name="Profit" fill={CHART_COLORS.status.pending} radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -2765,7 +2803,9 @@ const EmptyEmployeeSection = ({ onRetry }) => {
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Expense Breakdown</h2>
                   <div className="flex items-center space-x-2">
-                    <span className="text-sm text-gray-500">April 2023</span>
+                    <span className="text-sm text-gray-500">
+                      {new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+                    </span>
                   </div>
                 </div>
                 <div className="h-80 flex flex-col md:flex-row items-center justify-between">
@@ -2778,7 +2818,7 @@ const EmptyEmployeeSection = ({ onRetry }) => {
                           cy="50%"
                           labelLine={false}
                           outerRadius={80}
-                          fill="#8884d8"
+                          fill={CHART_COLORS.primary[1]}
                           dataKey="value"
                           label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                         >
@@ -3215,7 +3255,7 @@ const EmptyEmployeeSection = ({ onRetry }) => {
                           type="monotone" 
                           dataKey="amount" 
                           name="Payroll Cost" 
-                          stroke="#4CAF50" 
+                          stroke={CHART_COLORS.status.paid} 
                           strokeWidth={2} 
                           dot={{ r: 4 }} 
                           activeDot={{ r: 6 }} 
