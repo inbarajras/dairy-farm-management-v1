@@ -136,22 +136,37 @@ const CowManagement = () => {
     }
     
     if (cow?.milkProduction && cow.milkProduction.length > 0) {
-      const latest = cow.milkProduction[cow.milkProduction.length - 1];
+      // Sort milk production records by date to ensure we get the latest one
+      const sortedProduction = [...cow.milkProduction].sort((a, b) => {
+        const dateA = new Date(a.date);
+        const dateB = new Date(b.date);
+        return dateB - dateA; // Descending order (newest first)
+      });
+      
+      const latest = sortedProduction[0];
       if (!latest.date) return { milked: false, message: 'No milking date recorded' };
       
+      // Normalize dates to avoid timezone issues
       const today = new Date();
-      const milkDate = new Date(latest.date);
+      const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD format
       
-      // Check if dates are the same day
-      const isSameDay = 
-        milkDate.getDate() === today.getDate() &&
-        milkDate.getMonth() === today.getMonth() &&
-        milkDate.getFullYear() === today.getFullYear();
+      // Handle different date formats
+      let milkDateStr;
+      if (typeof latest.date === 'string') {
+        milkDateStr = latest.date.split('T')[0]; // Extract YYYY-MM-DD part
+      } else {
+        const milkDate = new Date(latest.date);
+        milkDateStr = milkDate.toISOString().split('T')[0];
+      }
+      
+      const isSameDay = todayStr === milkDateStr;
         
       return { 
         milked: isSameDay,
         message: isSameDay ? 'Milked today' : 'Not milked today',
-        shift: latest.shift || 'Not specified'
+        shift: latest.shift || 'Not specified',
+        latestDate: milkDateStr,
+        todayDate: todayStr
       };
     }
     
@@ -365,21 +380,28 @@ const CowManagement = () => {
   const handleRecordMilkProduction = async (cowId, recordData) => {
     try {
       setLoading(true);
-      console.log(recordData);
+      console.log('Recording milk production:', recordData);
       const newRecord = await recordMilkProduction(cowId, recordData);
+      
+      // Create the new milk record object
+      const newMilkRecord = {
+        date: recordData.date,
+        amount: recordData.amount,
+        shift: recordData.shift || 'Morning',
+        quality: recordData.quality || 'Good',
+        notes: recordData.notes || ''
+      };
       
       // Update local state with the new milk production record
       const updatedCows = cows.map(cow => {
         if (cow.id === cowId) {
+          // Add the new record and sort by date (newest first)
+          const updatedMilkProduction = [...cow.milkProduction, newMilkRecord]
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
+          
           return {
             ...cow,
-            milkProduction: [...cow.milkProduction, {
-              date: recordData.date,
-              amount: recordData.amount,
-              shift: recordData.shift || 'Morning', // Adding shift property
-              quality: recordData.quality || 'Good',
-              notes: recordData.notes || ''
-            }]
+            milkProduction: updatedMilkProduction
           };
         }
         return cow;
@@ -388,15 +410,12 @@ const CowManagement = () => {
       setCows(updatedCows);
       
       if (selectedCow && selectedCow.id === cowId) {
+        const updatedMilkProduction = [...selectedCow.milkProduction, newMilkRecord]
+          .sort((a, b) => new Date(b.date) - new Date(a.date));
+          
         setSelectedCow({
           ...selectedCow,
-          milkProduction: [...selectedCow.milkProduction, {
-            date: recordData.date,
-            amount: recordData.amount,
-            shift: recordData.shift || 'Morning',
-            quality: recordData.quality || 'Good',
-            notes: recordData.notes || ''
-          }]
+          milkProduction: updatedMilkProduction
         });
       }
       
