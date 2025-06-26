@@ -229,6 +229,21 @@ export const recordHealthEvent = async (cowId, eventData) => {
 // Record milk production
 export const recordMilkProduction = async (cowId, recordData) => {
     try {
+      // Check for existing record with same cow_id, date, and shift
+      const { data: existingRecords, error: checkError } = await supabase
+        .from('milk_production')
+        .select('id')
+        .eq('cow_id', cowId)
+        .eq('date', recordData.date)
+        .eq('shift', recordData.shift || 'Morning');
+      
+      if (checkError) throw checkError;
+      
+      // If a record already exists, prevent duplicate
+      if (existingRecords && existingRecords.length > 0) {
+        throw new Error(`Milk production record already exists for this cow on ${recordData.date} for ${recordData.shift || 'Morning'} shift. Duplicate records are not allowed.`);
+      }
+      
       const { data, error } = await supabase
         .from('milk_production')
         .insert({

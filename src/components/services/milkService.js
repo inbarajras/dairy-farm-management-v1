@@ -179,6 +179,21 @@ export const fetchQualityTrends = async (days = 7) => {
 // Add a new milk collection record
 export const addMilkCollection = async (collectionData) => {
     try {
+      // Check for existing record with same cow_id, date, and shift
+      const { data: existingRecords, error: checkError } = await supabase
+        .from('milk_production')
+        .select('id')
+        .eq('cow_id', collectionData.cowId)
+        .eq('date', collectionData.date)
+        .eq('shift', collectionData.shift || 'Morning');
+      
+      if (checkError) throw checkError;
+      
+      // If a record already exists, prevent duplicate
+      if (existingRecords && existingRecords.length > 0) {
+        throw new Error(`Milk collection record already exists for this cow on ${collectionData.date} for ${collectionData.shift || 'Morning'} shift. Duplicate records are not allowed.`);
+      }
+      
       // First, let's insert into milk_production
       const { data, error } = await supabase
         .from('milk_production')
