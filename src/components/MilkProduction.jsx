@@ -386,6 +386,11 @@ useEffect(() => {
       // Call the service function to add the collection
       const result = await addMilkCollection(collectionData);
       
+      if (!result.success) {
+        toast.error(result.message);
+        return result; // Return the result so the modal can handle it
+      }
+      
       // Reload data to reflect the changes
       const startDateStr = new Date(Date.now() - (7 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
       const endDateStr = new Date().toISOString().split('T')[0];
@@ -397,10 +402,12 @@ useEffect(() => {
         dailyCollections: updatedCollections
       });
       
+      toast.success('Milk collection recorded successfully!');
       return result;
     } catch (error) {
       console.error('Error adding collection:', error);
-      throw error;
+      toast.error('An unexpected error occurred. Please try again.');
+      return { success: false, message: 'An unexpected error occurred. Please try again.' };
     }
   };
   
@@ -2773,7 +2780,6 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
       bacteria: ''
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [error, setError] = useState(null);
     const [cows, setCows] = useState([]);
     const [isLoadingCows, setIsLoadingCows] = useState(true);
     
@@ -2790,7 +2796,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
           setCows(cowsData);
         } catch (error) {
           console.error('Error loading cows:', error);
-          setError('Failed to load cows. Please try again.');
+          toast.error('Failed to load cows. Please try again.');
         } finally {
           setIsLoadingCows(false);
         }
@@ -2820,12 +2826,12 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
     const handleSubmit = async (e) => {
       e.preventDefault();
       setIsSubmitting(true);
-      setError(null);
       
       try {
         // Validate required fields
         if (!formData.cowId || !formData.date || !formData.totalQuantity) {
-          throw new Error("Please fill in all required fields");
+          toast.error("Please fill in all required fields");
+          return;
         }
         
         // Prepare data for API
@@ -2844,18 +2850,22 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
         };  
         
         // Call the onAdd function that will use the milk service
-        await onAdd(collectionData);
+        const result = await onAdd(collectionData);
         
-        // Handle WhatsApp notification if enabled
-        if (formData.sendWhatsAppNotification) {
-          console.log('Would send WhatsApp notification here');
-          // In a real app, you'd implement a notification service
+        // Only proceed if the operation was successful
+        if (result && result.success) {
+          // Handle WhatsApp notification if enabled
+          if (formData.sendWhatsAppNotification) {
+            console.log('Would send WhatsApp notification here');
+            // In a real app, you'd implement a notification service
+          }
+          
+          onClose();
         }
-        
-        onClose();
+        // If result.success is false, the error toast will already be shown by handleAddCollection
       } catch (error) {
         console.error('Error submitting form:', error);
-        setError('Failed to record milk collection. Please try again.');
+        toast.error('An unexpected error occurred. Please try again.');
       } finally {
         setIsSubmitting(false);
       }
@@ -2875,12 +2885,6 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
               <X size={20} />
             </button>
           </div>
-          
-          {error && (
-            <div className="mx-6 mt-4 p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg">
-              {error}
-            </div>
-          )}
           
           <form onSubmit={handleSubmit}>
             <div className="px-6 py-4 space-y-6">

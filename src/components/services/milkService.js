@@ -187,11 +187,20 @@ export const addMilkCollection = async (collectionData) => {
         .eq('date', collectionData.date)
         .eq('shift', collectionData.shift || 'Morning');
       
-      if (checkError) throw checkError;
+      if (checkError) {
+        console.error('Error checking for existing records:', checkError);
+        return {
+          success: false,
+          message: 'Failed to check for existing records. Please try again.'
+        };
+      }
       
-      // If a record already exists, prevent duplicate
+      // If a record already exists, return failure with message
       if (existingRecords && existingRecords.length > 0) {
-        throw new Error(`Milk collection record already exists for this cow on ${collectionData.date} for ${collectionData.shift || 'Morning'} shift. Duplicate records are not allowed.`);
+        return {
+          success: false,
+          message: `Milk collection record already exists for this cow on ${collectionData.date} for ${collectionData.shift || 'Morning'} shift. Duplicate records are not allowed.`
+        };
       }
       
       // First, let's insert into milk_production
@@ -218,12 +227,24 @@ export const addMilkCollection = async (collectionData) => {
         })
         .select();
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error inserting milk collection record:', error);
+        return {
+          success: false,
+          message: 'Failed to add milk collection. Please try again.'
+        };
+      }
       
-      return data[0];
+      return {
+        success: true,
+        data: data[0]
+      };
     } catch (error) {
       console.error('Error adding milk collection:', error);
-      throw error;
+      return {
+        success: false,
+        message: 'An unexpected error occurred. Please try again.'
+      };
     }
   };
 
