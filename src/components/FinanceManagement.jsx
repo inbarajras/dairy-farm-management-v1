@@ -297,10 +297,14 @@ const EmptyEmployeeSection = ({ onRetry }) => {
   const handleCustomerUpdate = async (customerId, customerData) => {
     try {
       setIsLoading(true);
-      await updateCustomer(customerId, customerData);
+      const updatedCustomer = await updateCustomer(customerId, customerData);
       
-      // Refresh customer list
-      await fetchCustomers();
+      // Update local customer list with the response from the database
+      setCustomers(prevCustomers => 
+        prevCustomers.map(customer => 
+          customer.id === customerId ? updatedCustomer : customer
+        )
+      );
       
       toggleEditCustomerModal();
       return true;
@@ -323,8 +327,10 @@ const EmptyEmployeeSection = ({ onRetry }) => {
       setIsLoading(true);
       await deleteCustomer(customerId);
       
-      // Refresh customer list
-      await fetchCustomers();
+      // Update local customer list
+      setCustomers(prevCustomers => 
+        prevCustomers.filter(customer => customer.id !== customerId)
+      );
       
       return true;
     } catch (err) {
@@ -1216,7 +1222,7 @@ const EmptyEmployeeSection = ({ onRetry }) => {
       // Update the expense in the database
       const updatedExpense = await updateExpense(expenseId, expenseData);
       
-      // Update the financial data state
+      // Update the financial data state with the response from the database
       setFinancialData(prevData => {
         const updatedRecent = prevData.expenses.recent.map(expense => 
           expense.id === expenseId ? updatedExpense : expense
@@ -1231,9 +1237,13 @@ const EmptyEmployeeSection = ({ onRetry }) => {
         };
       });
       
-      // If on expenses tab, refresh the expenses list
+      // Update the expenses list if on expenses tab
       if (activeTab === 'expenses') {
-        fetchExpenses(expensePage, expenseSearchQuery);
+        setExpensesList(prevList => 
+          prevList.map(expense => 
+            expense.id === expenseId ? updatedExpense : expense
+          )
+        );
       }
       
       // Close the edit modal
@@ -1273,9 +1283,11 @@ const EmptyEmployeeSection = ({ onRetry }) => {
         };
       });
       
-      // If on expenses tab, refresh the expenses list
+      // Update the expenses list if on expenses tab
       if (activeTab === 'expenses') {
-        fetchExpenses(expensePage, expenseSearchQuery);
+        setExpensesList(prevList => 
+          prevList.filter(expense => expense.id !== expenseId)
+        );
       }
     } catch (err) {
       console.error('Error deleting expense:', err);
@@ -1308,12 +1320,12 @@ const EmptyEmployeeSection = ({ onRetry }) => {
     try {
       setIsLoading(true);
       
-      await updateExpense(expenseId, { status: newStatus });
+      const updatedExpense = await updateExpense(expenseId, { status: newStatus });
       
-      // Update the financial data state
+      // Update the financial data state with the response from the database
       setFinancialData(prevData => {
         const updatedRecent = prevData.expenses.recent.map(expense => 
-          expense.id === expenseId ? { ...expense, status: newStatus } : expense
+          expense.id === expenseId ? updatedExpense : expense
         );
         
         return {
@@ -1325,9 +1337,13 @@ const EmptyEmployeeSection = ({ onRetry }) => {
         };
       });
       
-      // If on expenses tab, refresh the expenses list
+      // Update the expenses list if on expenses tab
       if (activeTab === 'expenses') {
-        fetchExpenses(expensePage, expenseSearchQuery);
+        setExpensesList(prevList => 
+          prevList.map(expense => 
+            expense.id === expenseId ? updatedExpense : expense
+          )
+        );
       }
     } catch (err) {
       console.error('Error updating expense status:', err);
@@ -1420,13 +1436,16 @@ const EmptyEmployeeSection = ({ onRetry }) => {
       setIsLoading(true);
       await updateInvoiceStatus(invoiceId, newStatus);
       
-      // Refresh invoices list
-      await fetchInvoices(invoicesPage, invoiceSearchQuery);
+      // Update the invoices list with the new status
+      setInvoicesList(prevList => 
+        prevList.map(invoice => 
+          invoice.id === invoiceId ? { ...invoice, status: newStatus } : invoice
+        )
+      );
       
-      // If we're viewing the invoice, refresh the selected invoice data
+      // If we're viewing the invoice, update the selected invoice data
       if (selectedInvoice && selectedInvoice.id === invoiceId) {
-        const updatedInvoice = await getInvoiceById(invoiceId);
-        setSelectedInvoice(updatedInvoice);
+        setSelectedInvoice(prev => ({ ...prev, status: newStatus }));
       }
       
       // Update the financial dashboard data
@@ -1487,8 +1506,10 @@ const EmptyEmployeeSection = ({ onRetry }) => {
       setIsLoading(true);
       await deleteInvoice(invoiceId);
       
-      // Refresh invoices list
-      await fetchInvoices(invoicesPage, invoiceSearchQuery);
+      // Update invoices list by removing the deleted invoice
+      setInvoicesList(prevList => 
+        prevList.filter(invoice => invoice.id !== invoiceId)
+      );
       
       // Close the details modal if it's open
       if (isViewInvoiceModalOpen && selectedInvoice?.id === invoiceId) {
