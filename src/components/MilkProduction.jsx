@@ -954,21 +954,12 @@ useEffect(() => {
       setIsLoading(true);
       console.log(updatedCollection);
       try {
-        // Create a proper updated collection object with nested qualityParameters
-        const processedCollection = {
-          ...updatedCollection,
-          qualityParameters: {
-            fat: updatedCollection.fat,
-            protein: updatedCollection.protein,
-            lactose: updatedCollection.lactose,
-            somatic: updatedCollection.somatic,
-            bacteria: updatedCollection.bacteria
-          }
-        };
+        // Update the collection in the database first
+        const updatedRecord = await updateMilkCollection(updatedCollection.id, updatedCollection);
         
-        // Update the collections list to reflect changes
+        // Update the collections list with the response from the database
         const updatedCollectionsList = collectionsList.map(item => 
-          item.id === updatedCollection.id ? updatedCollection : item
+          item.id === updatedCollection.id ? updatedRecord : item
         );
         
         setCollectionsList(updatedCollectionsList);
