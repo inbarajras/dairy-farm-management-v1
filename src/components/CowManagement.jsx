@@ -106,6 +106,37 @@ const CowManagement = () => {
     loadCows();
   }, []);
 
+  // Refresh cow data function (can be called when data changes)
+  const refreshCowData = async () => {
+    try {
+      const data = await fetchCows();
+      setCows(data);
+      
+      // If we have a selected cow, update it with fresh data
+      if (selectedCow) {
+        const updatedSelectedCow = data.find(cow => cow.id === selectedCow.id);
+        if (updatedSelectedCow) {
+          setSelectedCow(updatedSelectedCow);
+        }
+      }
+    } catch (err) {
+      console.error('Error refreshing cow data:', err);
+      setErrorMessage('Failed to refresh cow data.');
+      setTimeout(() => setErrorMessage(''), 3000);
+    }
+  };
+
+  // Add periodic refresh every 5 minutes to catch updates from other components
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!loading) {
+        refreshCowData();
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+    
+    return () => clearInterval(interval);
+  }, [loading]);
+
   const ensureValidCows = (cowsArray) => {
     if (!cowsArray || !Array.isArray(cowsArray)) {
       return [];
@@ -137,26 +168,66 @@ const CowManagement = () => {
     
     if (cow?.milkProduction && cow.milkProduction.length > 0) {
       // Sort milk production records by date to ensure we get the latest one
+      // Create a defensive copy and sort properly with enhanced logic
       const sortedProduction = [...cow.milkProduction].sort((a, b) => {
+        // Ensure we're comparing dates correctly
         const dateA = new Date(a.date);
         const dateB = new Date(b.date);
-        return dateB - dateA; // Descending order (newest first)
+        
+        // Check for invalid dates
+        if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+          console.warn('Invalid date found in milk production records:', { a: a.date, b: b.date });
+          return 0;
+        }
+        
+        const dateComparison = dateB.getTime() - dateA.getTime(); // Descending order (newest first)
+        
+        // If dates are the same, prioritize Evening shift over Morning shift
+        if (dateComparison === 0) {
+          const shiftA = a.shift || 'Morning';
+          const shiftB = b.shift || 'Morning';
+          
+          // Evening has higher priority than Morning
+          if (shiftA === 'Evening' && shiftB === 'Morning') {
+            return -1; // a comes first (Evening before Morning)
+          }
+          if (shiftA === 'Morning' && shiftB === 'Evening') {
+            return 1; // b comes first (Evening before Morning)
+          }
+          
+          // If both are the same shift, maintain original order
+          return 0;
+        }
+        
+        return dateComparison;
       });
       
       const latest = sortedProduction[0];
-      if (!latest.date) return { milked: false, message: 'No milking date recorded' };
+      if (!latest || !latest.date) {
+        return { milked: false, message: 'No milking date recorded' };
+      }
       
-      // Normalize dates to avoid timezone issues
+      // Get today's date in the local timezone and normalize to YYYY-MM-DD
       const today = new Date();
-      const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD format
+      const todayStr = today.getFullYear() + '-' + 
+                     String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+                     String(today.getDate()).padStart(2, '0');
       
-      // Handle different date formats
+      // Normalize the latest milk production date to YYYY-MM-DD format
       let milkDateStr;
-      if (typeof latest.date === 'string') {
-        milkDateStr = latest.date.split('T')[0]; // Extract YYYY-MM-DD part
-      } else {
+      try {
         const milkDate = new Date(latest.date);
-        milkDateStr = milkDate.toISOString().split('T')[0];
+        if (isNaN(milkDate.getTime())) {
+          console.warn('Invalid milk production date:', latest.date);
+          return { milked: false, message: 'Invalid milking date format' };
+        }
+        
+        milkDateStr = milkDate.getFullYear() + '-' + 
+                     String(milkDate.getMonth() + 1).padStart(2, '0') + '-' + 
+                     String(milkDate.getDate()).padStart(2, '0');
+      } catch (error) {
+        console.error('Error parsing milk production date:', latest.date, error);
+        return { milked: false, message: 'Error parsing milking date' };
       }
       
       const isSameDay = todayStr === milkDateStr;
@@ -400,9 +471,39 @@ const CowManagement = () => {
       // Update local state with the new milk production record
       const updatedCows = cows.map(cow => {
         if (cow.id === cowId) {
-          // Add the new record and sort by date (newest first)
+          // Add the new record and sort by date (newest first), then by shift priority (Evening > Morning) for same day
           const updatedMilkProduction = [...cow.milkProduction, newMilkRecord]
-            .sort((a, b) => new Date(b.date) - new Date(a.date));
+            .sort((a, b) => {
+              const dateA = new Date(a.date);
+              const dateB = new Date(b.date);
+              
+              // Check for invalid dates
+              if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+                console.warn('Invalid date found in milk production records:', { a: a.date, b: b.date });
+                return 0;
+              }
+              
+              const dateComparison = dateB.getTime() - dateA.getTime();
+              
+              // If dates are the same, prioritize Evening shift over Morning shift
+              if (dateComparison === 0) {
+                const shiftA = a.shift || 'Morning';
+                const shiftB = b.shift || 'Morning';
+                
+                // Evening has higher priority than Morning
+                if (shiftA === 'Evening' && shiftB === 'Morning') {
+                  return -1; // a comes first (Evening before Morning)
+                }
+                if (shiftA === 'Morning' && shiftB === 'Evening') {
+                  return 1; // b comes first (Evening before Morning)
+                }
+                
+                // If both are the same shift, maintain original order
+                return 0;
+              }
+              
+              return dateComparison;
+            });
           
           return {
             ...cow,
@@ -416,7 +517,37 @@ const CowManagement = () => {
       
       if (selectedCow && selectedCow.id === cowId) {
         const updatedMilkProduction = [...selectedCow.milkProduction, newMilkRecord]
-          .sort((a, b) => new Date(b.date) - new Date(a.date));
+          .sort((a, b) => {
+            const dateA = new Date(a.date);
+            const dateB = new Date(b.date);
+            
+            // Check for invalid dates
+            if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+              console.warn('Invalid date found in milk production records:', { a: a.date, b: b.date });
+              return 0;
+            }
+            
+            const dateComparison = dateB.getTime() - dateA.getTime();
+            
+            // If dates are the same, prioritize Evening shift over Morning shift
+            if (dateComparison === 0) {
+              const shiftA = a.shift || 'Morning';
+              const shiftB = b.shift || 'Morning';
+              
+              // Evening has higher priority than Morning
+              if (shiftA === 'Evening' && shiftB === 'Morning') {
+                return -1; // a comes first (Evening before Morning)
+              }
+              if (shiftA === 'Morning' && shiftB === 'Evening') {
+                return 1; // b comes first (Evening before Morning)
+              }
+              
+              // If both are the same shift, maintain original order
+              return 0;
+            }
+            
+            return dateComparison;
+          });
           
         setSelectedCow({
           ...selectedCow,
@@ -813,7 +944,7 @@ const CowManagement = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {cow.milkProduction && cow.milkProduction.length > 0 
-                        ? `${cow.milkProduction[cow.milkProduction.length - 1].amount}L/day`
+                        ? `${cow.milkProduction[0].amount}L/day`
                         : '0L/day'
                       }
                       </td>
@@ -1011,7 +1142,8 @@ const CowCard = ({ cow, onClick, onEdit, onDelete, checkCowMilkingStatus, hasPer
   // Safe method to get latest milk production
   const getLatestMilkProduction = () => {
     if (cow?.milkProduction && cow.milkProduction.length > 0) {
-      const latest = cow.milkProduction[cow.milkProduction.length - 1];
+      // Since the data is now sorted with newest first, get the first item
+      const latest = cow.milkProduction[0];
       return `${latest.amount || '0'}L/day`;
     }
     return '0L/day';
@@ -1814,7 +1946,7 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                           <div className="text-center p-2 rounded-lg bg-gradient-to-b from-purple-50 to-purple-100 border border-purple-200">
                             <p className="text-xs text-gray-500">Latest</p>
                             <p className="text-lg font-bold text-purple-600">
-                              {parseFloat(cow.milkProduction[cow.milkProduction.length - 1]?.amount || 0).toFixed(1)}L
+                              {parseFloat(cow.milkProduction[0]?.amount || 0).toFixed(1)}L
                             </p>
                           </div>
                         </div>
@@ -1850,7 +1982,7 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                         {hasMilkProductionData ? (
-                            cow.milkProduction.slice().reverse().map((record, index) => (
+                            cow.milkProduction.map((record, index) => (
                               <tr key={index} className="hover:bg-gray-50 transition-colors duration-200">
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                   {formatDate(record.date)}

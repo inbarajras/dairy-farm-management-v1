@@ -21,13 +21,46 @@ export const fetchCows = async () => {
       status: cow.status,
       healthStatus: cow.health_status,
       owner: cow.owner,
-      milkProduction: cow.milk_production.map(record => ({
-        date: record.date,
-        amount: record.amount,
-        shift: record.shift || 'Morning',
-        quality: record.quality || 'Good',
-        notes: record.notes || ''
-      })),
+      milkProduction: cow.milk_production
+        .map(record => ({
+          date: record.date,
+          amount: record.amount,
+          shift: record.shift || 'Morning',
+          quality: record.quality || 'Good',
+          notes: record.notes || ''
+        }))
+        .sort((a, b) => {
+          // Enhanced sorting: First by date (newest first), then by shift priority (Evening > Morning) for same day
+          const dateA = new Date(a.date);
+          const dateB = new Date(b.date);
+          
+          // Check for invalid dates
+          if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+            console.warn('Invalid date found in milk production records:', { a: a.date, b: b.date });
+            return 0;
+          }
+          
+          const dateComparison = dateB.getTime() - dateA.getTime();
+          
+          // If dates are the same, prioritize Evening shift over Morning shift
+          if (dateComparison === 0) {
+            const shiftA = a.shift || 'Morning';
+            const shiftB = b.shift || 'Morning';
+            
+            // Evening has higher priority than Morning
+            if (shiftA === 'Evening' && shiftB === 'Morning') {
+              return -1; // a comes first (Evening before Morning)
+            }
+            if (shiftA === 'Morning' && shiftB === 'Evening') {
+              return 1; // b comes first (Evening before Morning)
+            }
+            
+            // If both are the same shift, maintain original order
+            return 0;
+          }
+          
+          return dateComparison;
+        }),
       lastHealthCheck: cow.last_health_check,
       vaccinationStatus: cow.vaccination_status,
       alerts: cow.alerts ? JSON.parse(cow.alerts) : [],

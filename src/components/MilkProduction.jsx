@@ -913,10 +913,11 @@ useEffect(() => {
         (filter === 'morning' && collection.shift === 'Morning') ||
         (filter === 'evening' && collection.shift === 'Evening');
       
-      // Search by ID, date, or collector
+      // Search by cow name, tag number, date, or collector
       const matchesSearch = 
         searchQuery === '' || 
-        collection.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (collection.cowName && collection.cowName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (collection.cowTagNumber && collection.cowTagNumber.toLowerCase().includes(searchQuery.toLowerCase())) ||
         collection.date.includes(searchQuery) ||
         collection.collectedBy.toLowerCase().includes(searchQuery.toLowerCase());
       
@@ -1014,7 +1015,7 @@ useEffect(() => {
             <input
               type="text"
               className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
-              placeholder="Search by ID, date, or collector..."
+              placeholder="Search by cow name, tag number, date, or collector..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -1052,7 +1053,10 @@ useEffect(() => {
               <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
                 <tr>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  ID
+                  Cow Name
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Tag Number
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Date
@@ -1082,7 +1086,10 @@ useEffect(() => {
               currentItems.map(collection => (
                 <tr key={collection.id} className="hover:bg-gray-50 transition-colors duration-200">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {collection.id}
+                    {collection.cowName || 'Unknown'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {collection.cowTagNumber || 'Unknown'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {formatShortDate(collection.date)}
@@ -2854,13 +2861,13 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
         
         // Only proceed if the operation was successful
         if (result && result.success) {
-          // Handle WhatsApp notification if enabled
-          if (formData.sendWhatsAppNotification) {
-            console.log('Would send WhatsApp notification here');
-            // In a real app, you'd implement a notification service
-          }
-          
-          onClose();
+        // Handle WhatsApp notification if enabled
+        if (formData.sendWhatsAppNotification) {
+          console.log('Would send WhatsApp notification here');
+          // In a real app, you'd implement a notification service
+        }
+        
+        onClose();
         }
         // If result.success is false, the error toast will already be shown by handleAddCollection
       } catch (error) {
