@@ -179,6 +179,30 @@ export const fetchQualityTrends = async (days = 7) => {
 // Add a new milk collection record
 export const addMilkCollection = async (collectionData) => {
     try {
+      // Check for existing record with same cow_id, date, and shift
+      const { data: existingRecords, error: checkError } = await supabase
+        .from('milk_production')
+        .select('id')
+        .eq('cow_id', collectionData.cowId)
+        .eq('date', collectionData.date)
+        .eq('shift', collectionData.shift || 'Morning');
+      
+      if (checkError) {
+        console.error('Error checking for existing records:', checkError);
+        return {
+          success: false,
+          message: 'Failed to check for existing records. Please try again.'
+        };
+      }
+      
+      // If a record already exists, return failure with message
+      if (existingRecords && existingRecords.length > 0) {
+        return {
+          success: false,
+          message: `Milk collection record already exists for this cow on ${collectionData.date} for ${collectionData.shift || 'Morning'} shift. Duplicate records are not allowed.`
+        };
+      }
+      
       // First, let's insert into milk_production
       const { data, error } = await supabase
         .from('milk_production')
@@ -203,12 +227,24 @@ export const addMilkCollection = async (collectionData) => {
         })
         .select();
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error inserting milk collection record:', error);
+        return {
+          success: false,
+          message: 'Failed to add milk collection. Please try again.'
+        };
+      }
       
-      return data[0];
+      return {
+        success: true,
+        data: data[0]
+      };
     } catch (error) {
       console.error('Error adding milk collection:', error);
-      throw error;
+      return {
+        success: false,
+        message: 'An unexpected error occurred. Please try again.'
+      };
     }
   };
 

@@ -229,6 +229,30 @@ export const recordHealthEvent = async (cowId, eventData) => {
 // Record milk production
 export const recordMilkProduction = async (cowId, recordData) => {
     try {
+      // Check for existing record with same cow_id, date, and shift
+      const { data: existingRecords, error: checkError } = await supabase
+        .from('milk_production')
+        .select('id')
+        .eq('cow_id', cowId)
+        .eq('date', recordData.date)
+        .eq('shift', recordData.shift || 'Morning');
+      
+      if (checkError) {
+        console.error('Error checking for existing records:', checkError);
+        return {
+          success: false,
+          message: 'Failed to check for existing records. Please try again.'
+        };
+      }
+      
+      // If a record already exists, return failure with message
+      if (existingRecords && existingRecords.length > 0) {
+        return {
+          success: false,
+          message: `Milk production record already exists for this cow on ${recordData.date} for ${recordData.shift || 'Morning'} shift. Duplicate records are not allowed.`
+        };
+      }
+      
       const { data, error } = await supabase
         .from('milk_production')
         .insert({
@@ -241,12 +265,24 @@ export const recordMilkProduction = async (cowId, recordData) => {
         })
         .select('*');
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error inserting milk production record:', error);
+        return {
+          success: false,
+          message: 'Failed to record milk production. Please try again.'
+        };
+      }
       
-      return data[0];
+      return {
+        success: true,
+        data: data[0]
+      };
     } catch (error) {
       console.error('Error recording milk production:', error);
-      throw error;
+      return {
+        success: false,
+        message: 'An unexpected error occurred. Please try again.'
+      };
     }
 };
 

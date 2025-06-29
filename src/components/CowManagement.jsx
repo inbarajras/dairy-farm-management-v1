@@ -381,7 +381,12 @@ const CowManagement = () => {
     try {
       setLoading(true);
       console.log('Recording milk production:', recordData);
-      const newRecord = await recordMilkProduction(cowId, recordData);
+      const result = await recordMilkProduction(cowId, recordData);
+      
+      if (!result.success) {
+        toast.error(result.message);
+        return;
+      }
       
       // Create the new milk record object
       const newMilkRecord = {
@@ -419,12 +424,10 @@ const CowManagement = () => {
         });
       }
       
-      setSuccessMessage('Milk production recorded successfully!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      toast.success('Milk production recorded successfully!');
     } catch (err) {
       console.error("Error recording milk production:", err);
-      setErrorMessage('Failed to record milk production. Please try again.');
-      setTimeout(() => setErrorMessage(''), 3000);
+      toast.error('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
