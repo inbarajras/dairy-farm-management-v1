@@ -179,7 +179,7 @@ export const updateCow = async (cowId, cowData) => {
       .from('cows')
       .update(dbCow)
       .eq('id', cowId)
-      .select();
+      .select('*, milk_production(*)');
 
     if (error) {
       console.error('Supabase update error:', error);
@@ -187,7 +187,40 @@ export const updateCow = async (cowId, cowData) => {
     }
     
     console.log('Update successful, returned data:', data);
-    return data[0];
+    
+    // Transform the data back to frontend format
+    const transformedCow = {
+      id: data[0].id,
+      tagNumber: data[0].tag_number,
+      name: data[0].name,
+      breed: data[0].breed,
+      dateOfBirth: data[0].date_of_birth,
+      status: data[0].status,
+      healthStatus: data[0].health_status,
+      owner: data[0].owner,
+      lastHealthCheck: data[0].last_health_check,
+      vaccinationStatus: data[0].vaccination_status,
+      alerts: data[0].alerts ? JSON.parse(data[0].alerts) : [],
+      image: data[0].image_url || '/api/placeholder/160/160',
+      purchaseDate: data[0].purchase_date,
+      purchasePrice: data[0].purchase_price,
+      initialWeight: data[0].initial_weight,
+      currentWeight: data[0].current_weight,
+      notes: data[0].notes,
+      milkProduction: data[0].milk_production ? data[0].milk_production.sort((a, b) => {
+        const dateComparison = new Date(b.date) - new Date(a.date);
+        if (dateComparison === 0) {
+          const shiftA = a.shift || 'Morning';
+          const shiftB = b.shift || 'Morning';
+          if (shiftA === 'Evening' && shiftB === 'Morning') return -1;
+          if (shiftA === 'Morning' && shiftB === 'Evening') return 1;
+          return 0;
+        }
+        return dateComparison;
+      }) : []
+    };
+    
+    return transformedCow;
   } catch (error) {
     console.error('Error updating cow:', error);
     throw error;

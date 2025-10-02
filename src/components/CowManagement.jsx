@@ -160,6 +160,36 @@ const CowManagement = () => {
   };
 
   // Helper function to check milking status for filtering and display
+  const getLatestMilkProduction = (cow) => {
+    if (!cow?.milkProduction || cow.milkProduction.length === 0) {
+      return 0;
+    }
+
+    // Get today's date and format it to match the records
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+
+    // Filter records for today
+    const todayRecords = cow.milkProduction.filter(record => record.date === todayStr);
+    
+    if (todayRecords.length > 0) {
+      // Sum up all of today's records
+      return todayRecords.reduce((sum, record) => sum + record.amount, 0);
+    }
+
+    // If no records for today, check yesterday's records
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    const yesterdayRecords = cow.milkProduction.filter(record => record.date === yesterdayStr);
+
+    if (yesterdayRecords.length > 0) {
+      return yesterdayRecords.reduce((sum, record) => sum + record.amount, 0);
+    }
+
+    return 0;
+  };
+
   const checkCowMilkingStatus = (cow) => {
     // Skip check for non-milking cows
     if (cow?.status === 'Calf' || cow?.status === 'Heifer' || cow?.status === 'Dry') {
@@ -369,10 +399,14 @@ const CowManagement = () => {
     try {
       setLoading(true);
       const updatedCow = await updateCow(updatedCowData.id, updatedCowData);
-      setCows(cows.map(cow => cow.id === updatedCow.id ? updatedCow : cow));
+      
+      // Ensure we preserve all fields when updating the state
+      setCows(prevCows => prevCows.map(cow => 
+        cow.id === updatedCow.id ? { ...cow, ...updatedCow } : cow
+      ));
       
       if (selectedCow && selectedCow.id === updatedCow.id) {
-        setSelectedCow(updatedCow);
+        setSelectedCow(prev => ({ ...prev, ...updatedCow }));
       }
       
       setSuccessMessage('Cow updated successfully!');
@@ -943,10 +977,7 @@ const CowManagement = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {cow.milkProduction && cow.milkProduction.length > 0 
-                        ? `${cow.milkProduction[0].amount}L/day`
-                        : '0L/day'
-                      }
+                      {`${getLatestMilkProduction(cow)}L/day`}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {(() => {
@@ -1139,14 +1170,34 @@ const CowManagement = () => {
 
 // Cow Card Component
 const CowCard = ({ cow, onClick, onEdit, onDelete, checkCowMilkingStatus, hasPermission, onShowQRCode }) => {
-  // Safe method to get latest milk production
+  // Calculate average daily milk production from recent records
   const getLatestMilkProduction = () => {
-    if (cow?.milkProduction && cow.milkProduction.length > 0) {
-      // Since the data is now sorted with newest first, get the first item
-      const latest = cow.milkProduction[0];
-      return `${latest.amount || '0'}L/day`;
+    if (!cow?.milkProduction || cow.milkProduction.length === 0) {
+      return '0L/day';
     }
-    return '0L/day';
+
+    // Get today's date
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+
+    // Get yesterday's date
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    // Get today's total production (morning + evening)
+    const todayRecords = cow.milkProduction.filter(record => record.date === todayStr);
+    const todayTotal = todayRecords.reduce((sum, record) => sum + (parseFloat(record.amount) || 0), 0);
+
+    // Get yesterday's total production (morning + evening)
+    const yesterdayRecords = cow.milkProduction.filter(record => record.date === yesterdayStr);
+    const yesterdayTotal = yesterdayRecords.reduce((sum, record) => sum + (parseFloat(record.amount) || 0), 0);
+
+    // Use today's total if available, otherwise use yesterday's total
+    const dailyTotal = todayTotal > 0 ? todayTotal : (yesterdayTotal > 0 ? yesterdayTotal : 0);
+
+    // Format to 1 decimal place
+    return `${dailyTotal.toFixed(1)}L/day`;
   };
 
   // Safe method to get last health check date
