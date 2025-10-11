@@ -417,16 +417,18 @@ const FarmDashboard = () => {
   
   // Calculate date range based on current selection
   const calculateDateRange = () => {
-    const endDate = new Date(currentDate);
-    const startDate = new Date(currentDate);
+    // Always start with fresh Date objects to avoid mutation issues
+    const endDate = new Date();
+    let startDate = new Date();
     
     if (dateRange === 'Today') {
       // For today, start and end are the same date
       startDate.setHours(0, 0, 0, 0);
       endDate.setHours(23, 59, 59, 999);
     } else if (dateRange === 'Last 7 days') {
-      // Go back 6 days to include today as the 7th day
-      startDate.setDate(startDate.getDate() - 6);
+      // Go back 6 days from today to include today as the 7th day
+      startDate = new Date(endDate); // Create a new date object
+      startDate.setDate(endDate.getDate() - 6);
       startDate.setHours(0, 0, 0, 0);
       endDate.setHours(23, 59, 59, 999);
     } else if (dateRange === 'This month') {
@@ -487,7 +489,14 @@ const FarmDashboard = () => {
       const healthData = processHealthData(cowsData);
       
       // Calculate total milk production for KPI (within date range)
-      const totalMilk = milkData.reduce((sum, record) => sum + parseFloat(record.totalQuantity || 0), 0);
+      const totalMilk = milkData.reduce((sum, record) => {
+        const recordDate = new Date(record.date);
+        // Only include records within the date range
+        if (recordDate >= startDate && recordDate <= endDate) {
+          return sum + parseFloat(record.totalQuantity || 0);
+        }
+        return sum;
+      }, 0);
       
       // Calculate active tasks within date range
       const activeTasks = filteredHealthEvents.filter(event => 
