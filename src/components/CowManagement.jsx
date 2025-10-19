@@ -165,26 +165,27 @@ const CowManagement = () => {
       return 0;
     }
 
-    // Get today's date and format it to match the records
+    // Get today's date and yesterday's date
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
-
-    // Filter records for today
-    const todayRecords = cow.milkProduction.filter(record => record.date === todayStr);
-    
-    if (todayRecords.length > 0) {
-      // Sum up all of today's records
-      return todayRecords.reduce((sum, record) => sum + record.amount, 0);
-    }
-
-    // If no records for today, check yesterday's records
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toISOString().split('T')[0];
-    const yesterdayRecords = cow.milkProduction.filter(record => record.date === yesterdayStr);
 
-    if (yesterdayRecords.length > 0) {
-      return yesterdayRecords.reduce((sum, record) => sum + record.amount, 0);
+    // Group records by date and calculate daily totals
+    const dailyTotals = cow.milkProduction.reduce((acc, record) => {
+      const dateStr = new Date(record.date).toISOString().split('T')[0];
+      acc[dateStr] = (acc[dateStr] || 0) + parseFloat(record.amount || 0);
+      return acc;
+    }, {});
+
+    // Return today's total if available, otherwise yesterday's total
+    if (dailyTotals[todayStr]) {
+      return parseFloat(dailyTotals[todayStr].toFixed(1));
+    }
+
+    if (dailyTotals[yesterdayStr]) {
+      return parseFloat(dailyTotals[yesterdayStr].toFixed(1));
     }
 
     return 0;
@@ -1176,25 +1177,27 @@ const CowCard = ({ cow, onClick, onEdit, onDelete, checkCowMilkingStatus, hasPer
       return '0L/day';
     }
 
-    // Get today's date
+    // Get today's date and yesterday's date
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
-
-    // Get yesterday's date
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toISOString().split('T')[0];
 
-    // Get today's total production (morning + evening)
-    const todayRecords = cow.milkProduction.filter(record => record.date === todayStr);
-    const todayTotal = todayRecords.reduce((sum, record) => sum + (parseFloat(record.amount) || 0), 0);
+    // Group records by date and calculate daily totals
+    const dailyTotals = cow.milkProduction.reduce((acc, record) => {
+      const dateStr = new Date(record.date).toISOString().split('T')[0];
+      acc[dateStr] = (acc[dateStr] || 0) + parseFloat(record.amount || 0);
+      return acc;
+    }, {});
 
-    // Get yesterday's total production (morning + evening)
-    const yesterdayRecords = cow.milkProduction.filter(record => record.date === yesterdayStr);
-    const yesterdayTotal = yesterdayRecords.reduce((sum, record) => sum + (parseFloat(record.amount) || 0), 0);
-
-    // Use today's total if available, otherwise use yesterday's total
-    const dailyTotal = todayTotal > 0 ? todayTotal : (yesterdayTotal > 0 ? yesterdayTotal : 0);
+    // Get the latest daily total (today or yesterday)
+    let dailyTotal = 0;
+    if (dailyTotals[todayStr]) {
+      dailyTotal = dailyTotals[todayStr];
+    } else if (dailyTotals[yesterdayStr]) {
+      dailyTotal = dailyTotals[yesterdayStr];
+    }
 
     // Format to 1 decimal place
     return `${dailyTotal.toFixed(1)}L/day`;
@@ -1361,10 +1364,39 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
   // Safely check for milkProduction array and ensure it has data
   const hasMilkProductionData = cow?.milkProduction && Array.isArray(cow.milkProduction) && cow.milkProduction.length > 0;
   
-  // Calculate average milk production with comprehensive safety check
-  const avgMilkProduction = hasMilkProductionData
-    ? cow.milkProduction.reduce((sum, record) => sum + (parseFloat(record.amount) || 0), 0) / cow.milkProduction.length
-    : 0;
+  // Calculate daily totals and averages for the last 7 days
+  const calculateDailyStats = () => {
+    if (!hasMilkProductionData) return { average: 0, highest: 0, latest: 0 };
+    
+    // Get records from last 7 days
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    // Group by date and sum up both morning and evening production
+    const dailyTotals = cow.milkProduction
+      .filter(record => new Date(record.date) >= sevenDaysAgo)
+      .reduce((acc, record) => {
+        const dateStr = new Date(record.date).toISOString().split('T')[0];
+        acc[dateStr] = (acc[dateStr] || 0) + (parseFloat(record.amount) || 0);
+        return acc;
+      }, {});
+    
+    // Convert to array of daily totals sorted by date
+    const dailyAmounts = Object.entries(dailyTotals)
+      .sort((a, b) => new Date(b[0]) - new Date(a[0]))
+      .map(([_, amount]) => amount);
+    
+    return {
+      average: dailyAmounts.length > 0 ? 
+        parseFloat((dailyAmounts.reduce((sum, amount) => sum + amount, 0) / dailyAmounts.length).toFixed(1)) : 0,
+      highest: dailyAmounts.length > 0 ? 
+        parseFloat(Math.max(...dailyAmounts).toFixed(1)) : 0,
+      latest: dailyAmounts.length > 0 ? 
+        parseFloat(dailyAmounts[0].toFixed(1)) : 0
+    };
+  };
+  
+  const { average: avgMilkProduction, highest: highestMilkProduction, latest: latestMilkProduction } = calculateDailyStats();
   
   // Ensure alerts is always treated as an array
   const alerts = Array.isArray(cow.alerts) ? cow.alerts : 
@@ -1802,20 +1834,28 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                         <div className="bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
                           <div className="flex justify-between items-start">
                             <div>
-                              <p className="text-sm font-medium text-gray-500">Avg. Milk Production</p>
+                              <p className="text-sm font-medium text-gray-500">Daily Milk Production</p>
                               <p className="text-2xl font-semibold text-gray-800 mt-1">
-                                {!isNaN(avgMilkProduction) ? avgMilkProduction.toFixed(1) : '0.0'}L
+                                {!isNaN(avgMilkProduction) ? avgMilkProduction.toFixed(1) : '0.0'}L/day
                               </p>
                             </div>
                             <div className="p-2 rounded-full bg-gradient-to-r from-blue-50 to-blue-100 text-blue-600">
                               <Droplet className="h-5 w-5" />
                             </div>
                           </div>
-                          <div className="mt-4 text-xs text-green-600 flex items-center">
-                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                            </svg>
-                            <span>+3% from last week</span>
+                          <div className="mt-4 text-xs text-gray-600 flex flex-col">
+                            <span className="flex items-center mb-1">
+                              <svg className="w-4 h-4 mr-1 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                              </svg>
+                              <span>Highest: {highestMilkProduction.toFixed(1)}L/day</span>
+                            </span>
+                            <span className="flex items-center">
+                              <svg className="w-4 h-4 mr-1 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                              <span>Latest: {latestMilkProduction.toFixed(1)}L/day</span>
+                            </span>
                           </div>
                         </div>
                       )}
@@ -1890,8 +1930,64 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                 {/* Tab content for Milk Production */}
                 {activeTab === 'milk' && (
                   <div>
+                    {/* Stats Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                      <div className="bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">7-Day Average</p>
+                            <p className="text-2xl font-semibold text-gray-800 mt-1">
+                              {avgMilkProduction.toFixed(1)}L
+                            </p>
+                          </div>
+                          <div className="p-2 rounded-full bg-gradient-to-r from-blue-50 to-blue-100 text-blue-600">
+                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                            </svg>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-sm text-gray-600">Daily average over the past week</p>
+                      </div>
+
+                      <div className="bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">Highest Production</p>
+                            <p className="text-2xl font-semibold text-gray-800 mt-1">
+                              {highestMilkProduction.toFixed(1)}L
+                            </p>
+                          </div>
+                          <div className="p-2 rounded-full bg-gradient-to-r from-green-50 to-green-100 text-green-600">
+                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                            </svg>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-sm text-gray-600">Best daily total this week</p>
+                      </div>
+
+                      <div className="bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">Latest Production</p>
+                            <p className="text-2xl font-semibold text-gray-800 mt-1">
+                              {latestMilkProduction.toFixed(1)}L
+                            </p>
+                          </div>
+                          <div className="p-2 rounded-full bg-gradient-to-r from-blue-50 to-blue-100 text-blue-600">
+                            <Droplet className="h-5 w-5" />
+                          </div>
+                        </div>
+                        <p className="mt-2 text-sm text-gray-600">Most recent daily total</p>
+                      </div>
+                    </div>
+
+                    {/* Milk Production Chart */}
                     <div className="bg-white shadow-lg rounded-lg p-6 mb-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
-                      <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-600 mb-4">Daily Milk Production (Last 7 Days)</h3>
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-600">Daily Production Trend</h3>
+                        <div className="text-sm text-gray-500">Last 7 Days</div>
+                      </div>
                       <div className="h-64">
                         {hasMilkProductionData ? (
                           <ResponsiveContainer width="100%" height="100%">
@@ -1904,10 +2000,31 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                                   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
                                   return recordDate >= sevenDaysAgo;
                                 })
-                                .map(record => ({
-                                  date: new Date(record.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                                  amount: parseFloat(record.amount) || 0,
-                                  quality: record.quality || 'Standard'
+                                .reduce((acc, record) => {
+                                  // Convert to date string for grouping
+                                  const dateStr = new Date(record.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                                  
+                                  // Find or create the accumulator entry
+                                  const existingEntry = acc.find(entry => entry.date === dateStr);
+                                  if (existingEntry) {
+                                    // Add to existing date's total and update quality if needed
+                                    existingEntry.amount += parseFloat(record.amount) || 0;
+                                    if (record.quality === 'Premium' && existingEntry.quality !== 'Premium') {
+                                      existingEntry.quality = 'Premium';
+                                    }
+                                  } else {
+                                    // Create new entry for this date
+                                    acc.push({
+                                      date: dateStr,
+                                      amount: parseFloat(record.amount) || 0,
+                                      quality: record.quality || 'Standard'
+                                    });
+                                  }
+                                  return acc;
+                                }, [])
+                                .map(entry => ({
+                                  ...entry,
+                                  amount: parseFloat(entry.amount.toFixed(1)) // Round to 1 decimal place
                                 }))
                                 .sort((a, b) => new Date(a.date) - new Date(b.date)) // Ensure data is sorted by date
                               }
@@ -1940,13 +2057,14 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                                   borderRadius: '8px',
                                   boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                                 }}
-                                formatter={(value, name) => [`${value}L`, 'Production']}
+                                formatter={(value, name) => [`${value}L/day`, 'Daily Total']}
+                                labelFormatter={(label) => `Date: ${label}`}
                               />
                               <Legend />
                               <Area
                                 type="monotone"
                                 dataKey="amount"
-                                name="Milk Production"
+                                name="Daily Total"
                                 stroke="#3B82F6"
                                 strokeWidth={3}
                                 fill="url(#milkGradient)"
@@ -1979,7 +2097,7 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                         )}
                       </div>
                       
-                      {/* Production Statistics - Update to reflect 7-day stats */}
+                      {/* Production Statistics - Update to reflect 7-day stats
                       {hasMilkProductionData && (
                         <div className="grid grid-cols-3 gap-3 mt-4">
                           <div className="text-center p-2 rounded-lg bg-gradient-to-b from-blue-50 to-blue-100 border border-blue-200">
@@ -2001,7 +2119,7 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                             </p>
                           </div>
                         </div>
-                      )}
+                      )} */}
                     </div>
                     
                       <div className="px-6 py-4 border-b border-gray-200 flex flex-wrap justify-between items-center gap-3">
