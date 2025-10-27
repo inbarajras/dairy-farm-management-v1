@@ -537,9 +537,15 @@ const InventoryManagement = () => {
       // If order is delivered, update stock
       if (status === 'Delivered') {
         await updateStockFromOrder(orderId);
+        // After stock update, refetch inventory stats only
+        const stats = await fetchInventoryStats();
+        setInventoryData(prev => ({
+          ...prev,
+          stats
+        }));
       }
       
-      // Update local state
+      // Update local state for the order
       setInventoryData(prev => {
         const updatedOrders = prev.orders.map(order => 
           order.id === orderId ? { ...order, status } : order
@@ -553,7 +559,7 @@ const InventoryManagement = () => {
       
       setIsOrderDetailsModalOpen(false);
       setIsLoading(false);
-      await fetchInventoryData(); // Refresh all data
+      toast.success('Order status updated successfully');
       return true;
     } catch (err) {
       setError('Failed to update order status: ' + err.message);
@@ -700,7 +706,8 @@ const handleSupplierSubmit = async (supplierData) => {
     setIsLoading(true);
     
     if (supplierData.id) {
-      const { error } = await supabase
+      // Update existing supplier
+      const { data, error } = await supabase
         .from('suppliers')
         .update({
           name: supplierData.name,
@@ -715,12 +722,22 @@ const handleSupplierSubmit = async (supplierData) => {
           payment_terms: supplierData.payment_terms,
           notes: supplierData.notes
         })
-        .eq('id', supplierData.id);
+        .eq('id', supplierData.id)
+        .select()
+        .single();
       
       if (error) throw error;
+      
+      // Update local suppliers list with the updated supplier
+      setInventoryData(prev => ({
+        ...prev,
+        suppliers: prev.suppliers.map(supplier => 
+          supplier.id === supplierData.id ? data : supplier
+        )
+      }));
     } else {
       // Add new supplier
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('suppliers')
         .insert({
           name: supplierData.name,
@@ -734,16 +751,22 @@ const handleSupplierSubmit = async (supplierData) => {
           category: supplierData.category,
           payment_terms: supplierData.payment_terms,
           notes: supplierData.notes
-        });
+        })
+        .select()
+        .single();
       
       if (error) throw error;
+      
+      // Add new supplier to local suppliers list
+      setInventoryData(prev => ({
+        ...prev,
+        suppliers: [...prev.suppliers, data]
+      }));
     }
-    
-    // Refresh the suppliers list
-    await fetchInventoryData();
     
     setIsSupplierModalOpen(false);
     setIsLoading(false);
+    toast.success(`Supplier ${supplierData.id ? 'updated' : 'added'} successfully`);
     return true;
   } catch (err) {
     setError(`Failed to ${supplierData.id ? 'update' : 'add'} supplier: ` + err.message);
