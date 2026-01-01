@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Home, Users, Clipboard, Droplet, Thermometer, DollarSign, Settings, LogOut, X, Menu, IndianRupee, Package, Leaf, AlertTriangle } from 'lucide-react';
-import { Toaster } from 'react-hot-toast';
 
 import AuthenticationScreen from './components/AuthenticationScreen';
 import FarmDashboard from './components/FarmDashboard';
@@ -206,8 +205,7 @@ const AppContent = () => {
 
   return (
     <div className="h-screen bg-gray-100 flex">
-      <Toaster position="top-right" />
-      <ToastContainer></ToastContainer>
+      <ToastContainer />
       
       {/* Improved Sidebar with enhanced styling */}
       <div className={`bg-white shadow-lg z-20 transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-20'} flex flex-col`}>

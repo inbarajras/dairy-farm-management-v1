@@ -705,7 +705,7 @@ const FarmDashboard = () => {
         type: 'milk',
         text: `${record.shift} collection complete: ${record.totalQuantity}L`,
         time: getRelativeTime(record.date),
-        details: `Quality parameters: Fat ${(record.qualityParameters?.fat || 3.8).toFixed(1)}%, Protein ${(record.qualityParameters?.protein || 3.2).toFixed(1)}%, Lactose ${(record.qualityParameters?.lactose || 4.7).toFixed(1)}%. Collected by ${record.collectedBy || 'Farm Staff'}.`
+        details: `Quality parameters: Fat ${(record.qualityParameters?.fat || 3.8).toFixed(1)}%, SNF ${(record.qualityParameters?.snf || 8.5).toFixed(1)}%. Collected by ${record.collectedBy || 'Farm Staff'}.`
       });
     });
     

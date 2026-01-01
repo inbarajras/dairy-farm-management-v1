@@ -56,6 +56,13 @@ const ToastItem = ({ id, message, type, duration, onClose }) => {
   const [isExiting, setIsExiting] = useState(false);
   const [progress, setProgress] = useState(100);
 
+  const handleClose = () => {
+    setIsExiting(true);
+    setTimeout(() => {
+      onClose(id);
+    }, 300);
+  };
+
   useEffect(() => {
     const startTime = Date.now();
     const interval = setInterval(() => {
@@ -72,14 +79,8 @@ const ToastItem = ({ id, message, type, duration, onClose }) => {
       clearTimeout(timer);
       clearInterval(interval);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [duration]);
-
-  const handleClose = () => {
-    setIsExiting(true);
-    setTimeout(() => {
-      onClose(id);
-    }, 300);
-  };
 
   const config = {
     success: {
@@ -162,8 +163,17 @@ const ToastContainer = () => {
   if (toasts.length === 0) return null;
 
   return ReactDOM.createPortal(
-    <div className="fixed top-4 right-4 z-[9999] pointer-events-none">
-      <div className="pointer-events-auto flex flex-col items-end">
+    <div
+      style={{
+        position: 'fixed',
+        top: '16px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 9999,
+        pointerEvents: 'none'
+      }}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', pointerEvents: 'auto' }}>
         {toasts.map(toast => (
           <ToastItem
             key={toast.id}

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Calendar, Droplet, Filter, Search, ChevronLeft, ChevronRight, BarChart2, Download, Plus, ThermometerSun, X, RefreshCw,FileSpreadsheet,FileText,File,FileType } from 'lucide-react';
-import { 
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
-  ResponsiveContainer, Area, ReferenceLine
+import {
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, Area, AreaChart, ReferenceLine
 } from 'recharts';
 import { 
   fetchMilkCollections, 
@@ -29,10 +29,7 @@ import UserRoleBadge from './UserRoleBadge';
 // Default quality standards in case the API doesn't return them
   const defaultStandards = {
     fat: { min: 3.5, target: 3.8, max: 4.2 },
-    protein: { min: 3.0, target: 3.3, max: 3.6 },
-    lactose: { min: 4.5, target: 4.8, max: 5.0 },
-    somatic: { max: 200 },
-    bacteria: { max: 20000 }
+    snf: { min: 8.0, target: 8.5, max: 9.0 }
   };
 
 // Utility functions
@@ -90,6 +87,8 @@ const MilkProduction = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dateRange, setDateRange] = useState('week');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
   const [milkData, setMilkData] = useState({
     dailyCollections: [],
     monthlyTotals: [],
@@ -141,26 +140,52 @@ const MilkProduction = () => {
 
       switch(dateRange) {
         case 'today':
-          // For today, use the same date for start and end
           startDateStr = currentDateStr;
           endDateStr = currentDateStr;
           break;
+        case 'yesterday':
+          const yesterday = new Date(currentDate);
+          yesterday.setDate(yesterday.getDate() - 1);
+          startDateStr = yesterday.toISOString().split('T')[0];
+          endDateStr = yesterday.toISOString().split('T')[0];
+          break;
         case 'week':
-          // For week, go back 6 days
           const weekStartDate = new Date(currentDate);
           weekStartDate.setDate(weekStartDate.getDate() - 6);
           startDateStr = weekStartDate.toISOString().split('T')[0];
           endDateStr = currentDateStr;
           break;
+        case '14days':
+          const twoWeeksStart = new Date(currentDate);
+          twoWeeksStart.setDate(twoWeeksStart.getDate() - 13);
+          startDateStr = twoWeeksStart.toISOString().split('T')[0];
+          endDateStr = currentDateStr;
+          break;
         case 'month':
-          // For month, go back 29 days
           const monthStartDate = new Date(currentDate);
           monthStartDate.setDate(monthStartDate.getDate() - 29);
           startDateStr = monthStartDate.toISOString().split('T')[0];
           endDateStr = currentDateStr;
           break;
+        case '90days':
+          const quarterStart = new Date(currentDate);
+          quarterStart.setDate(quarterStart.getDate() - 89);
+          startDateStr = quarterStart.toISOString().split('T')[0];
+          endDateStr = currentDateStr;
+          break;
+        case 'custom':
+          if (customStartDate && customEndDate) {
+            startDateStr = customStartDate;
+            endDateStr = customEndDate;
+          } else {
+            // Fallback to week if custom dates not set
+            const fallbackStart = new Date(currentDate);
+            fallbackStart.setDate(fallbackStart.getDate() - 6);
+            startDateStr = fallbackStart.toISOString().split('T')[0];
+            endDateStr = currentDateStr;
+          }
+          break;
         default:
-          // Default to week
           const defaultStartDate = new Date(currentDate);
           defaultStartDate.setDate(defaultStartDate.getDate() - 6);
           startDateStr = defaultStartDate.toISOString().split('T')[0];
@@ -195,7 +220,7 @@ const MilkProduction = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [dateRange, currentDate]);
+  }, [dateRange, currentDate, customStartDate, customEndDate]);
 
   // Load data when dependencies change
   useEffect(() => {
@@ -222,9 +247,9 @@ const MilkProduction = () => {
     ? milkData.qualityTrends.reduce((sum, item) => sum + (item.fat || 0), 0) / milkData.qualityTrends.length
     : 3.8;
     
-  const avgProtein = milkData.qualityTrends && milkData.qualityTrends.length > 0
-    ? milkData.qualityTrends.reduce((sum, item) => sum + (item.protein || 0), 0) / milkData.qualityTrends.length
-    : 3.2;
+  const avgSNF = milkData.qualityTrends && milkData.qualityTrends.length > 0
+    ? milkData.qualityTrends.reduce((sum, item) => sum + (item.snf || 0), 0) / milkData.qualityTrends.length
+    : 8.5;
 
   // Prepare chart data with null checks
   const prepareChartData = () => {
@@ -390,60 +415,32 @@ const MilkProduction = () => {
     return validEntries > 0 ? (totalFat / validEntries).toFixed(1) : '0.0';
   };
   
-  // Calculate average protein percentage from actual collection data
-  const calculateAverageProtein = (collections) => {
+  // Calculate average SNF (Solid Not Fat) percentage from actual collection data
+  const calculateAverageSNF = (collections) => {
     if (!Array.isArray(collections) || collections.length === 0) {
       return '0.0';
     }
-    
+
     let validEntries = 0;
-    const totalProtein = collections.reduce((sum, record) => {
-      // Get protein value from qualityParameters or direct property
-      let proteinValue = null;
-      
-      if (record.protein !== undefined && record.protein !== null) {
-        proteinValue = parseFloat(record.protein);
-      } else if (record.qualityParameters?.protein !== undefined && record.qualityParameters?.protein !== null) {
-        proteinValue = parseFloat(record.qualityParameters.protein);
+    const totalSNF = collections.reduce((sum, record) => {
+      // Get SNF value from qualityParameters or direct property
+      let snfValue = null;
+
+      if (record.snf !== undefined && record.snf !== null) {
+        snfValue = parseFloat(record.snf);
+      } else if (record.qualityParameters?.snf !== undefined && record.qualityParameters?.snf !== null) {
+        snfValue = parseFloat(record.qualityParameters.snf);
       }
-      
-      if (!isNaN(proteinValue)) {
+
+      if (!isNaN(snfValue)) {
         validEntries++;
-        return sum + proteinValue;
+        return sum + snfValue;
       }
-      
+
       return sum;
     }, 0);
-    
-    return validEntries > 0 ? (totalProtein / validEntries).toFixed(1) : '0.0';
-  };
-  
-  // Calculate average lactose percentage from actual collection data
-  const calculateAverageLactose = (collections) => {
-    if (!Array.isArray(collections) || collections.length === 0) {
-      return '0.0';
-    }
-    
-    let validEntries = 0;
-    const totalLactose = collections.reduce((sum, record) => {
-      // Get lactose value from qualityParameters or direct property
-      let lactoseValue = null;
-      
-      if (record.lactose !== undefined && record.lactose !== null) {
-        lactoseValue = parseFloat(record.lactose);
-      } else if (record.qualityParameters?.lactose !== undefined && record.qualityParameters?.lactose !== null) {
-        lactoseValue = parseFloat(record.qualityParameters.lactose);
-      }
-      
-      if (!isNaN(lactoseValue)) {
-        validEntries++;
-        return sum + lactoseValue;
-      }
-      
-      return sum;
-    }, 0);
-    
-    return validEntries > 0 ? (totalLactose / validEntries).toFixed(1) : '0.0';
+
+    return validEntries > 0 ? (totalSNF / validEntries).toFixed(1) : '0.0';
   };
   
   // Calculate percentage change in production compared to previous period
@@ -562,12 +559,38 @@ const MilkProduction = () => {
               // Reset to today when changing date range
               setCurrentDate(new Date());
             }}
-            className="appearance-none bg-white border border-gray-200 rounded-lg pl-3 pr-10 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-300 shadow-sm hover:shadow-md transition-all duration-200 min-w-[120px]"
+            className="appearance-none bg-white border border-gray-200 rounded-lg pl-3 pr-10 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-300 shadow-sm hover:shadow-md transition-all duration-200 min-w-[140px]"
           >
             <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
             <option value="week">Last 7 days</option>
+            <option value="14days">Last 14 days</option>
             <option value="month">Last 30 days</option>
+            <option value="90days">Last 90 days</option>
+            <option value="custom">Custom Range</option>
           </select>
+
+          {/* Custom Date Range Inputs */}
+          {dateRange === 'custom' && (
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                max={new Date().toISOString().split('T')[0]}
+                className="appearance-none bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-300 shadow-sm"
+              />
+              <span className="text-sm text-gray-500">to</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                max={new Date().toISOString().split('T')[0]}
+                min={customStartDate}
+                className="appearance-none bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-300 shadow-sm"
+              />
+            </div>
+          )}
           
           <div className="flex items-center bg-white rounded-lg shadow-sm border border-gray-200 px-2 hover:shadow-md transition-shadow duration-200">
             <button 
@@ -662,9 +685,9 @@ const MilkProduction = () => {
                 <div className="p-5">
                   <div className="flex justify-between items-start">
                     <div>
-                      <p className="text-sm font-medium text-gray-500">Average Protein Content</p>
+                      <p className="text-sm font-medium text-gray-500">Average SNF Content</p>
                       <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-pink-400 mt-1 mb-3">
-                        {calculateAverageProtein(milkData.dailyCollections)}%
+                        {calculateAverageSNF(milkData.dailyCollections)}%
                       </p>
                     </div>
                     <div className="p-2.5 rounded-xl bg-gradient-to-r from-purple-500 to-pink-400">
@@ -672,7 +695,7 @@ const MilkProduction = () => {
                     </div>
                   </div>
                   <div className="mt-2 text-xs text-gray-600 flex items-center">
-                    <span>Target: {milkData.qualityStandards.protein?.target || '3.3'}%</span>
+                    <span>Target: {milkData.qualityStandards.snf?.target || '8.5'}%</span>
                   </div>
                 </div>
               </div>
@@ -694,21 +717,43 @@ const MilkProduction = () => {
                 </div>
                 <div className="h-60 sm:h-80">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="displayDate" />
-                      <YAxis />
-                      <Tooltip 
-                        formatter={(value) => [`${value} L`, 'Milk Production']}
-                        contentStyle={{ 
-                          background: 'rgba(255, 255, 255, 0.95)', 
-                          border: '1px solid #EEE', 
-                          borderRadius: '8px',
-                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                        }}
+                    <AreaChart data={chartData}>
+                      <defs>
+                        <linearGradient id="colorMilk" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#4CAF50" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#4CAF50" stopOpacity={0.1}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis
+                        dataKey="displayDate"
+                        stroke="#888"
+                        style={{ fontSize: '12px' }}
                       />
-                      <Bar dataKey="totalQuantity" fill="#4CAF50" radius={[4, 4, 0, 0]} />
-                    </BarChart>
+                      <YAxis
+                        stroke="#888"
+                        style={{ fontSize: '12px' }}
+                      />
+                      <Tooltip
+                        formatter={(value) => [`${value} L`, 'Milk Production']}
+                        contentStyle={{
+                          background: 'rgba(255, 255, 255, 0.98)',
+                          border: '1px solid #e0e0e0',
+                          borderRadius: '12px',
+                          boxShadow: '0 8px 16px -4px rgba(0, 0, 0, 0.15)',
+                          padding: '12px'
+                        }}
+                        labelStyle={{ fontWeight: 600, marginBottom: '4px' }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="totalQuantity"
+                        stroke="#4CAF50"
+                        strokeWidth={3}
+                        fill="url(#colorMilk)"
+                        animationDuration={1000}
+                      />
+                    </AreaChart>
                   </ResponsiveContainer>
                 </div>
                 
@@ -764,8 +809,8 @@ const MilkProduction = () => {
                         <div className="text-right">
                           <p className="text-lg font-semibold text-gray-800">{collection.totalQuantity} L</p>
                           <p className="text-xs text-gray-500 whitespace-nowrap">
-                            Fat: {collection.qualityParameters?.fat || 'N/A'}% | 
-                            Protein: {collection.qualityParameters?.protein || 'N/A'}%
+                            Fat: {collection.qualityParameters?.fat || 'N/A'}% |
+                            SNF: {collection.qualityParameters?.snf || 'N/A'}%
                           </p>
                         </div>
                       </div>
@@ -892,10 +937,7 @@ const MilkProduction = () => {
           ...updatedCollection,
           qualityParameters: {
             fat: updatedCollection.fat,
-            protein: updatedCollection.protein,
-            lactose: updatedCollection.lactose,
-            somatic: updatedCollection.somatic,
-            bacteria: updatedCollection.bacteria
+            snf: updatedCollection.snf
           }
         };
         
@@ -1036,7 +1078,7 @@ const MilkProduction = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     <div className="flex flex-col">
                       <span>Fat: {collection.qualityParameters?.fat || 'N/A'}%</span>
-                      <span>Protein: {collection.qualityParameters?.protein || 'N/A'}%</span>
+                      <span>SNF: {collection.qualityParameters?.snf || 'N/A'}%</span>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -1248,18 +1290,14 @@ const MilkProduction = () => {
               </div>
               <div className="col-span-1 sm:col-span-2">
                 <p className="text-sm font-medium text-gray-500">Quality Parameters</p>
-                <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div className="mt-2 grid grid-cols-2 gap-2">
                   <div className="p-2 bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30 rounded-lg">
                     <p className="text-xs text-gray-500">Fat</p>
                     <p className="text-sm font-medium text-gray-900">{qualityParams.fat || 'N/A'}%</p>
                   </div>
                   <div className="p-2 bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30 rounded-lg">
-                    <p className="text-xs text-gray-500">Protein</p>
-                    <p className="text-sm font-medium text-gray-900">{qualityParams.protein || 'N/A'}%</p>
-                  </div>
-                  <div className="p-2 bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30 rounded-lg">
-                    <p className="text-xs text-gray-500">Lactose</p>
-                    <p className="text-sm font-medium text-gray-900">{qualityParams.lactose || 'N/A'}%</p>
+                    <p className="text-xs text-gray-500">SNF</p>
+                    <p className="text-sm font-medium text-gray-900">{qualityParams.snf || 'N/A'}%</p>
                   </div>
                 </div>
               </div>
@@ -1294,10 +1332,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
   const [formData, setFormData] = useState({
     ...collection,
     fat: qualityParams.fat || '',
-    protein: qualityParams.protein || '',
-    lactose: qualityParams.lactose || '',
-    somatic: qualityParams.somatic || '',
-    bacteria: qualityParams.bacteria || ''
+    snf: qualityParams.snf || ''
   });
   
   const handleChange = (e) => {
@@ -1322,15 +1357,12 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
       // Parse numeric values properly
       const totalQuantity = parseFloat(formData.totalQuantity);
       const fat = formData.fat ? parseFloat(formData.fat) : null;
-      const protein = formData.protein ? parseFloat(formData.protein) : null;
-      const lactose = formData.lactose ? parseFloat(formData.lactose) : null;
-      const somatic = formData.somatic ? parseInt(formData.somatic) : null;
-      const bacteria = formData.bacteria ? parseInt(formData.bacteria) : null;
-      
+      const snf = formData.snf ? parseFloat(formData.snf) : null;
+
       if (isNaN(totalQuantity) || totalQuantity <= 0) {
         throw new Error("Please enter a valid quantity");
       }
-      
+
       // Prepare data for API with correct structure
       const updatedCollection = {
         id: collection.id,
@@ -1342,13 +1374,10 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
         collectedBy: formData.collectedBy || collection.collectedBy,
         qualityParameters: {
           fat,
-          protein,
-          lactose,
-          somatic,
-          bacteria
+          snf
         }
       };
-      
+
       // Call the updateMilkCollection service
       await updateMilkCollection(collection.id, {
         date: formData.date,
@@ -1357,10 +1386,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
         quality: formData.quality,
         notes: formData.notes,
         fat,
-        protein,
-        lactose,
-        somatic,
-        bacteria
+        snf
       });
       
       // Pass the updated collection back to the parent component
@@ -1482,71 +1508,25 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                       className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                     />
                   </div>
-                  
+
                   <div>
-                    <label htmlFor="protein" className="block text-sm font-medium text-gray-700 mb-1">
-                      Protein (%)
+                    <label htmlFor="snf" className="block text-sm font-medium text-gray-700 mb-1">
+                      SNF (%)
                     </label>
                     <input
                       type="number"
-                      id="protein"
-                      name="protein"
-                      value={formData.protein}
+                      id="snf"
+                      name="snf"
+                      value={formData.snf}
                       onChange={handleChange}
                       min="0"
                       step="0.1"
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="lactose" className="block text-sm font-medium text-gray-700 mb-1">
-                      Lactose (%)
-                    </label>
-                    <input
-                      type="number"
-                      id="lactose"
-                      name="lactose"
-                      value={formData.lactose}
-                      onChange={handleChange}
-                      min="0"
-                      step="0.1"
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="somatic" className="block text-sm font-medium text-gray-700 mb-1">
-                      Somatic Cell Count (thousands/ml)
-                    </label>
-                    <input
-                      type="number"
-                      id="somatic"
-                      name="somatic"
-                      value={formData.somatic}
-                      onChange={handleChange}
-                      min="0"
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="bacteria" className="block text-sm font-medium text-gray-700 mb-1">
-                      Bacteria Count (CFU/ml)
-                    </label>
-                    <input
-                      type="number"
-                      id="bacteria"
-                      name="bacteria"
-                      value={formData.bacteria}
-                      onChange={handleChange}
-                      min="0"
                       className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                     />
                   </div>
                 </div>
               </div>
-              
+
               <div>
                 <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
                   Notes
@@ -1562,7 +1542,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                 ></textarea>
               </div>
             </div>
-            
+
             <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3 bg-gray-50 sticky bottom-0">
               <button
                 type="button"
@@ -1623,18 +1603,12 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
             displayDate: formatShortDate(new Date(dateKey)),
             fatSum: 0,
             fatCount: 0,
-            proteinSum: 0,
-            proteinCount: 0,
-            lactoseSum: 0,
-            lactoseCount: 0,
-            somaticSum: 0,
-            somaticCount: 0,
-            bacteriaSum: 0,
-            bacteriaCount: 0
+            snfSum: 0,
+            snfCount: 0
           };
         }
-        
-        
+
+
         // Add fat data
         let fatValue = null;
         if (record.fat !== undefined && record.fat !== null) {
@@ -1642,72 +1616,30 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
         } else if (record.qualityParameters?.fat !== undefined && record.qualityParameters?.fat !== null) {
           fatValue = parseFloat(record.qualityParameters.fat);
         }
-        
+
         if (!isNaN(fatValue)) {
           groupedByDate[dateKey].fatSum += fatValue;
           groupedByDate[dateKey].fatCount += 1;
         }
-        
-        // Add protein data
-        let proteinValue = null;
-        if (record.protein !== undefined && record.protein !== null) {
-          proteinValue = parseFloat(record.protein);
-        } else if (record.qualityParameters?.protein !== undefined && record.qualityParameters?.protein !== null) {
-          proteinValue = parseFloat(record.qualityParameters.protein);
+
+        // Add SNF data
+        let snfValue = null;
+        if (record.snf !== undefined && record.snf !== null) {
+          snfValue = parseFloat(record.snf);
+        } else if (record.qualityParameters?.snf !== undefined && record.qualityParameters?.snf !== null) {
+          snfValue = parseFloat(record.qualityParameters.snf);
         }
-        
-        if (!isNaN(proteinValue)) {
-          groupedByDate[dateKey].proteinSum += proteinValue;
-          groupedByDate[dateKey].proteinCount += 1;
-        }
-        
-        // Add lactose data
-        let lactoseValue = null;
-        if (record.lactose !== undefined && record.lactose !== null) {
-          lactoseValue = parseFloat(record.lactose);
-        } else if (record.qualityParameters?.lactose !== undefined && record.qualityParameters?.lactose !== null) {
-          lactoseValue = parseFloat(record.qualityParameters.lactose);
-        }
-        
-        if (!isNaN(lactoseValue)) {
-          groupedByDate[dateKey].lactoseSum += lactoseValue;
-          groupedByDate[dateKey].lactoseCount += 1;
-        }
-        
-        // Add somatic cell data
-        let somaticValue = null;
-        if (record.somatic_cell_count !== undefined && record.somatic_cell_count !== null) {
-          somaticValue = parseFloat(record.somatic_cell_count);
-        } else if (record.qualityParameters?.somatic !== undefined && record.qualityParameters?.somatic !== null) {
-          somaticValue = parseFloat(record.qualityParameters.somatic);
-        }
-        
-        if (!isNaN(somaticValue)) {
-          groupedByDate[dateKey].somaticSum += somaticValue;
-          groupedByDate[dateKey].somaticCount += 1;
-        }
-        
-        // Add bacteria data
-        let bacteriaValue = null;
-        if (record.bacteria_count !== undefined && record.bacteria_count !== null) {
-          bacteriaValue = parseFloat(record.bacteria_count);
-        } else if (record.qualityParameters?.bacteria !== undefined && record.qualityParameters?.bacteria !== null) {
-          bacteriaValue = parseFloat(record.qualityParameters.bacteria);
-        }
-        
-        if (!isNaN(bacteriaValue)) {
-          groupedByDate[dateKey].bacteriaSum += bacteriaValue;
-          groupedByDate[dateKey].bacteriaCount += 1;
+
+        if (!isNaN(snfValue)) {
+          groupedByDate[dateKey].snfSum += snfValue;
+          groupedByDate[dateKey].snfCount += 1;
         }
       });
-      
+
       // Calculate averages for each day
       Object.values(groupedByDate).forEach(day => {
         day.fat = day.fatCount > 0 ? day.fatSum / day.fatCount : null;
-        day.protein = day.proteinCount > 0 ? day.proteinSum / day.proteinCount : null;
-        day.lactose = day.lactoseCount > 0 ? day.lactoseSum / day.lactoseCount : null;
-        day.somatic = day.somaticCount > 0 ? day.somaticSum / day.somaticCount : null;
-        day.bacteria = day.bacteriaCount > 0 ? day.bacteriaSum / day.bacteriaCount : null;
+        day.snf = day.snfCount > 0 ? day.snfSum / day.snfCount : null;
       });
       
       // Convert to array and sort by date
@@ -1740,8 +1672,8 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
       const paramStandards = standards[parameter];
       if (!paramStandards) return "Unknown";
       
-      // For fat, protein, lactose - check if within target range
-      if (parameter === 'fat' || parameter === 'protein' || parameter === 'lactose') {
+      // For fat, snf - check if within target range
+      if (parameter === 'fat' || parameter === 'snf') {
         if (value >= paramStandards.min && value <= paramStandards.max) {
           if (Math.abs(value - paramStandards.target) <= 0.2) {
             return "Excellent";
@@ -1787,19 +1719,13 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
     // Calculate averages once
     const currentAverages = {
       fat: parseFloat(calculateParameterAverage('fat')),
-      protein: parseFloat(calculateParameterAverage('protein')),
-      lactose: parseFloat(calculateParameterAverage('lactose')),
-      somatic: parseFloat(calculateParameterAverage('somatic')),
-      bacteria: parseFloat(calculateParameterAverage('bacteria'))
+      snf: parseFloat(calculateParameterAverage('snf'))
     };
     
     // Generate statuses based on averages
     const parameterStatuses = {
       fat: getParameterStatus('fat', currentAverages.fat),
-      protein: getParameterStatus('protein', currentAverages.protein),
-      lactose: getParameterStatus('lactose', currentAverages.lactose),
-      somatic: getParameterStatus('somatic', currentAverages.somatic),
-      bacteria: getParameterStatus('bacteria', currentAverages.bacteria)
+      snf: getParameterStatus('snf', currentAverages.snf)
     };
     
     return (
@@ -1814,7 +1740,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                 <button
                   onClick={() => setSelectedParameter('fat')}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-300 ${
-                    selectedParameter === 'fat' 
+                    selectedParameter === 'fat'
                       ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-sm'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
@@ -1822,34 +1748,14 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                   Fat
                 </button>
                 <button
-                  onClick={() => setSelectedParameter('protein')}
+                  onClick={() => setSelectedParameter('snf')}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-300 ${
-                    selectedParameter === 'protein' 
+                    selectedParameter === 'snf'
                       ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-sm'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-                  Protein
-                </button>
-                <button
-                  onClick={() => setSelectedParameter('lactose')}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-300 ${
-                    selectedParameter === 'lactose' 
-                      ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-sm'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Lactose
-                </button>
-                <button
-                  onClick={() => setSelectedParameter('somatic')}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-300 ${
-                    selectedParameter === 'somatic' 
-                      ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-sm'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Somatic Cells
+                  SNF
                 </button>
               </div>
             </div>
@@ -1877,15 +1783,12 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                         [standards[selectedParameter]?.min * 0.9 || 0, standards[selectedParameter]?.max * 1.1 || 5]
                       } 
                     />
-                    <Tooltip 
+                    <Tooltip
                       formatter={(value) => {
-                        if (selectedParameter === 'fat' || selectedParameter === 'protein' || selectedParameter === 'lactose') {
+                        if (selectedParameter === 'fat' || selectedParameter === 'snf') {
                           return [`${value.toFixed(2)}%`, selectedParameter.charAt(0).toUpperCase() + selectedParameter.slice(1)];
-                        } else if (selectedParameter === 'somatic') {
-                          return [`${value}`, 'Somatic Cell Count'];
-                        } else {
-                          return [`${value}`, 'Bacteria Count'];
                         }
+                        return [`${value}`, selectedParameter.charAt(0).toUpperCase() + selectedParameter.slice(1)];
                       }}
                       contentStyle={{ 
                         background: 'rgba(255, 255, 255, 0.95)', 
@@ -1914,7 +1817,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                     />
                     
                     {/* Add reference lines for target and limits */}
-                    {(selectedParameter === 'fat' || selectedParameter === 'protein' || selectedParameter === 'lactose') && standards[selectedParameter]?.target && (
+                    {(selectedParameter === 'fat' || selectedParameter === 'snf') && standards[selectedParameter]?.target && (
                       <ReferenceLine 
                         y={standards[selectedParameter].target} 
                         stroke="#2196F3" 
@@ -1928,7 +1831,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                       />
                     )}
                     
-                    {(selectedParameter === 'fat' || selectedParameter === 'protein' || selectedParameter === 'lactose') && standards[selectedParameter]?.min && (
+                    {(selectedParameter === 'fat' || selectedParameter === 'snf') && standards[selectedParameter]?.min && (
                       <ReferenceLine 
                         y={standards[selectedParameter].min} 
                         stroke="rgba(255, 152, 0, 0.5)" 
@@ -1942,29 +1845,15 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                       />
                     )}
                     
-                    {(selectedParameter === 'fat' || selectedParameter === 'protein' || selectedParameter === 'lactose') && standards[selectedParameter]?.max && (
-                      <ReferenceLine 
-                        y={standards[selectedParameter].max} 
+                    {(selectedParameter === 'fat' || selectedParameter === 'snf') && standards[selectedParameter]?.max && (
+                      <ReferenceLine
+                        y={standards[selectedParameter].max}
                         stroke="rgba(255, 152, 0, 0.5)"
                         strokeDasharray="3 3"
-                        label={{ 
-                          value: 'Max', 
-                          position: 'insideTopRight', 
+                        label={{
+                          value: 'Max',
+                          position: 'insideTopRight',
                           fill: '#FF9800',
-                          fontSize: 10
-                        }}
-                      />
-                    )}
-                    
-                    {(selectedParameter === 'somatic' || selectedParameter === 'bacteria') && standards[selectedParameter]?.max && (
-                      <ReferenceLine 
-                        y={standards[selectedParameter].max} 
-                        stroke="rgba(244, 67, 54, 0.5)"
-                        strokeDasharray="3 3"
-                        label={{ 
-                          value: 'Limit', 
-                          position: 'insideTopRight', 
-                          fill: '#F44336',
                           fontSize: 10
                         }}
                       />
@@ -2060,58 +1949,20 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
               </tr>
               <tr className="hover:bg-gray-50 transition-colors duration-200">
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  Protein Content
+                  SNF Content
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {currentAverages.protein.toFixed(2)}%
+                  {currentAverages.snf.toFixed(2)}%
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {standards.protein?.target || '3.3'}%
+                  {standards.snf?.target || '8.5'}%
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {standards.protein?.min || '3.0'}% - {standards.protein?.max || '3.6'}%
+                  {standards.snf?.min || '8.0'}% - {standards.snf?.max || '9.0'}%
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColorClass(parameterStatuses.protein)}`}>
-                    {parameterStatuses.protein}
-                  </span>
-                </td>
-              </tr>
-              <tr className="hover:bg-gray-50 transition-colors duration-200">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  Lactose Content
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {currentAverages.lactose.toFixed(2)}%
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {standards.lactose?.target || '4.8'}%
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {standards.lactose?.min || '4.5'}% - {standards.lactose?.max || '5.0'}%
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColorClass(parameterStatuses.lactose)}`}>
-                    {parameterStatuses.lactose}
-                  </span>
-                </td>
-              </tr>
-              <tr className="hover:bg-gray-50 transition-colors duration-200">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  Somatic Cell Count
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {currentAverages.somatic.toFixed(0)}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {'< 150'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {'< ' + (standards.somatic?.max || '200')}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColorClass(parameterStatuses.somatic)}`}>
-                    {parameterStatuses.somatic}
+                  <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColorClass(parameterStatuses.snf)}`}>
+                    {parameterStatuses.snf}
                   </span>
                 </td>
               </tr>
@@ -2350,8 +2201,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
             <div className="text-sm text-gray-600">
               <p className="mb-2"><strong>Quality Metrics Report</strong> includes:</p>
               <ul className="list-disc pl-5 space-y-1">
-                <li>Average fat, protein and lactose content</li>
-                <li>Somatic cell and bacteria counts</li>
+                <li>Average fat and SNF content</li>
                 <li>Daily quality trends</li>
                 <li>Compliance with industry standards</li>
               </ul>
@@ -2460,48 +2310,74 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
     };
   
     return (
-      <div>
-        {/* Report Generator Form */}
-        <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 mb-6">
-          <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Generate Reports</h2>
+      <div className="space-y-6">
+        {/* Enhanced Report Generator Form */}
+        <div className="bg-gradient-to-br from-white via-blue-50/30 to-green-50/30 rounded-2xl shadow-xl overflow-hidden border border-gray-100/50 backdrop-blur-sm">
+          {/* Animated gradient border */}
+          <div className="h-1.5 bg-gradient-to-r from-green-400 via-blue-500 to-purple-500"></div>
+          {/* Header with icon */}
+          <div className="px-6 py-5 border-b border-gray-100 bg-white/80 backdrop-blur-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-gradient-to-br from-green-500 to-blue-600 rounded-xl shadow-lg">
+                <FileText className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-600 via-blue-600 to-purple-600">
+                  Generate Reports
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">Create detailed milk production reports</p>
+              </div>
+            </div>
           </div>
-          <div className="p-6">
+          <div className="p-6 bg-white/60 backdrop-blur-sm">
             {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg">
-                {error}
+              <div className="mb-6 p-4 bg-red-50/80 border-l-4 border-red-500 text-red-700 rounded-r-xl shadow-sm backdrop-blur-sm">
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                  <span className="font-medium">{error}</span>
+                </div>
               </div>
             )}
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label htmlFor="reportType" className="block text-sm font-medium text-gray-700 mb-1">
+
+            {/* Configuration Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Report Type */}
+              <div className="group">
+                <label htmlFor="reportType" className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                  <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
                   Report Type
                 </label>
                 <select
                   id="reportType"
                   value={reportType}
                   onChange={(e) => setReportType(e.target.value)}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  className="block w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 hover:border-green-300 cursor-pointer font-medium text-gray-700"
                 >
-                  <option value="daily">Daily Production Report</option>
-                  <option value="weekly">Weekly Summary Report</option>
-                  <option value="monthly">Monthly Analysis Report</option>
-                  <option value="quality">Quality Metrics Report</option>
-                  <option value="compliance">Compliance Report</option>
+                  <option value="daily">📊 Daily Production Report</option>
+                  <option value="weekly">📈 Weekly Summary Report</option>
+                  <option value="monthly">📅 Monthly Analysis Report</option>
+                  <option value="quality">⭐ Quality Metrics Report</option>
+                  <option value="compliance">✓ Compliance Report</option>
                 </select>
               </div>
-              
-              <div>
-                <label htmlFor="dateRange" className="block text-sm font-medium text-gray-700 mb-1">
-                  Date Range
+
+              {/* Report Period */}
+              <div className="group">
+                <label htmlFor="dateRange" className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                  <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Report Period
                 </label>
                 <select
                   id="dateRange"
                   value={dateRange}
                   onChange={(e) => setDateRange(e.target.value)}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  className="block w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-blue-300 cursor-pointer font-medium text-gray-700"
                 >
                   <option value="today">Today</option>
                   <option value="yesterday">Yesterday</option>
@@ -2509,14 +2385,18 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                   <option value="last30">Last 30 days</option>
                   <option value="thisMonth">This month</option>
                   <option value="lastMonth">Last month</option>
-                  <option value="custom">Custom range...</option>
+                  <option value="custom">🎯 Custom range</option>
                 </select>
               </div>
               
+              {/* Custom Date Range */}
               {dateRange === 'custom' && (
                 <>
-                  <div>
-                    <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">
+                  <div className="group">
+                    <label htmlFor="startDate" className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                      <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
                       Start Date
                     </label>
                     <input
@@ -2524,12 +2404,16 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                       id="startDate"
                       value={customStartDate}
                       onChange={(e) => setCustomStartDate(e.target.value)}
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                      max={new Date().toISOString().split('T')[0]}
+                      className="block w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 hover:border-purple-300 font-medium text-gray-700"
                     />
                   </div>
-                  
-                  <div>
-                    <label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">
+
+                  <div className="group">
+                    <label htmlFor="endDate" className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                      <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
                       End Date
                     </label>
                     <input
@@ -2537,84 +2421,95 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                       id="endDate"
                       value={customEndDate}
                       onChange={(e) => setCustomEndDate(e.target.value)}
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                      max={new Date().toISOString().split('T')[0]}
+                      min={customStartDate}
+                      className="block w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 hover:border-purple-300 font-medium text-gray-700"
                     />
                   </div>
                 </>
               )}
               
-              <div className="md:col-span-2 overflow-x-auto">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+              {/* Output Format */}
+              <div className="lg:col-span-2">
+                <label className="block text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
                   Output Format
                 </label>
-                <div className="mt-1 flex items-center space-x-4 flex-wrap gap-y-2">
-                  <div className="flex items-center">
+                <div className="flex items-center gap-4 flex-wrap">
+                  <label className={`flex items-center gap-3 px-6 py-3 rounded-xl border-2 cursor-pointer transition-all duration-200 ${format === 'pdf' ? 'bg-red-50 border-red-500 shadow-md scale-105' : 'bg-white border-gray-200 hover:border-red-300 hover:shadow-sm'}`}>
                     <input
                       id="pdf"
                       name="format"
                       type="radio"
                       checked={format === 'pdf'}
                       onChange={() => setFormat('pdf')}
-                      className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
+                      className="h-5 w-5 text-red-600 focus:ring-red-500 border-gray-300"
                     />
-                    <label htmlFor="pdf" className="ml-2 block text-sm text-gray-700">
-                      PDF
-                    </label>
-                  </div>
-                  <div className="flex items-center">
+                    <div className="flex items-center gap-2">
+                      <FileType className="h-5 w-5 text-red-600" />
+                      <span className="font-semibold text-gray-700">PDF</span>
+                    </div>
+                  </label>
+
+                  <label className={`flex items-center gap-3 px-6 py-3 rounded-xl border-2 cursor-pointer transition-all duration-200 ${format === 'xlsx' ? 'bg-green-50 border-green-500 shadow-md scale-105' : 'bg-white border-gray-200 hover:border-green-300 hover:shadow-sm'}`}>
                     <input
                       id="xlsx"
                       name="format"
                       type="radio"
                       checked={format === 'xlsx'}
                       onChange={() => setFormat('xlsx')}
-                      className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
+                      className="h-5 w-5 text-green-600 focus:ring-green-500 border-gray-300"
                     />
-                    <label htmlFor="xlsx" className="ml-2 block text-sm text-gray-700">
-                      Excel
-                    </label>
-                  </div>
-                  <div className="flex items-center">
+                    <div className="flex items-center gap-2">
+                      <FileSpreadsheet className="h-5 w-5 text-green-600" />
+                      <span className="font-semibold text-gray-700">Excel</span>
+                    </div>
+                  </label>
+
+                  <label className={`flex items-center gap-3 px-6 py-3 rounded-xl border-2 cursor-pointer transition-all duration-200 ${format === 'csv' ? 'bg-blue-50 border-blue-500 shadow-md scale-105' : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-sm'}`}>
                     <input
                       id="csv"
                       name="format"
                       type="radio"
                       checked={format === 'csv'}
                       onChange={() => setFormat('csv')}
-                      className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
+                      className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300"
                     />
-                    <label htmlFor="csv" className="ml-2 block text-sm text-gray-700">
-                      CSV
-                    </label>
-                  </div>
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-5 w-5 text-blue-600" />
+                      <span className="font-semibold text-gray-700">CSV</span>
+                    </div>
+                  </label>
                 </div>
               </div>
             </div>
             
-            {/* Report Preview with scrollbar for long content */}
-          <div className="mt-4 p-4 border border-gray-200 rounded-lg bg-gray-50 max-h-[300px] overflow-y-auto">
-            <ReportPreview reportType={reportType} />
-          </div>
-          
-          {/* Button placed in full width container */}
-            <div className="mt-6 flex justify-center sm:justify-start">
+            {/* Enhanced Report Preview */}
+            <div className="mt-6 p-5 border-2 border-dashed border-gray-200 rounded-xl bg-gradient-to-br from-gray-50 to-blue-50/30">
+              <ReportPreview reportType={reportType} />
+            </div>
+
+            {/* Generate Button */}
+            <div className="mt-6 flex justify-center">
               <button
                 onClick={handleGenerateReport}
                 disabled={isGenerating}
-                className={`inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300 ${isGenerating ? 'opacity-70 cursor-not-allowed' : ''}`}
+                className={`group relative inline-flex items-center gap-3 px-8 py-4 rounded-xl text-base font-bold text-white bg-gradient-to-r from-green-600 via-blue-600 to-purple-600 shadow-lg hover:shadow-xl transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-green-500/50 transition-all duration-300 ${isGenerating ? 'opacity-70 cursor-not-allowed scale-100' : ''}`}
               >
                 {isGenerating ? (
                   <>
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Generating...
+                    <span>Generating Report...</span>
                   </>
                 ) : (
                   <>
-                    <Download size={16} className="mr-2" />
-                    Generate Report
+                    <Download className="h-6 w-6 group-hover:animate-bounce" />
+                    <span>Generate & Download Report</span>
                   </>
                 )}
               </button>
@@ -2714,10 +2609,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
       notes: '',
       sendWhatsAppNotification: false,
       fat: '',
-      protein: '',
-      lactose: '',
-      somatic: '',
-      bacteria: ''
+      snf: ''
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [cows, setCows] = useState([]);
@@ -2783,10 +2675,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
           quality: formData.quality,
           notes: formData.notes,
           fat: formData.fat ? parseFloat(formData.fat) : null,
-          protein: formData.protein ? parseFloat(formData.protein) : null,
-          lactose: formData.lactose ? parseFloat(formData.lactose) : null,
-          somatic: formData.somatic ? parseInt(formData.somatic) : null,
-          bacteria: formData.bacteria ? parseInt(formData.bacteria) : null
+          snf: formData.snf ? parseFloat(formData.snf) : null
         };  
         
         // Call the onAdd function that will use the milk service
@@ -2942,71 +2831,25 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                       className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                     />
                   </div>
-                  
+
                   <div>
-                    <label htmlFor="protein" className="block text-sm font-medium text-gray-700 mb-1">
-                      Protein (%)
+                    <label htmlFor="snf" className="block text-sm font-medium text-gray-700 mb-1">
+                      SNF (%)
                     </label>
                     <input
                       type="number"
-                      id="protein"
-                      name="protein"
-                      value={formData.protein}
+                      id="snf"
+                      name="snf"
+                      value={formData.snf}
                       onChange={handleChange}
                       min="0"
                       step="0.1"
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="lactose" className="block text-sm font-medium text-gray-700 mb-1">
-                      Lactose (%)
-                    </label>
-                    <input
-                      type="number"
-                      id="lactose"
-                      name="lactose"
-                      value={formData.lactose}
-                      onChange={handleChange}
-                      min="0"
-                      step="0.1"
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="somatic" className="block text-sm font-medium text-gray-700 mb-1">
-                      Somatic Cell Count (thousands/ml)
-                    </label>
-                    <input
-                      type="number"
-                      id="somatic"
-                      name="somatic"
-                      value={formData.somatic}
-                      onChange={handleChange}
-                      min="0"
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="bacteria" className="block text-sm font-medium text-gray-700 mb-1">
-                      Bacteria Count (CFU/ml)
-                    </label>
-                    <input
-                      type="number"
-                      id="bacteria"
-                      name="bacteria"
-                      value={formData.bacteria}
-                      onChange={handleChange}
-                      min="0"
                       className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                     />
                   </div>
                 </div>
               </div>
-              
+
               <div>
                 <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
                   Notes
@@ -3021,7 +2864,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                   placeholder="Any additional notes about this collection..."
                 ></textarea>
               </div>
-              
+
               <div className="flex items-center mt-4 p-3 bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30 rounded-lg">
                 <div className="flex items-center h-5">
                   <input

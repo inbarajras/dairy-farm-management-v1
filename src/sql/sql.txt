@@ -1004,3 +1004,20 @@ CREATE TRIGGER update_breeds_updated_at
 -- Grant permissions
 GRANT SELECT, INSERT ON breeds TO authenticated;
 GRANT SELECT ON breeds TO anon;
+
+
+-- Remove unnecessary quality parameter columns from milk_production table
+ALTER TABLE milk_production
+  DROP COLUMN IF EXISTS protein,
+  DROP COLUMN IF EXISTS lactose,
+  DROP COLUMN IF EXISTS somatic_cell_count,
+  DROP COLUMN IF EXISTS bacteria_count;
+
+-- Add SNF (Solid Not Fat) column
+ALTER TABLE milk_production
+  ADD COLUMN IF NOT EXISTS snf DECIMAL(4,2);
+
+-- Final columns in milk_production table for quality:
+-- - fat DECIMAL(4,2)
+-- - snf DECIMAL(4,2)  
+-- - quality_grade VARCHAR

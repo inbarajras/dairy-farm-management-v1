@@ -61,8 +61,6 @@ const CowManagement = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [view, setView] = useState('grid'); // 'grid' or 'table'
-  const [successMessage, setSuccessMessage] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
   
   // QR Code states
   const [showQRCode, setShowQRCode] = useState(false);
@@ -80,7 +78,7 @@ const CowManagement = () => {
         setCows(data);
       } catch (err) {
         setError(err.message);
-        setErrorMessage('Failed to load cows. Please try again later.');
+        toast.error('Failed to load cows. Please try again later.');
       } finally {
         setLoading(false);
       }
@@ -104,8 +102,7 @@ const CowManagement = () => {
       }
     } catch (err) {
       console.error('Error refreshing cow data:', err);
-      setErrorMessage('Failed to refresh cow data.');
-      setTimeout(() => setErrorMessage(''), 3000);
+      toast.error('Failed to refresh cow data.');
     }
   }, [selectedCow]);
 
@@ -243,16 +240,17 @@ const CowManagement = () => {
       }
       
       const isSameDay = todayStr === milkDateStr;
-        
-      return { 
-        milked: isSameDay,
-        message: isSameDay ? 'Milked today' : 'Not milked today',
+      const hasActualMilk = latest.amount && parseFloat(latest.amount) > 0;
+
+      return {
+        milked: isSameDay && hasActualMilk,
+        message: (isSameDay && hasActualMilk) ? 'Milked today' : 'Not milked today',
         shift: latest.shift || 'Not specified',
         latestDate: milkDateStr,
         todayDate: todayStr
       };
     }
-    
+
     return { milked: false, message: 'No milking records' };
   };
 
@@ -370,12 +368,10 @@ const CowManagement = () => {
       setLoading(true);
       const newCow = await addCow(newCowData);
       setCows([...cows, newCow]);
-      setSuccessMessage('New cow added successfully!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      toast.success('New cow added successfully!');
     } catch (err) {
       console.error("Error adding cow:", err);
-      setErrorMessage('Failed to add cow. Please try again.');
-      setTimeout(() => setErrorMessage(''), 3000);
+      toast.error('Failed to add cow. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -395,14 +391,12 @@ const CowManagement = () => {
       if (selectedCow && selectedCow.id === updatedCow.id) {
         setSelectedCow(prev => ({ ...prev, ...updatedCow }));
       }
-      
-      setSuccessMessage('Cow updated successfully!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+
+      toast.success('Cow updated successfully!');
     } catch (err) {
       console.error("Error updating cow:", err);
-      setErrorMessage('Failed to update cow. Please try again.');
-      setTimeout(() => setErrorMessage(''), 3000);
-    } finally {
+      toast.error('Failed to update cow. Please try again.');
+    } finally{
       setLoading(false);
     }
   };
@@ -417,13 +411,11 @@ const CowManagement = () => {
       if (selectedCow && selectedCow.id === cowId) {
         setSelectedCow(null);
       }
-      
-      setSuccessMessage('Cow deleted successfully!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+
+      toast.success('Cow deleted successfully!');
     } catch (err) {
       console.error("Error deleting cow:", err);
-      setErrorMessage('Failed to delete cow. Please try again.');
-      setTimeout(() => setErrorMessage(''), 3000);
+      toast.error('Failed to delete cow. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -460,13 +452,11 @@ const CowManagement = () => {
       // Refresh cow data to get the latest information including new health event
       await refreshCowData();
 
-      setSuccessMessage('Health event recorded successfully!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      toast.success('Health event recorded successfully!');
       setIsRecordHealthEventModalOpen(false);
     } catch (err) {
       console.error("Error recording health event:", err);
-      setErrorMessage('Failed to record health event. Please try again.');
-      setTimeout(() => setErrorMessage(''), 3000);
+      toast.error('Failed to record health event. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -603,12 +593,10 @@ const CowManagement = () => {
       await refreshCowData();
 
       setIsRecordBreedingEventModalOpen(false);
-      setSuccessMessage('Breeding event recorded successfully!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      toast.success('Breeding event recorded successfully!');
     } catch (err) {
       console.error("Error recording breeding event:", err);
-      setErrorMessage('Failed to record breeding event. Please try again.');
-      setTimeout(() => setErrorMessage(''), 3000);
+      toast.error('Failed to record breeding event. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -644,12 +632,10 @@ const CowManagement = () => {
       await refreshCowData();
 
       setIsRecordGrowthMilestoneModalOpen(false);
-      setSuccessMessage('Growth milestone recorded successfully!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      toast.success('Growth milestone recorded successfully!');
     } catch (err) {
       console.error("Error recording growth milestone:", err);
-      setErrorMessage('Failed to record growth milestone. Please try again.');
-      setTimeout(() => setErrorMessage(''), 3000);
+      toast.error('Failed to record growth milestone. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -684,8 +670,7 @@ const CowManagement = () => {
       setSelectedCow(scannedCow);
       setShowQuickRecordModal(true);
     } else {
-      setErrorMessage('Cow not found in the system.');
-      setTimeout(() => setErrorMessage(''), 3000);
+      toast.error('Cow not found in the system.');
     }
   };
   
@@ -738,18 +723,6 @@ const CowManagement = () => {
 
   return (
     <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30 overflow-y-auto">
-      {/* Success and error messages */}
-      {successMessage && (
-        <div className="fixed top-6 right-6 bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-md shadow-lg z-50 animate-fadeIn">
-          <p>{successMessage}</p>
-        </div>
-      )}
-      
-      {errorMessage && (
-        <div className="fixed top-6 right-6 bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-3 rounded-md shadow-lg z-50 animate-fadeIn">
-          <p>{errorMessage}</p>
-        </div>
-      )}
       
       {selectedCow ? (
       <CowProfile 
@@ -1130,8 +1103,7 @@ const CowManagement = () => {
           onScan={handleQRScan}
           onClose={handleCloseQRScanner}
           onError={(error) => {
-            setErrorMessage(`Scanner error: ${error.message}`);
-            setTimeout(() => setErrorMessage(''), 3000);
+            toast.error(`Scanner error: ${error.message}`);
           }}
         />
       )}
@@ -1227,6 +1199,7 @@ const CowCard = ({ cow, onClick, onEdit, onDelete, checkCowMilkingStatus, hasPer
             src={cow?.image || cow?.photo || cowSample}
             alt={cow?.name}
             className="w-16 h-16 object-cover rounded-full bg-gray-200 border-2 border-green-100 flex-shrink-0"
+            onError={(e) => { e.target.src = cowSample; }}
           />
           <div className="ml-4 min-w-0">
             <p className="text-sm text-gray-600 truncate">{cow?.breed}</p>
@@ -1660,6 +1633,7 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                   src={cow.image || cow.photo || cowSample}
                   alt={cow.name}
                   className="w-32 h-32 object-cover rounded-full bg-gray-200 mb-4 border-4 border-green-100 shadow-md"
+                  onError={(e) => { e.target.src = cowSample; }}
                 />
                 <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-600">{cow.name}</h2>
                 <p className="text-gray-500">Tag: {cow.tagNumber}</p>
@@ -5200,6 +5174,7 @@ const QuickRecordModal = ({ cow, onClose, onRecord }) => {
               src={cow?.image || cow?.photo || cowSample}
               alt={cow?.name}
               className="w-16 h-16 object-cover rounded-full bg-gray-200 border-2 border-purple-100 mr-4"
+              onError={(e) => { e.target.src = cowSample; }}
             />
             <div>
               <h4 className="text-lg font-semibold text-gray-800">{cow?.name}</h4>

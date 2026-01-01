@@ -15,10 +15,7 @@ export const fetchMilkCollections = async (startDate = null, endDate = null) => 
         created_at,
         cow_id,
         fat,
-        protein, 
-        lactose,
-        somatic_cell_count,
-        bacteria_count,
+        snf,
         quality_grade,
         cows (
           id,
@@ -75,10 +72,7 @@ export const fetchMilkCollections = async (startDate = null, endDate = null) => 
       // Use actual quality parameters from the database if available
       qualityParameters: {
         fat: collection.fat !== null ? parseFloat(collection.fat) : (3.8 + (Math.random() * 0.4 - 0.2)),
-        protein: collection.protein !== null ? parseFloat(collection.protein) : (3.2 + (Math.random() * 0.4 - 0.2)),
-        lactose: collection.lactose !== null ? parseFloat(collection.lactose) : (4.7 + (Math.random() * 0.4 - 0.2)),
-        somatic: collection.somatic_cell_count !== null ? parseInt(collection.somatic_cell_count) : Math.round(180 + (Math.random() * 40 - 20)),
-        bacteria: collection.bacteria_count !== null ? parseInt(collection.bacteria_count) : Math.round(16000 + (Math.random() * 8000 - 4000))
+        snf: collection.snf !== null ? parseFloat(collection.snf) : (8.5 + (Math.random() * 0.4 - 0.2))
       }
     }));
   } catch (error) {
@@ -158,8 +152,7 @@ export const fetchQualityTrends = async (days = 7) => {
           totalAmount: 0,
           // We'll use static quality parameters for this example
           fat: 3.7 + Math.random() * 0.3, // Random between 3.7-4.0
-          protein: 3.1 + Math.random() * 0.3, // Random between 3.1-3.4
-          lactose: 4.6 + Math.random() * 0.3 // Random between 4.6-4.9
+          snf: 8.3 + Math.random() * 0.4 // Random between 8.3-8.7
         };
       }
       
@@ -214,15 +207,10 @@ export const addMilkCollection = async (collectionData) => {
           quality: collectionData.quality || 'Good',
           notes: collectionData.notes,
           fat: collectionData.fat || null,
-          protein: collectionData.protein || null,
-          lactose: collectionData.lactose || null,
-          somatic_cell_count: collectionData.somatic || null,
-          bacteria_count: collectionData.bacteria || null,
+          snf: collectionData.snf || null,
           quality_grade: determineQualityGrade({
             fat: collectionData.fat,
-            protein: collectionData.protein,
-            somatic: collectionData.somatic,
-            bacteria: collectionData.bacteria
+            snf: collectionData.snf
           })
         })
         .select();
@@ -250,21 +238,19 @@ export const addMilkCollection = async (collectionData) => {
 
   const determineQualityGrade = (params) => {
     // Default to "Good" if parameters are missing
-    if (!params.fat && !params.protein && !params.somatic && !params.bacteria) {
+    if (!params.fat && !params.snf) {
       return "Good";
     }
-    
+
     // Get quality standards
     const standards = {
       fat: { min: 3.5, target: 3.8, max: 4.2 },
-      protein: { min: 3.0, target: 3.3, max: 3.6 },
-      somatic: { max: 200 }, // thousands/ml
-      bacteria: { max: 20000 } // CFU/ml
+      snf: { min: 8.0, target: 8.5, max: 9.0 }
     };
-    
+
     // Score each parameter (0-5 scale)
     let scores = [];
-    
+
     if (params.fat) {
       if (params.fat >= standards.fat.target - 0.1 && params.fat <= standards.fat.target + 0.1) {
         scores.push(5); // Excellent
@@ -276,46 +262,22 @@ export const addMilkCollection = async (collectionData) => {
         scores.push(2); // Poor
       }
     }
-    
-    if (params.protein) {
-      if (params.protein >= standards.protein.target - 0.1 && params.protein <= standards.protein.target + 0.1) {
+
+    if (params.snf) {
+      if (params.snf >= standards.snf.target - 0.1 && params.snf <= standards.snf.target + 0.1) {
         scores.push(5); // Excellent
-      } else if (params.protein >= standards.protein.min && params.protein <= standards.protein.max) {
+      } else if (params.snf >= standards.snf.min && params.snf <= standards.snf.max) {
         scores.push(4); // Good
-      } else if (params.protein >= standards.protein.min - 0.3 || params.protein <= standards.protein.max + 0.3) {
+      } else if (params.snf >= standards.snf.min - 0.3 || params.snf <= standards.snf.max + 0.3) {
         scores.push(3); // Average
       } else {
         scores.push(2); // Poor
       }
     }
-    
-    if (params.somatic) {
-      if (params.somatic < standards.somatic.max * 0.6) {
-        scores.push(5); // Excellent
-      } else if (params.somatic < standards.somatic.max * 0.8) {
-        scores.push(4); // Good
-      } else if (params.somatic < standards.somatic.max) {
-        scores.push(3); // Average
-      } else {
-        scores.push(2); // Poor
-      }
-    }
-    
-    if (params.bacteria) {
-      if (params.bacteria < standards.bacteria.max * 0.6) {
-        scores.push(5); // Excellent
-      } else if (params.bacteria < standards.bacteria.max * 0.8) {
-        scores.push(4); // Good
-      } else if (params.bacteria < standards.bacteria.max) {
-        scores.push(3); // Average
-      } else {
-        scores.push(2); // Poor
-      }
-    }
-    
+
     // Calculate average score
     const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
-    
+
     // Determine grade based on average score
     if (avgScore >= 4.5) return "Excellent";
     if (avgScore >= 3.5) return "Good";
@@ -346,29 +308,15 @@ export const updateMilkCollection = async (id, collectionData) => {
     if (collectionData.fat !== undefined && collectionData.fat !== null) {
       dbData.fat = parseFloat(collectionData.fat);
     }
-    
-    if (collectionData.protein !== undefined && collectionData.protein !== null) {
-      dbData.protein = parseFloat(collectionData.protein);
+
+    if (collectionData.snf !== undefined && collectionData.snf !== null) {
+      dbData.snf = parseFloat(collectionData.snf);
     }
-    
-    if (collectionData.lactose !== undefined && collectionData.lactose !== null) {
-      dbData.lactose = parseFloat(collectionData.lactose);
-    }
-    
-    if (collectionData.somatic !== undefined && collectionData.somatic !== null) {
-      dbData.somatic_cell_count = parseInt(collectionData.somatic);
-    }
-    
-    if (collectionData.bacteria !== undefined && collectionData.bacteria !== null) {
-      dbData.bacteria_count = parseInt(collectionData.bacteria);
-    }
-    
+
     // Calculate quality grade
     dbData.quality_grade = determineQualityGrade({
       fat: dbData.fat,
-      protein: dbData.protein,
-      somatic: dbData.somatic_cell_count,
-      bacteria: dbData.bacteria_count
+      snf: dbData.snf
     });
     
     // Update the database
@@ -414,10 +362,7 @@ export const getQualityStandards = async () => {
   // In a real system you might store these in a settings table
   return {
     fat: { min: 3.5, target: 3.8, max: 4.2 },
-    protein: { min: 3.0, target: 3.3, max: 3.6 },
-    lactose: { min: 4.5, target: 4.8, max: 5.0 },
-    somatic: { max: 200 },
-    bacteria: { max: 20000 }
+    snf: { min: 8.0, target: 8.5, max: 9.0 }
   };
 };
 
@@ -431,9 +376,9 @@ export const getMilkAlerts = async () => {
         id: 'A001',
         date: new Date().toISOString().split('T')[0],
         type: 'quality',
-        parameter: 'somatic',
-        value: 190,
-        message: 'Somatic cell count nearing upper limit',
+        parameter: 'fat',
+        value: 3.4,
+        message: 'Fat content nearing lower limit',
         severity: 'warning'
       }
     ];

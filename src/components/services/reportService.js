@@ -269,10 +269,7 @@ async function fetchDataForReport(reportType, startDate, endDate) {
       qualityData = milkData.map(record => ({
         date: record.date,
         fat: 3.8 + (Math.random() * 0.4 - 0.2),
-        protein: 3.2 + (Math.random() * 0.4 - 0.2),
-        lactose: 4.7 + (Math.random() * 0.4 - 0.2),
-        somatic: Math.round(180 + (Math.random() * 40 - 20)),
-        bacteria: Math.round(16000 + (Math.random() * 8000 - 4000))
+        snf: 8.5 + (Math.random() * 0.4 - 0.2)
       }));
     }
     
@@ -541,89 +538,60 @@ function processMonthlyReportData(milkData) {
 function processQualityReportData(milkData, qualityData) {
   // Calculate quality averages
   const totalFat = qualityData.reduce((sum, record) => sum + record.fat, 0);
-  const totalProtein = qualityData.reduce((sum, record) => sum + record.protein, 0);
-  const totalLactose = qualityData.reduce((sum, record) => sum + record.lactose, 0);
-  const totalSomatic = qualityData.reduce((sum, record) => sum + record.somatic, 0);
-  const totalBacteria = qualityData.reduce((sum, record) => sum + record.bacteria, 0);
-  
+  const totalSnf = qualityData.reduce((sum, record) => sum + record.snf, 0);
+
   const count = qualityData.length || 1;
-  
+
   const qualityAverages = {
     fat: totalFat / count,
-    protein: totalProtein / count,
-    lactose: totalLactose / count,
-    somatic: totalSomatic / count,
-    bacteria: totalBacteria / count
+    snf: totalSnf / count
   };
-  
+
   // Group quality data by day to see trends
   const dailyQuality = {};
   qualityData.forEach(record => {
     const date = record.date;
-    
+
     if (!dailyQuality[date]) {
       dailyQuality[date] = {
         date,
         samples: 0,
         fatTotal: 0,
-        proteinTotal: 0,
-        lactoseTotal: 0,
-        somaticTotal: 0,
-        bacteriaTotal: 0
+        snfTotal: 0
       };
     }
-    
+
     dailyQuality[date].samples++;
     dailyQuality[date].fatTotal += record.fat;
-    dailyQuality[date].proteinTotal += record.protein;
-    dailyQuality[date].lactoseTotal += record.lactose;
-    dailyQuality[date].somaticTotal += record.somatic;
-    dailyQuality[date].bacteriaTotal += record.bacteria;
+    dailyQuality[date].snfTotal += record.snf;
   });
-  
+
   // Calculate daily averages
   Object.values(dailyQuality).forEach(day => {
     day.fatAvg = day.fatTotal / day.samples;
-    day.proteinAvg = day.proteinTotal / day.samples;
-    day.lactoseAvg = day.lactoseTotal / day.samples;
-    day.somaticAvg = day.somaticTotal / day.samples;
-    day.bacteriaAvg = day.bacteriaTotal / day.samples;
-    
+    day.snfAvg = day.snfTotal / day.samples;
+
     // Remove the totals to clean up the data
     delete day.fatTotal;
-    delete day.proteinTotal;
-    delete day.lactoseTotal;
-    delete day.somaticTotal;
-    delete day.bacteriaTotal;
+    delete day.snfTotal;
   });
   
   // Quality standards (for comparison)
   const standards = {
     fat: { min: 3.5, target: 3.8, max: 4.2 },
-    protein: { min: 3.0, target: 3.3, max: 3.6 },
-    lactose: { min: 4.5, target: 4.8, max: 5.0 },
-    somatic: { max: 200 },
-    bacteria: { max: 20000 }
+    snf: { min: 8.0, target: 8.5, max: 9.0 }
   };
-  
+
   // Calculate compliance percentages
   const complianceCount = {
     fat: qualityData.filter(r => r.fat >= standards.fat.min && r.fat <= standards.fat.max).length,
-    protein: qualityData.filter(r => r.protein >= standards.protein.min && r.protein <= standards.protein.max).length,
-    lactose: qualityData.filter(r => r.lactose >= standards.lactose.min && r.lactose <= standards.lactose.max).length,
-    somatic: qualityData.filter(r => r.somatic <= standards.somatic.max).length,
-    bacteria: qualityData.filter(r => r.bacteria <= standards.bacteria.max).length
+    snf: qualityData.filter(r => r.snf >= standards.snf.min && r.snf <= standards.snf.max).length
   };
-  
+
   const compliance = {
     fat: (complianceCount.fat / count) * 100,
-    protein: (complianceCount.protein / count) * 100,
-    lactose: (complianceCount.lactose / count) * 100,
-    somatic: (complianceCount.somatic / count) * 100,
-    bacteria: (complianceCount.bacteria / count) * 100,
-    overall: 
-      (complianceCount.fat + complianceCount.protein + complianceCount.lactose +
-       complianceCount.somatic + complianceCount.bacteria) / (count * 5) * 100
+    snf: (complianceCount.snf / count) * 100,
+    overall: (complianceCount.fat + complianceCount.snf) / (count * 2) * 100
   };
   
   return {
@@ -645,53 +613,32 @@ function processComplianceReportData(milkData, qualityData) {
   // Add additional compliance-specific data
   const qualityStandards = {
     fat: { min: 3.5, target: 3.8, max: 4.2 },
-    protein: { min: 3.0, target: 3.3, max: 3.6 },
-    lactose: { min: 4.5, target: 4.8, max: 5.0 },
-    somatic: { max: 200 },
-    bacteria: { max: 20000 }
+    snf: { min: 8.0, target: 8.5, max: 9.0 }
   };
-  
+
   // Identify quality violations
   const violations = qualityData.filter(record => {
     return (
-      record.fat < qualityStandards.fat.min || 
+      record.fat < qualityStandards.fat.min ||
       record.fat > qualityStandards.fat.max ||
-      record.protein < qualityStandards.protein.min || 
-      record.protein > qualityStandards.protein.max ||
-      record.lactose < qualityStandards.lactose.min || 
-      record.lactose > qualityStandards.lactose.max ||
-      record.somatic > qualityStandards.somatic.max ||
-      record.bacteria > qualityStandards.bacteria.max
+      record.snf < qualityStandards.snf.min ||
+      record.snf > qualityStandards.snf.max
     );
   }).map(record => {
     const violations = [];
-    
+
     if (record.fat < qualityStandards.fat.min) {
       violations.push(`Fat content too low: ${record.fat.toFixed(1)}% (min: ${qualityStandards.fat.min}%)`);
     } else if (record.fat > qualityStandards.fat.max) {
       violations.push(`Fat content too high: ${record.fat.toFixed(1)}% (max: ${qualityStandards.fat.max}%)`);
     }
-    
-    if (record.protein < qualityStandards.protein.min) {
-      violations.push(`Protein content too low: ${record.protein.toFixed(1)}% (min: ${qualityStandards.protein.min}%)`);
-    } else if (record.protein > qualityStandards.protein.max) {
-      violations.push(`Protein content too high: ${record.protein.toFixed(1)}% (max: ${qualityStandards.protein.max}%)`);
+
+    if (record.snf < qualityStandards.snf.min) {
+      violations.push(`SNF content too low: ${record.snf.toFixed(1)}% (min: ${qualityStandards.snf.min}%)`);
+    } else if (record.snf > qualityStandards.snf.max) {
+      violations.push(`SNF content too high: ${record.snf.toFixed(1)}% (max: ${qualityStandards.snf.max}%)`);
     }
-    
-    if (record.lactose < qualityStandards.lactose.min) {
-      violations.push(`Lactose content too low: ${record.lactose.toFixed(1)}% (min: ${qualityStandards.lactose.min}%)`);
-    } else if (record.lactose > qualityStandards.lactose.max) {
-      violations.push(`Lactose content too high: ${record.lactose.toFixed(1)}% (max: ${qualityStandards.lactose.max}%)`);
-    }
-    
-    if (record.somatic > qualityStandards.somatic.max) {
-      violations.push(`Somatic cell count too high: ${record.somatic} (max: ${qualityStandards.somatic.max})`);
-    }
-    
-    if (record.bacteria > qualityStandards.bacteria.max) {
-      violations.push(`Bacteria count too high: ${record.bacteria} (max: ${qualityStandards.bacteria.max})`);
-    }
-    
+
     return {
       date: record.date,
       violationCount: violations.length,
@@ -2694,10 +2641,7 @@ function createPdfReport(reportType, data) {
       
       const qualityData = [
         ['Fat Content', `${data.qualityAverages.fat.toFixed(2)}%`, `${data.standards.fat.min}% - ${data.standards.fat.max}%`, `${data.compliance.fat.toFixed(1)}%`],
-        ['Protein Content', `${data.qualityAverages.protein.toFixed(2)}%`, `${data.standards.protein.min}% - ${data.standards.protein.max}%`, `${data.compliance.protein.toFixed(1)}%`],
-        ['Lactose Content', `${data.qualityAverages.lactose.toFixed(2)}%`, `${data.standards.lactose.min}% - ${data.standards.lactose.max}%`, `${data.compliance.lactose.toFixed(1)}%`],
-        ['Somatic Cell Count', `${data.qualityAverages.somatic.toFixed(0)}`, `< ${data.standards.somatic.max}`, `${data.compliance.somatic.toFixed(1)}%`],
-        ['Bacteria Count', `${data.qualityAverages.bacteria.toFixed(0)}`, `< ${data.standards.bacteria.max}`, `${data.compliance.bacteria.toFixed(1)}%`],
+        ['SNF Content', `${data.qualityAverages.snf.toFixed(2)}%`, `${data.standards.snf.min}% - ${data.standards.snf.max}%`, `${data.compliance.snf.toFixed(1)}%`],
         ['Overall Compliance', '', '', `${data.compliance.overall.toFixed(1)}%`]
       ];
       
@@ -2720,15 +2664,12 @@ function createPdfReport(reportType, data) {
       const trendsData = data.dailyTrends.slice(0, 10).map(day => [
         formatDateStr(day.date),
         `${day.fatAvg.toFixed(2)}%`,
-        `${day.proteinAvg.toFixed(2)}%`,
-        `${day.lactoseAvg.toFixed(2)}%`,
-        day.somaticAvg.toFixed(0),
-        day.bacteriaAvg.toFixed(0)
+        `${day.snfAvg.toFixed(2)}%`
       ]);
-      
+
       autoTable(doc, {
         startY: y,
-        head: [['Date', 'Fat %', 'Protein %', 'Lactose %', 'SCC', 'Bacteria']],
+        head: [['Date', 'Fat %', 'SNF %']],
         body: trendsData,
         theme: 'striped',
         headStyles: { fillColor: [76, 175, 80] }
@@ -2753,10 +2694,7 @@ function createPdfReport(reportType, data) {
       
       const complianceData = [
         ['Fat Content', `${data.compliance.fat.toFixed(1)}%`],
-        ['Protein Content', `${data.compliance.protein.toFixed(1)}%`],
-        ['Lactose Content', `${data.compliance.lactose.toFixed(1)}%`],
-        ['Somatic Cell Count', `${data.compliance.somatic.toFixed(1)}%`],
-        ['Bacteria Count', `${data.compliance.bacteria.toFixed(1)}%`],
+        ['SNF Content', `${data.compliance.snf.toFixed(1)}%`],
         ['Overall', `${data.compliance.overall.toFixed(1)}%`]
       ];
       
@@ -2964,24 +2902,18 @@ function createExcelReport(reportType, data) {
       const qualityHeaders = [['Parameter', 'Average', 'Standard Min', 'Standard Max', 'Compliance Rate']];
       const qualityRows = [
         ['Fat Content', data.qualityAverages.fat, data.standards.fat.min, data.standards.fat.max, data.compliance.fat],
-        ['Protein Content', data.qualityAverages.protein, data.standards.protein.min, data.standards.protein.max, data.compliance.protein],
-        ['Lactose Content', data.qualityAverages.lactose, data.standards.lactose.min, data.standards.lactose.max, data.compliance.lactose],
-        ['Somatic Cell Count', data.qualityAverages.somatic, 0, data.standards.somatic.max, data.compliance.somatic],
-        ['Bacteria Count', data.qualityAverages.bacteria, 0, data.standards.bacteria.max, data.compliance.bacteria]
+        ['SNF Content', data.qualityAverages.snf, data.standards.snf.min, data.standards.snf.max, data.compliance.snf]
       ];
-      
+
       const qualitySheet = XLSX.utils.aoa_to_sheet([...qualityHeaders, ...qualityRows]);
       XLSX.utils.book_append_sheet(wb, qualitySheet, 'Quality Parameters');
-      
+
       // Daily trends
-      const trendsHeaders = [['Date', 'Fat %', 'Protein %', 'Lactose %', 'SCC', 'Bacteria']];
+      const trendsHeaders = [['Date', 'Fat %', 'SNF %']];
       const trendsRows = data.dailyTrends.map(day => [
         formatDateStr(day.date),
         day.fatAvg,
-        day.proteinAvg,
-        day.lactoseAvg,
-        day.somaticAvg,
-        day.bacteriaAvg
+        day.snfAvg
       ]);
       
       const trendsSheet = XLSX.utils.aoa_to_sheet([...trendsHeaders, ...trendsRows]);
@@ -3009,10 +2941,7 @@ function createExcelReport(reportType, data) {
       const complianceHeaders = [['Parameter', 'Compliance Rate']];
       const complianceRows = [
         ['Fat Content', `${data.compliance.fat.toFixed(1)}%`],
-        ['Protein Content', `${data.compliance.protein.toFixed(1)}%`],
-        ['Lactose Content', `${data.compliance.lactose.toFixed(1)}%`],
-        ['Somatic Cell Count', `${data.compliance.somatic.toFixed(1)}%`],
-        ['Bacteria Count', `${data.compliance.bacteria.toFixed(1)}%`],
+        ['SNF Content', `${data.compliance.snf.toFixed(1)}%`],
         ['Overall', `${data.compliance.overall.toFixed(1)}%`]
       ];
       
@@ -3143,16 +3072,13 @@ function createCsvReport(reportType, data) {
       csvContent += 'Quality Parameters\n';
       csvContent += 'Parameter,Average,Standard Min,Standard Max,Compliance Rate\n';
       csvContent += `Fat Content,${data.qualityAverages.fat},${data.standards.fat.min},${data.standards.fat.max},${data.compliance.fat}\n`;
-      csvContent += `Protein Content,${data.qualityAverages.protein},${data.standards.protein.min},${data.standards.protein.max},${data.compliance.protein}\n`;
-      csvContent += `Lactose Content,${data.qualityAverages.lactose},${data.standards.lactose.min},${data.standards.lactose.max},${data.compliance.lactose}\n`;
-      csvContent += `Somatic Cell Count,${data.qualityAverages.somatic},0,${data.standards.somatic.max},${data.compliance.somatic}\n`;
-      csvContent += `Bacteria Count,${data.qualityAverages.bacteria},0,${data.standards.bacteria.max},${data.compliance.bacteria}\n\n`;
-      
+      csvContent += `SNF Content,${data.qualityAverages.snf},${data.standards.snf.min},${data.standards.snf.max},${data.compliance.snf}\n\n`;
+
       csvContent += 'Daily Trends\n';
-      csvContent += 'Date,Fat %,Protein %,Lactose %,SCC,Bacteria\n';
-      
+      csvContent += 'Date,Fat %,SNF %\n';
+
       data.dailyTrends.forEach(day => {
-        csvContent += `${formatDateStr(day.date)},${day.fatAvg.toFixed(2)},${day.proteinAvg.toFixed(2)},${day.lactoseAvg.toFixed(2)},${day.somaticAvg},${day.bacteriaAvg}\n`;
+        csvContent += `${formatDateStr(day.date)},${day.fatAvg.toFixed(2)},${day.snfAvg.toFixed(2)}\n`;
       });
       break;
       
@@ -3171,10 +3097,7 @@ function createCsvReport(reportType, data) {
       csvContent += 'Compliance by Parameter\n';
       csvContent += 'Parameter,Compliance Rate\n';
       csvContent += `Fat Content,${data.compliance.fat.toFixed(1)}%\n`;
-      csvContent += `Protein Content,${data.compliance.protein.toFixed(1)}%\n`;
-      csvContent += `Lactose Content,${data.compliance.lactose.toFixed(1)}%\n`;
-      csvContent += `Somatic Cell Count,${data.compliance.somatic.toFixed(1)}%\n`;
-      csvContent += `Bacteria Count,${data.compliance.bacteria.toFixed(1)}%\n`;
+      csvContent += `SNF Content,${data.compliance.snf.toFixed(1)}%\n`;
       csvContent += `Overall,${data.compliance.overall.toFixed(1)}%\n\n`;
       
       if (data.compliance.violations && data.compliance.violations.length > 0) {

@@ -26,6 +26,7 @@ import { getShiftTemplates, addShiftTemplate, updateShiftTemplate, deleteShiftTe
 import generatePayslipPDF from '../utils/pdfGenerator';
 import emp from '../assets/images/emp.jpg';
 import LoadingSpinner from './LoadingSpinner';
+import { toast } from './utils/CustomToast';
 
 // Status badge colors - unchanged
 const statusColors = {
@@ -72,7 +73,6 @@ const EmployeeManagement = () => {
   const [activeTab, setActiveTab] = useState('employees');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [employeeToEdit, setEmployeeToEdit] = useState(null);
-  const [successMessage, setSuccessMessage] = useState('');
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
   const [employeeForAttendance, setEmployeeForAttendance] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -280,10 +280,7 @@ const EmployeeManagement = () => {
       
       // Close the modal and show success message
       setIsEditModalOpen(false);
-      setSuccessMessage('Employee updated successfully!');
-      
-      // Clear the success message after 3 seconds
-      setTimeout(() => setSuccessMessage(''), 3000);
+      toast.success('Employee updated successfully!');
     } catch (err) {
       console.error('Error updating employee:', err);
       setError('Failed to update employee. Please try again.');
@@ -329,10 +326,7 @@ const EmployeeManagement = () => {
       
       // Close the modal and show success message
       setIsAttendanceModalOpen(false);
-      setSuccessMessage('Attendance recorded successfully!');
-      
-      // Clear the success message after 3 seconds
-      setTimeout(() => setSuccessMessage(''), 3000);
+      toast.success('Attendance recorded successfully!');
     } catch (err) {
       console.error('Error recording attendance:', err);
       setError('Failed to record attendance. Please try again.');
@@ -354,10 +348,7 @@ const EmployeeManagement = () => {
       
       // Close the modal and show success message
       setIsAddModalOpen(false);
-      setSuccessMessage('Employee added successfully!');
-      
-      // Clear the success message after 3 seconds
-      setTimeout(() => setSuccessMessage(''), 3000);
+      toast.success('Employee added successfully!');
     } catch (err) {
       console.error('Error adding employee:', err);
       setError('Failed to add employee. Please try again.');
@@ -746,13 +737,6 @@ const EmployeeManagement = () => {
           onSave={handleRecordAttendance}
           isLoading={isLoading}
         />
-      )}
-
-      {/* Success Message Toast */}
-      {successMessage && (
-        <div className="fixed top-6 right-6 bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-md shadow-lg z-50 animate-fadeIn">
-          <p>{successMessage}</p>
-        </div>
       )}
     </div>
   );
@@ -3241,8 +3225,7 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
         setTemplateToEdit(null);
       } catch (error) {
         console.error('Error saving shift template:', error);
-        // Show error message to user
-        alert('Failed to save shift template. Please try again.');
+        toast.error('Failed to save shift template. Please try again.');
       }
     };
     
@@ -3253,8 +3236,7 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
         setShiftTemplates(prev => prev.filter(t => t.id !== templateId));
       } catch (error) {
         console.error('Error deleting shift template:', error);
-        // Show error message to user
-        alert('Failed to delete shift template. Please try again.');
+        toast.error('Failed to delete shift template. Please try again.');
       }
     };
     
