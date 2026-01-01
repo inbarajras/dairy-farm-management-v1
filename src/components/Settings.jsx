@@ -24,7 +24,7 @@ import { fetchUsers, createUser, updateUser, deleteUser, resetUserPassword,updat
 import { fetchSystemSettings, updateSystemSettings } from './services/settingsService';
 import emp from '../assets/images/emp.jpg'
 import LoadingSpinner from './LoadingSpinner';
-import {toast} from './utils/ToastContainer';
+import {toast} from './utils/CustomToast';
 
 // Status colors (keep as is)
 const statusColors = {

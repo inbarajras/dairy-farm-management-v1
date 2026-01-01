@@ -297,9 +297,11 @@ const updateInventoryFromOrder = async (orderId) => {
       .from('purchase_order_items')
       .select('*')
       .eq('order_id', orderId);
-    
+
     if (itemsError) throw itemsError;
-    
+
+    const updatedItems = [];
+
     // Update inventory for each item
     for (const item of orderItems) {
       // Get current item
@@ -308,21 +310,25 @@ const updateInventoryFromOrder = async (orderId) => {
         .select('current_stock')
         .eq('id', item.item_id)
         .single();
-      
+
       if (fetchError) throw fetchError;
-      
+
       // Update stock
       const newStock = inventoryItem.current_stock + item.quantity;
-      const { error: updateError } = await supabase
+      const { data: updatedItem, error: updateError } = await supabase
         .from('inventory_items')
-        .update({ 
+        .update({
           current_stock: newStock,
           last_updated: new Date().toISOString()
         })
-        .eq('id', item.item_id);
-      
+        .eq('id', item.item_id)
+        .select()
+        .single();
+
       if (updateError) throw updateError;
-      
+
+      updatedItems.push(updatedItem);
+
       // Create stock adjustment record
       await supabase
         .from('stock_adjustments')
@@ -336,8 +342,8 @@ const updateInventoryFromOrder = async (orderId) => {
           adjustment_date: new Date().toISOString()
         });
     }
-    
-    return true;
+
+    return { success: true, updatedItems };
   } catch (error) {
     console.error(`Error updating inventory from order ${orderId}:`, error);
     throw error;

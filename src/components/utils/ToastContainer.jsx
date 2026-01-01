@@ -54,9 +54,9 @@ const ToastContainer = () => {
   if (!toasts.length) return null;
 
   return ReactDOM.createPortal(
-    <div className="fixed top-4 right-4 z-50 flex flex-col items-end">
+    <div className="fixed top-4 right-4 z-[9999] flex flex-col items-end gap-2">
       {toasts.map(t => (
-        <Toast 
+        <Toast
           key={t.id}
           id={t.id}
           message={t.message}

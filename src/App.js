@@ -12,7 +12,7 @@ import FinancesManagement from './components/FinanceManagement';
 import InventoryManagement from './components/InventoryManagement';
 import SettingsScreen from './components/Settings';
 import ResetPasswordPage from '../src/pages/ResetPasswordPage';
-import ToastContainer from './components/utils/ToastContainer';
+import ToastContainer from './components/utils/CustomToast';
 import QuickActionButton from './components/QuickActionButton';
 import { AuthProvider } from './contexts/AuthContext';
 import { RoleProvider, useRole } from './contexts/RoleContext';

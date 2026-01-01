@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Calendar, Clock, Mail, Phone, MapPin, Users, Award, FileText, Briefcase, User,Download,DollarSign,Droplet,Thermometer, QrCode, Camera } from 'lucide-react';
 import { fetchCows, addCow, updateCow, deleteCow, recordHealthEvent, recordMilkProduction, recordBreedingEvent,
   fetchRecentActivity,fetchBreedingEvents,fetchHealthHistory,fetchReproductiveStatus,
@@ -14,36 +14,19 @@ import cowSample from '../assets/images/cow.jpg';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area } from 'recharts';
 import { supabase } from '../lib/supabase';
 import LoadingSpinner from './LoadingSpinner';
-import {toast} from './utils/ToastContainer';
+import {toast} from './utils/CustomToast';
 import { useRole } from '../contexts/RoleContext';
 import UserRoleBadge from './UserRoleBadge';
-
-// Status badge colors
-const statusColors = {
-  'Active': 'bg-green-100 text-green-800',
-  'Dry': 'bg-blue-100 text-blue-800',
-  'Sold': 'bg-black-100 text-balck-800',
-  'Deceased': 'bg-red-100 text-red-800',
-  'Calf': 'bg-purple-100 text-purple-800',
-  'Heifer': 'bg-pink-100 text-pink-800'
-};
-
-// Health status colors
-const healthStatusColors = {
-  'Healthy': 'bg-green-100 text-green-800',
-  'Monitored': 'bg-yellow-100 text-yellow-800',
-  'Under treatment': 'bg-red-100 text-red-800'
-};
-
-// Attendance status colors
-const attendanceStatusColors = {
-  'Present': 'bg-green-100 text-green-800',
-  'Absent': 'bg-red-100 text-red-800',
-  'Late': 'bg-yellow-100 text-yellow-800',
-  'Weekend': 'bg-gray-100 text-gray-800',
-  'Holiday': 'bg-blue-100 text-blue-800',
-  'Vacation': 'bg-purple-100 text-purple-800'
-};
+import {
+  statusColors,
+  healthStatusColors,
+  attendanceStatusColors,
+  REFRESH_INTERVAL_MS,
+  SUCCESS_MESSAGE_DURATION_MS,
+  ERROR_MESSAGE_DURATION_MS,
+  SHIFT_TYPES
+} from './utils/cowConstants';
+import { sortMilkProductionRecords } from './utils/cowSorting';
 
 // Utility function to format dates
 const formatDate = (dateString) => {
@@ -107,11 +90,11 @@ const CowManagement = () => {
   }, []);
 
   // Refresh cow data function (can be called when data changes)
-  const refreshCowData = async () => {
+  const refreshCowData = useCallback(async () => {
     try {
       const data = await fetchCows();
       setCows(data);
-      
+
       // If we have a selected cow, update it with fresh data
       if (selectedCow) {
         const updatedSelectedCow = data.find(cow => cow.id === selectedCow.id);
@@ -124,18 +107,16 @@ const CowManagement = () => {
       setErrorMessage('Failed to refresh cow data.');
       setTimeout(() => setErrorMessage(''), 3000);
     }
-  };
+  }, [selectedCow]);
 
-  // Add periodic refresh every 5 minutes to catch updates from other components
+  // Add periodic refresh to catch updates from other components
   useEffect(() => {
     const interval = setInterval(() => {
-      if (!loading) {
-        refreshCowData();
-      }
-    }, 5 * 60 * 1000); // 5 minutes
-    
+      refreshCowData();
+    }, REFRESH_INTERVAL_MS);
+
     return () => clearInterval(interval);
-  }, [loading]);
+  }, [refreshCowData]);
 
   const ensureValidCows = (cowsArray) => {
     if (!cowsArray || !Array.isArray(cowsArray)) {
@@ -275,50 +256,52 @@ const CowManagement = () => {
     return { milked: false, message: 'No milking records' };
   };
 
-  // Filter cows based on search and filters
-  const filteredCows = ensureValidCows(cows).filter(cow => {
-    // Only process if cow is a valid object
-    if (!cow || typeof cow !== 'object') return false;
-    
-    // Search filter with safety checks
-    const matchesSearch = 
-      searchQuery === '' || 
-      (cow.name && cow.name.toLowerCase().includes(searchQuery.toLowerCase())) || 
-      (cow.tagNumber && cow.tagNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      cow.tagNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      cow.breed.toLowerCase().includes(searchQuery.toLowerCase()));
-    
-    // Status filter
-    const matchesStatus = 
-      filters.status === 'All' || 
-      cow.status === filters.status;
-    
-    // Health status filter
-    const matchesHealthStatus = 
-      filters.healthStatus === 'All' || 
-      cow.healthStatus === filters.healthStatus;
-    
-    // Breed filter
-    const matchesBreed = 
-      filters.breed === 'All' || 
-      cow.breed === filters.breed;
-    
-    // Milking status filter
-    let matchesMilkingStatus = true;
-    if (filters.milkingStatus !== 'All') {
-      const milkingStatus = checkCowMilkingStatus(cow);
-      
-      if (filters.milkingStatus === 'Milked') {
-        matchesMilkingStatus = milkingStatus && milkingStatus.milked;
-      } else if (filters.milkingStatus === 'NotMilked') {
-        matchesMilkingStatus = !milkingStatus || !milkingStatus.milked;
-      } else if (filters.milkingStatus === 'Morning' || filters.milkingStatus === 'Evening') {
-        matchesMilkingStatus = milkingStatus && milkingStatus.milked && milkingStatus.shift === filters.milkingStatus;
+  // Filter cows based on search and filters (memoized for performance)
+  const filteredCows = useMemo(() => {
+    return ensureValidCows(cows).filter(cow => {
+      // Only process if cow is a valid object
+      if (!cow || typeof cow !== 'object') return false;
+
+      // Search filter with safety checks
+      const matchesSearch =
+        searchQuery === '' ||
+        (cow.name && cow.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (cow.tagNumber && cow.tagNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        cow.tagNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        cow.breed.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      // Status filter
+      const matchesStatus =
+        filters.status === 'All' ||
+        cow.status === filters.status;
+
+      // Health status filter
+      const matchesHealthStatus =
+        filters.healthStatus === 'All' ||
+        cow.healthStatus === filters.healthStatus;
+
+      // Breed filter
+      const matchesBreed =
+        filters.breed === 'All' ||
+        cow.breed === filters.breed;
+
+      // Milking status filter
+      let matchesMilkingStatus = true;
+      if (filters.milkingStatus !== 'All') {
+        const milkingStatus = checkCowMilkingStatus(cow);
+
+        if (filters.milkingStatus === 'Milked') {
+          matchesMilkingStatus = milkingStatus && milkingStatus.milked;
+        } else if (filters.milkingStatus === 'NotMilked') {
+          matchesMilkingStatus = !milkingStatus || !milkingStatus.milked;
+        } else if (filters.milkingStatus === 'Morning' || filters.milkingStatus === 'Evening') {
+          matchesMilkingStatus = milkingStatus && milkingStatus.milked && milkingStatus.shift === filters.milkingStatus;
+        }
       }
-    }
-    
-    return matchesSearch && matchesStatus && matchesHealthStatus && matchesBreed && matchesMilkingStatus;
-  });
+
+      return matchesSearch && matchesStatus && matchesHealthStatus && matchesBreed && matchesMilkingStatus;
+    });
+  }, [cows, searchQuery, filters]);
 
   // Pagination
   const indexOfLastCow = currentPage * itemsPerPage;
@@ -326,8 +309,11 @@ const CowManagement = () => {
   const currentCows = filteredCows.slice(indexOfFirstCow, indexOfLastCow);
   const totalPages = Math.ceil(filteredCows.length / itemsPerPage);
 
-  // Get unique breeds for filter
-  const uniqueBreeds = Array.from(new Set(cows.map(cow => cow.breed)));
+  // Get unique breeds for filter (memoized for performance)
+  const uniqueBreeds = useMemo(() =>
+    Array.from(new Set(cows.map(cow => cow.breed))),
+    [cows]
+  );
 
   // Open cow profile
   const openCowProfile = (cow) => {
@@ -462,7 +448,7 @@ const CowManagement = () => {
       });
       
       setCows(updatedCows);
-      
+
       if (selectedCow && selectedCow.id === cowId) {
         setSelectedCow({
           ...selectedCow,
@@ -470,9 +456,13 @@ const CowManagement = () => {
           healthStatus: eventData.status || selectedCow.healthStatus
         });
       }
-      
+
+      // Refresh cow data to get the latest information including new health event
+      await refreshCowData();
+
       setSuccessMessage('Health event recorded successfully!');
       setTimeout(() => setSuccessMessage(''), 3000);
+      setIsRecordHealthEventModalOpen(false);
     } catch (err) {
       console.error("Error recording health event:", err);
       setErrorMessage('Failed to record health event. Please try again.');
@@ -589,7 +579,11 @@ const CowManagement = () => {
           milkProduction: updatedMilkProduction
         });
       }
-      
+
+      // Refresh cow data to get the latest milk production data
+      await refreshCowData();
+
+      setIsRecordMilkModalOpen(false);
       toast.success('Milk production recorded successfully!');
     } catch (err) {
       console.error("Error recording milk production:", err);
@@ -605,22 +599,10 @@ const CowManagement = () => {
       setLoading(true);
       const newEvent = await recordBreedingEvent(cowId, eventData);
       
-      // If this was for the selected cow, refresh the cow data
-      if (selectedCow && selectedCow.id === cowId) {
-        // We'll need to refresh the selectedCow data to reflect new updates
-        // No need to directly manipulate the breeding events or reproductive status here
-        // as they will be fetched when the tab is active in the EmployeeProfile component
-        
-        // Optionally, refresh the entire cow data if needed
-        const updatedCowData = await fetchCows().then(cows => 
-          cows.find(cow => cow.id === cowId)
-        );
-        
-        if (updatedCowData) {
-          setSelectedCow(updatedCowData);
-        }
-      }
-      
+      // Refresh cow data to get the latest breeding events and reproductive status
+      await refreshCowData();
+
+      setIsRecordBreedingEventModalOpen(false);
       setSuccessMessage('Breeding event recorded successfully!');
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
@@ -658,14 +640,10 @@ const CowManagement = () => {
       
       setCows(updatedCows);
       
-      // If this was for the selected cow, refresh the cow data
-      if (selectedCow && selectedCow.id === cowId) {
-        const updatedCowData = updatedCows.find(cow => cow.id === cowId);
-        if (updatedCowData) {
-          setSelectedCow(updatedCowData);
-        }
-      }
-      
+      // Refresh cow data to get the latest weight and growth rate data
+      await refreshCowData();
+
+      setIsRecordGrowthMilestoneModalOpen(false);
       setSuccessMessage('Growth milestone recorded successfully!');
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
@@ -1212,9 +1190,10 @@ const CowCard = ({ cow, onClick, onEdit, onDelete, checkCowMilkingStatus, hasPer
     return 'No data';
   };
 
-  // Ensure alerts is always an array
-  const alerts = Array.isArray(cow?.alerts) ? cow.alerts : 
-                (cow?.alerts ? [cow.alerts] : []);
+  // Ensure alerts is always an array and filter out empty/null values
+  const alerts = Array.isArray(cow?.alerts)
+    ? cow.alerts.filter(alert => alert && alert.trim && alert.trim() !== '')
+    : (cow?.alerts && cow?.alerts.trim && cow?.alerts.trim() !== '' ? [cow.alerts] : []);
 
   // Get milking status for today using the shared function from the parent component
   const milkingStatus = checkCowMilkingStatus(cow);
@@ -1244,8 +1223,8 @@ const CowCard = ({ cow, onClick, onEdit, onDelete, checkCowMilkingStatus, hasPer
         </div>
         
         <div className="flex items-center mb-4">
-          <img 
-            src={cowSample}  
+          <img
+            src={cow?.image || cow?.photo || cowSample}
             alt={cow?.name}
             className="w-16 h-16 object-cover rounded-full bg-gray-200 border-2 border-green-100 flex-shrink-0"
           />
@@ -1347,6 +1326,9 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
   const [recentActivities, setRecentActivities] = useState([]);
   const [growthMilestones, setGrowthMilestones] = useState([]);
   const [scheduledMilestone, setScheduledMilestone] = useState(null);
+  const [milkDateRange, setMilkDateRange] = useState('7days'); // New state for milk production date range
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
   const [loading, setLoading] = useState({
     health: false,
     breeding: false,
@@ -1363,18 +1345,70 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
   
   // Safely check for milkProduction array and ensure it has data
   const hasMilkProductionData = cow?.milkProduction && Array.isArray(cow.milkProduction) && cow.milkProduction.length > 0;
-  
-  // Calculate daily totals and averages for the last 7 days
+
+  // Helper function to get date range based on selection
+  const getDateRangeFilter = () => {
+    const now = new Date();
+    let startDate;
+
+    switch (milkDateRange) {
+      case '7days':
+        startDate = new Date(now);
+        startDate.setDate(startDate.getDate() - 7);
+        break;
+      case '30days':
+        startDate = new Date(now);
+        startDate.setDate(startDate.getDate() - 30);
+        break;
+      case '90days':
+        startDate = new Date(now);
+        startDate.setDate(startDate.getDate() - 90);
+        break;
+      case '6months':
+        startDate = new Date(now);
+        startDate.setMonth(startDate.getMonth() - 6);
+        break;
+      case '1year':
+        startDate = new Date(now);
+        startDate.setFullYear(startDate.getFullYear() - 1);
+        break;
+      case 'all':
+        startDate = new Date(0); // Beginning of time
+        break;
+      case 'custom':
+        if (customStartDate && customEndDate) {
+          return {
+            start: new Date(customStartDate),
+            end: new Date(customEndDate)
+          };
+        }
+        // Fallback to 7 days if custom dates not set
+        startDate = new Date(now);
+        startDate.setDate(startDate.getDate() - 7);
+        break;
+      default:
+        startDate = new Date(now);
+        startDate.setDate(startDate.getDate() - 7);
+    }
+
+    return { start: startDate, end: now };
+  };
+
+  // Calculate daily totals and averages for the selected date range
   const calculateDailyStats = () => {
     if (!hasMilkProductionData) return { average: 0, highest: 0, latest: 0 };
-    
-    // Get records from last 7 days
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    // Get records from selected date range
+    const dateRange = getDateRangeFilter();
+    const startDate = dateRange.start;
+    const endDate = dateRange.end;
     
     // Group by date and sum up both morning and evening production
     const dailyTotals = cow.milkProduction
-      .filter(record => new Date(record.date) >= sevenDaysAgo)
+      .filter(record => {
+        const recordDate = new Date(record.date);
+        return recordDate >= startDate && recordDate <= endDate;
+      })
       .reduce((acc, record) => {
         const dateStr = new Date(record.date).toISOString().split('T')[0];
         acc[dateStr] = (acc[dateStr] || 0) + (parseFloat(record.amount) || 0);
@@ -1438,15 +1472,15 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
     }
   };
   
-  // Fetch health history when tab changes to health
+  // Fetch health history when tab changes to health or when cow changes
   useEffect(() => {
-    if (activeTab === 'health' && cow && cow.id && !healthHistory.length) {
+    if (activeTab === 'health' && cow && cow.id) {
       loadHealthHistory();
     }
-  }, [activeTab, cow, healthHistory.length]);
+  }, [activeTab, cow?.id, cow?.lastHealthCheck]); // Added cow.lastHealthCheck to trigger reload
 
   const loadHealthHistory = async () => {
-    if (!cow?.id || healthHistory.length > 0) return;
+    if (!cow?.id) return;
     
     setLoading(prevState => ({ ...prevState, health: true }));
     try {
@@ -1508,9 +1542,9 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
     }
   }, [activeTab, cow]);
   
-  // Fetch recent activities when tab changes to overview
+  // Fetch recent activities when tab changes to overview or when cow data updates
   useEffect(() => {
-    if ((activeTab === 'overview' && cow && cow.id && !recentActivities.length)) {
+    if (activeTab === 'overview' && cow && cow.id) {
       const loadRecentActivities = async () => {
         try {
           setLoading(prev => ({ ...prev, activity: true }));
@@ -1525,14 +1559,14 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
       
       loadRecentActivities();
     }
-  }, [activeTab, cow, recentActivities.length]);
+  }, [activeTab, cow?.id, cow?.lastHealthCheck]); // Reload when cow updates
 
-  // Fetch growth milestones when tab changes to growth
+  // Fetch growth milestones when tab changes to growth or when cow weight updates
   useEffect(() => {
-    if (activeTab === 'growth' && cow && cow.id && !growthMilestones.length && (isCalf || isHeifer)) {
+    if (activeTab === 'growth' && cow && cow.id && (isCalf || isHeifer)) {
       loadGrowthMilestones();
     }
-  }, [activeTab, cow, growthMilestones.length, isCalf, isHeifer]);
+  }, [activeTab, cow?.id, cow?.currentWeight, isCalf, isHeifer]); // Reload when weight changes
 
   const loadGrowthMilestones = async () => {
     if (!cow?.id) return;
@@ -1622,8 +1656,8 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
             <div className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
               <div className="p-6 flex flex-col items-center">
                 <div className="h-1 w-full bg-gradient-to-r from-green-400 to-blue-500 absolute top-0 left-0"></div>
-                <img 
-                  src={cowSample} 
+                <img
+                  src={cow.image || cow.photo || cowSample}
                   alt={cow.name}
                   className="w-32 h-32 object-cover rounded-full bg-gray-200 mb-4 border-4 border-green-100 shadow-md"
                 />
@@ -1930,12 +1964,116 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                 {/* Tab content for Milk Production */}
                 {activeTab === 'milk' && (
                   <div>
+                    {/* Date Range Selector */}
+                    <div className="bg-white shadow-md rounded-lg p-4 mb-6 border border-gray-200">
+                      <div className="flex flex-wrap items-center gap-4">
+                        <label className="text-sm font-medium text-gray-700">View Period:</label>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => setMilkDateRange('7days')}
+                            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                              milkDateRange === '7days'
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            7 Days
+                          </button>
+                          <button
+                            onClick={() => setMilkDateRange('30days')}
+                            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                              milkDateRange === '30days'
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            30 Days
+                          </button>
+                          <button
+                            onClick={() => setMilkDateRange('90days')}
+                            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                              milkDateRange === '90days'
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            90 Days
+                          </button>
+                          <button
+                            onClick={() => setMilkDateRange('6months')}
+                            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                              milkDateRange === '6months'
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            6 Months
+                          </button>
+                          <button
+                            onClick={() => setMilkDateRange('1year')}
+                            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                              milkDateRange === '1year'
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            1 Year
+                          </button>
+                          <button
+                            onClick={() => setMilkDateRange('all')}
+                            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                              milkDateRange === 'all'
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            All Time
+                          </button>
+                          <button
+                            onClick={() => setMilkDateRange('custom')}
+                            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                              milkDateRange === 'custom'
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            Custom
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Custom Date Range Inputs */}
+                      {milkDateRange === 'custom' && (
+                        <div className="mt-4 flex flex-wrap items-center gap-4">
+                          <div className="flex items-center gap-2">
+                            <label className="text-sm font-medium text-gray-700">From:</label>
+                            <input
+                              type="date"
+                              value={customStartDate}
+                              onChange={(e) => setCustomStartDate(e.target.value)}
+                              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <label className="text-sm font-medium text-gray-700">To:</label>
+                            <input
+                              type="date"
+                              value={customEndDate}
+                              onChange={(e) => setCustomEndDate(e.target.value)}
+                              max={new Date().toISOString().split('T')[0]}
+                              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     {/* Stats Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                       <div className="bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
                         <div className="flex justify-between items-start">
                           <div>
-                            <p className="text-sm font-medium text-gray-500">7-Day Average</p>
+                            <p className="text-sm font-medium text-gray-500">Period Average</p>
                             <p className="text-2xl font-semibold text-gray-800 mt-1">
                               {avgMilkProduction.toFixed(1)}L
                             </p>
@@ -1946,7 +2084,7 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                             </svg>
                           </div>
                         </div>
-                        <p className="mt-2 text-sm text-gray-600">Daily average over the past week</p>
+                        <p className="mt-2 text-sm text-gray-600">Daily average for selected period</p>
                       </div>
 
                       <div className="bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
@@ -1963,7 +2101,7 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                             </svg>
                           </div>
                         </div>
-                        <p className="mt-2 text-sm text-gray-600">Best daily total this week</p>
+                        <p className="mt-2 text-sm text-gray-600">Best daily total in period</p>
                       </div>
 
                       <div className="bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
@@ -1986,7 +2124,16 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                     <div className="bg-white shadow-lg rounded-lg p-6 mb-6 hover:shadow-xl transition-all duration-300 border border-gray-100">
                       <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-600">Daily Production Trend</h3>
-                        <div className="text-sm text-gray-500">Last 7 Days</div>
+                        <div className="text-sm text-gray-500">
+                          {milkDateRange === '7days' && 'Last 7 Days'}
+                          {milkDateRange === '30days' && 'Last 30 Days'}
+                          {milkDateRange === '90days' && 'Last 90 Days'}
+                          {milkDateRange === '6months' && 'Last 6 Months'}
+                          {milkDateRange === '1year' && 'Last Year'}
+                          {milkDateRange === 'all' && 'All Time'}
+                          {milkDateRange === 'custom' && customStartDate && customEndDate && `${customStartDate} to ${customEndDate}`}
+                          {milkDateRange === 'custom' && (!customStartDate || !customEndDate) && 'Custom Range (Select Dates)'}
+                        </div>
                       </div>
                       <div className="h-64">
                         {hasMilkProductionData ? (
@@ -1994,11 +2141,10 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                             <LineChart
                               data={cow.milkProduction
                                 .filter(record => {
-                                  // Filter to show only the last 7 days of records
+                                  // Filter based on selected date range
                                   const recordDate = new Date(record.date);
-                                  const sevenDaysAgo = new Date();
-                                  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-                                  return recordDate >= sevenDaysAgo;
+                                  const dateRange = getDateRangeFilter();
+                                  return recordDate >= dateRange.start && recordDate <= dateRange.end;
                                 })
                                 .reduce((acc, record) => {
                                   // Convert to date string for grouping
@@ -2813,7 +2959,90 @@ const AddCowModal = ({ onClose, onAdd }) => {
     birthType: 'Single' // Single, Twin, etc.
   });
   const [errors, setErrors] = useState({});
-  
+  const [availableBreeds, setAvailableBreeds] = useState([]);
+  const [showCustomBreedInput, setShowCustomBreedInput] = useState(false);
+  const [customBreed, setCustomBreed] = useState('');
+  const [imagePreview, setImagePreview] = useState(null);
+
+  // Load available breeds from database
+  useEffect(() => {
+    const loadBreeds = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('breeds')
+          .select('name')
+          .order('name');
+
+        if (error) throw error;
+
+        // Set default breeds if table is empty
+        if (!data || data.length === 0) {
+          setAvailableBreeds([
+            'Holstein', 'Jersey', 'Brown Swiss', 'Ayrshire', 'Guernsey',
+            'Gir', 'Sahiwal', 'Red Sindhi', 'Tharparkar'
+          ]);
+        } else {
+          setAvailableBreeds(data.map(b => b.name));
+        }
+      } catch (error) {
+        console.error('Error loading breeds:', error);
+        // Fallback to default breeds
+        setAvailableBreeds([
+          'Holstein', 'Jersey', 'Brown Swiss', 'Ayrshire', 'Guernsey',
+          'Gir', 'Sahiwal', 'Red Sindhi', 'Tharparkar'
+        ]);
+      }
+    };
+
+    loadBreeds();
+  }, []);
+
+  // Handle breed change
+  const handleBreedChange = (e) => {
+    const value = e.target.value;
+    if (value === 'custom') {
+      setShowCustomBreedInput(true);
+      setFormData({ ...formData, breed: '' });
+    } else {
+      setShowCustomBreedInput(false);
+      setFormData({ ...formData, breed: value });
+    }
+  };
+
+  // Save custom breed to database
+  const saveCustomBreed = async (breedName) => {
+    try {
+      const { data, error } = await supabase
+        .from('breeds')
+        .insert({ name: breedName })
+        .select();
+
+      if (error) {
+        console.error('Error saving custom breed:', error);
+        toast.error(`Failed to save breed to database: ${error.message}`);
+        return;
+      }
+
+      // Add to available breeds list
+      setAvailableBreeds(prev => [...prev, breedName].sort());
+      toast.success(`Breed "${breedName}" added successfully!`);
+    } catch (error) {
+      console.error('Error saving custom breed:', error);
+      toast.error('Failed to save custom breed, but will be used for this cow');
+    }
+  };
+
+  // Handle custom breed submission
+  const handleCustomBreedSubmit = () => {
+    if (customBreed.trim()) {
+      const trimmedBreed = customBreed.trim();
+      setFormData({ ...formData, breed: trimmedBreed });
+      saveCustomBreed(trimmedBreed);
+      setShowCustomBreedInput(false);
+      setCustomBreed('');
+    }
+  };
+
   // Handle form field changes
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -2821,7 +3050,7 @@ const AddCowModal = ({ onClose, onAdd }) => {
       ...formData,
       [name]: value
     });
-    
+
     // Clear error for this field when it's changed
     if (errors[name]) {
       setErrors({
@@ -2904,14 +3133,52 @@ const AddCowModal = ({ onClose, onAdd }) => {
   };
   
   // Handle form submission
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    
+  const handleSubmit = async () => {
     // Final validation before submission
     if (!validateCurrentStep()) {
       return;
     }
-    
+
+    let imageUrl = '/api/placeholder/160/160';
+
+    // Upload image if provided
+    if (formData.photo) {
+      try {
+        const fileExt = formData.photo.name.split('.').pop();
+        const fileName = `${formData.tagNumber}_${Date.now()}.${fileExt}`;
+        const filePath = fileName; // Don't use subfolder, just filename
+
+        console.log('Uploading image:', { fileName, filePath, fileType: formData.photo.type });
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('cow-images')
+          .upload(filePath, formData.photo, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (uploadError) {
+          console.error('Error uploading image:', uploadError);
+          toast.error(`Image upload failed: ${uploadError.message}`);
+        } else {
+          console.log('Upload successful:', uploadData);
+          // Get public URL
+          const { data: urlData } = supabase.storage
+            .from('cow-images')
+            .getPublicUrl(filePath);
+
+          if (urlData && urlData.publicUrl) {
+            imageUrl = urlData.publicUrl;
+            console.log('Image URL:', imageUrl);
+            toast.success('Image uploaded successfully!');
+          }
+        }
+      } catch (error) {
+        console.error('Error handling image upload:', error);
+        toast.error(`Failed to upload image: ${error.message}`);
+      }
+    }
+
     // Create a new cow object
     const newCow = {
       tagNumber: formData.tagNumber,
@@ -2927,14 +3194,19 @@ const AddCowModal = ({ onClose, onAdd }) => {
       ],
       lastHealthCheck: new Date().toISOString().split('T')[0],
       vaccinationStatus: 'Up to date',
-      image: '/api/placeholder/160/160', // Use placeholder for demo
+      alerts: [], // Initialize with empty array
+      image: imageUrl,
+      photo: imageUrl, // Also set photo field for compatibility
       notes: formData.notes,
       purchaseDate: formData.purchaseDate || null,
       purchasePrice: formData.purchasePrice || null,
       initialWeight: formData.initialWeight || null,
-      currentWeight: formData.currentWeight || formData.initialWeight || null
+      currentWeight: formData.currentWeight || formData.initialWeight || null,
+      mother: formData.mother || null,
+      father: formData.father || null,
+      birthType: formData.birthType || 'Single'
     };
-    
+
     onAdd(newCow);
     onClose();
   };
@@ -2956,10 +3228,17 @@ const AddCowModal = ({ onClose, onAdd }) => {
   // Handle file selection
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
       setFormData({
         ...formData,
-        photo: e.target.files[0]
+        photo: file
       });
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result);
+      };
+      reader.readAsDataURL(file);
     }
   };
   
@@ -3023,7 +3302,7 @@ const AddCowModal = ({ onClose, onAdd }) => {
             </div>
           </div>
           
-          <form onSubmit={handleSubmit} className="px-6 pb-6 animate-fadeIn">
+          <div className="px-6 pb-6 animate-fadeIn">
             {/* Step 1: Basic Info */}
             {currentStep === 1 && (
               <div className="space-y-6 animate-fadeIn">
@@ -3068,20 +3347,49 @@ const AddCowModal = ({ onClose, onAdd }) => {
                     <label htmlFor="breed" className="block text-sm font-medium text-gray-700 mb-1">
                       Breed *
                     </label>
-                    <select
-                      id="breed"
-                      name="breed"
-                      value={formData.breed}
-                      onChange={handleChange}
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
-                    >
-                      <option value="Holstein">Holstein</option>
-                      <option value="Jersey">Jersey</option>
-                      <option value="Brown Swiss">Brown Swiss</option>
-                      <option value="Ayrshire">Ayrshire</option>
-                      <option value="Guernsey">Guernsey</option>
-                      <option value="Other">Other</option>
-                    </select>
+                    {!showCustomBreedInput ? (
+                      <select
+                        id="breed"
+                        name="breed"
+                        value={formData.breed}
+                        onChange={handleBreedChange}
+                        className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                      >
+                        {availableBreeds.map(breed => (
+                          <option key={breed} value={breed}>{breed}</option>
+                        ))}
+                        <option value="custom">+ Add Custom Breed</option>
+                      </select>
+                    ) : (
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={customBreed}
+                          onChange={(e) => setCustomBreed(e.target.value)}
+                          placeholder="Enter breed name"
+                          className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                          onKeyPress={(e) => e.key === 'Enter' && handleCustomBreedSubmit()}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleCustomBreedSubmit}
+                          className="px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700"
+                        >
+                          Add
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowCustomBreedInput(false);
+                            setCustomBreed('');
+                            setFormData({ ...formData, breed: availableBreeds[0] || 'Holstein' });
+                          }}
+                          className="px-4 py-2 bg-gray-300 text-gray-700 text-sm rounded-md hover:bg-gray-400"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
                   </div>
                   
                   <div>
@@ -3213,14 +3521,17 @@ const AddCowModal = ({ onClose, onAdd }) => {
                   <div className="mt-1 flex items-center">
                     {formData.photo ? (
                       <div className="relative">
-                        <img 
-                          src={URL.createObjectURL(formData.photo)} 
-                          alt="Cow" 
+                        <img
+                          src={imagePreview || URL.createObjectURL(formData.photo)}
+                          alt="Cow"
                           className="h-24 w-24 object-cover rounded-md border-2 border-green-100 shadow-sm"
                         />
                         <button
                           type="button"
-                          onClick={() => setFormData({...formData, photo: null})}
+                          onClick={() => {
+                            setFormData({...formData, photo: null});
+                            setImagePreview(null);
+                          }}
                           className="absolute top-0 right-0 -mt-2 -mr-2 bg-red-500 text-white rounded-full p-1 shadow-md transform transition-transform duration-300 hover:scale-110"
                         >
                           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -3282,7 +3593,7 @@ const AddCowModal = ({ onClose, onAdd }) => {
                     </label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <span className="text-gray-500 sm:text-sm">$</span>
+                        <span className="text-gray-500 sm:text-sm">₹</span>
                       </div>
                       <input
                         type="number"
@@ -3399,7 +3710,7 @@ const AddCowModal = ({ onClose, onAdd }) => {
                     {formData.purchasePrice && (
                       <div>
                         <h5 className="text-sm font-medium text-gray-500">Purchase Price</h5>
-                        <p className="text-gray-800">${formData.purchasePrice}</p>
+                        <p className="text-gray-800">₹{formData.purchasePrice}</p>
                       </div>
                     )}
                     {formData.initialWeight && (
@@ -3408,22 +3719,46 @@ const AddCowModal = ({ onClose, onAdd }) => {
                         <p className="text-gray-800">{formData.initialWeight} kg</p>
                       </div>
                     )}
+                    {formData.currentWeight && (
+                      <div>
+                        <h5 className="text-sm font-medium text-gray-500">Current Weight</h5>
+                        <p className="text-gray-800">{formData.currentWeight} kg</p>
+                      </div>
+                    )}
+                    {formData.status === 'Calf' && formData.mother && (
+                      <div>
+                        <h5 className="text-sm font-medium text-gray-500">Mother</h5>
+                        <p className="text-gray-800">{formData.mother}</p>
+                      </div>
+                    )}
+                    {formData.status === 'Calf' && formData.father && (
+                      <div>
+                        <h5 className="text-sm font-medium text-gray-500">Father</h5>
+                        <p className="text-gray-800">{formData.father}</p>
+                      </div>
+                    )}
+                    {formData.status === 'Calf' && formData.birthType && (
+                      <div>
+                        <h5 className="text-sm font-medium text-gray-500">Birth Type</h5>
+                        <p className="text-gray-800">{formData.birthType}</p>
+                      </div>
+                    )}
                   </div>
-                  
+
                   {formData.notes && (
                     <div className="mt-4">
                       <h5 className="text-sm font-medium text-gray-500">Notes</h5>
                       <p className="text-gray-800">{formData.notes}</p>
                     </div>
                   )}
-                  
-                  {formData.photo && (
+
+                  {imagePreview && (
                     <div className="mt-4">
                       <h5 className="text-sm font-medium text-gray-500">Photo</h5>
-                      <img 
-                        src={URL.createObjectURL(formData.photo)} 
-                        alt="Cow" 
-                        className="h-24 w-24 object-cover rounded-md mt-2 border border-gray-200 shadow-sm"
+                      <img
+                        src={imagePreview}
+                        alt="Cow Preview"
+                        className="h-32 w-32 object-cover rounded-md mt-2 border border-gray-200 shadow-sm"
                       />
                     </div>
                   )}
@@ -3460,14 +3795,15 @@ const AddCowModal = ({ onClose, onAdd }) => {
                 </button>
               ) : (
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={handleSubmit}
                   className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300 transform hover:scale-105"
                 >
                   Add Cow
                 </button>
               )}
             </div>
-          </form>
+          </div>
         </div>
       </div>
     </div>
@@ -3495,8 +3831,32 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
     photo: cow.image && cow.image !== '/api/placeholder/160/160' ? cow.image : null,
     alerts: Array.isArray(cow.alerts) ? [...cow.alerts] : []
   });
-  
+
   const [errors, setErrors] = useState({});
+  const [availableBreeds, setAvailableBreeds] = useState([]);
+
+  // Load available breeds from database
+  useEffect(() => {
+    const loadBreeds = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('breeds')
+          .select('name')
+          .order('name');
+
+        if (error) throw error;
+
+        const breedNames = data.map(b => b.name);
+        setAvailableBreeds(breedNames);
+      } catch (error) {
+        console.error('Error loading breeds:', error);
+        // Use default breeds if database fetch fails
+        setAvailableBreeds(['Holstein', 'Jersey', 'Brown Swiss', 'Ayrshire', 'Guernsey', 'Gir', 'Sahiwal']);
+      }
+    };
+
+    loadBreeds();
+  }, []);
   
   // Handle form field changes
   const handleChange = (e) => {
@@ -3707,12 +4067,19 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
                   onChange={handleChange}
                   className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
                 >
-                  <option value="Holstein">Holstein</option>
-                  <option value="Jersey">Jersey</option>
-                  <option value="Brown Swiss">Brown Swiss</option>
-                  <option value="Ayrshire">Ayrshire</option>
-                  <option value="Guernsey">Guernsey</option>
-                  <option value="Other">Other</option>
+                  {availableBreeds.length > 0 ? (
+                    availableBreeds.map(breed => (
+                      <option key={breed} value={breed}>{breed}</option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="Holstein">Holstein</option>
+                      <option value="Jersey">Jersey</option>
+                      <option value="Brown Swiss">Brown Swiss</option>
+                      <option value="Ayrshire">Ayrshire</option>
+                      <option value="Guernsey">Guernsey</option>
+                    </>
+                  )}
                 </select>
               </div>
               
@@ -3862,7 +4229,7 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500 sm:text-sm">$</span>
+                    <span className="text-gray-500 sm:text-sm">₹</span>
                   </div>
                   <input
                     type="number"
@@ -3899,6 +4266,53 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
               )}
             </div>
             
+            <div>
+              <label htmlFor="photo" className="block text-sm font-medium text-gray-700 mb-1">
+                Photo
+              </label>
+              <div className="mt-1 flex items-center">
+                {getPhotoPreview() ? (
+                  <div className="relative">
+                    <img
+                      src={getPhotoPreview()}
+                      alt="Cow"
+                      className="h-24 w-24 object-cover rounded-md border-2 border-green-100 shadow-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, photo: null })}
+                      className="absolute top-0 right-0 -mt-2 -mr-2 bg-red-500 text-white rounded-full p-1 shadow-md transform transition-transform duration-300 hover:scale-110"
+                    >
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-24 w-24 border-2 border-gray-300 border-dashed rounded-md hover:border-green-400 transition-colors duration-300">
+                    <label htmlFor="file-upload-edit" className="relative cursor-pointer">
+                      <div className="flex flex-col items-center justify-center">
+                        <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span className="mt-2 block text-xs text-gray-600">
+                          Upload
+                        </span>
+                      </div>
+                      <input
+                        id="file-upload-edit"
+                        name="file-upload-edit"
+                        type="file"
+                        className="sr-only"
+                        onChange={handleFileChange}
+                        accept="image/*"
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div>
               <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
                 Notes
@@ -4782,8 +5196,8 @@ const QuickRecordModal = ({ cow, onClose, onRecord }) => {
 
         <div className="p-6">
           <div className="flex items-center mb-4">
-            <img 
-              src={cowSample} 
+            <img
+              src={cow?.image || cow?.photo || cowSample}
               alt={cow?.name}
               className="w-16 h-16 object-cover rounded-full bg-gray-200 border-2 border-purple-100 mr-4"
             />

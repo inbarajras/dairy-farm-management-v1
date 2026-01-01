@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import emp from '../assets/images/emp.jpg'
-import { toast } from '../components/utils/ToastContainer';
+import { toast } from '../components/utils/CustomToast';
 import UserRoleBadge from './UserRoleBadge';
 
 const UserProfile = ({ userData: initialUserData }) => {

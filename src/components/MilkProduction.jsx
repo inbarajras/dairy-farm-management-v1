@@ -20,7 +20,7 @@ import {
   getReportById, downloadReport
 } from './services/reportService';
 import LoadingSpinner from './LoadingSpinner';
-import {toast} from './utils/ToastContainer';
+import {toast} from './utils/CustomToast';
 import { useRole } from '../contexts/RoleContext';
 import UserRoleBadge from './UserRoleBadge';
 
@@ -102,7 +102,7 @@ const MilkProduction = () => {
   
   const navigateDate = useCallback((direction) => {
     const newDate = new Date(currentDate);
-    
+
     switch(dateRange) {
       case 'today':
         // Move one day forward or backward
@@ -119,95 +119,26 @@ const MilkProduction = () => {
       default:
         newDate.setDate(newDate.getDate() + (direction === 'next' ? 1 : -1));
     }
-    
+
     // Don't allow navigating to future dates beyond today
     const today = new Date();
     if (newDate > today) {
       newDate.setTime(today.getTime());
     }
-    
+
     setCurrentDate(newDate);
   }, [currentDate, dateRange]);
 
-  const loadMilkData = async () => {
+  // Define loadMilkData function with useCallback to make it available throughout the component
+  const loadMilkData = useCallback(async () => {
     try {
       setIsLoading(true);
-      
-      // Create clean date strings (no time component) for exact date matching
-      const currentDateStr = currentDate.toISOString().split('T')[0];
-      let startDateStr;
-      let endDateStr;
-      
-      switch(dateRange) {
-        case 'today':
-          // For today, use the same date for start and end
-          startDateStr = currentDateStr;
-          endDateStr = currentDateStr;
-          break;
-        case 'week':
-          // For week, go back 6 days
-          const weekStartDate = new Date(currentDate);
-          weekStartDate.setDate(weekStartDate.getDate() - 6);
-          startDateStr = weekStartDate.toISOString().split('T')[0];
-          endDateStr = currentDateStr;
-          break;
-        case 'month':
-          // For month, go back 29 days
-          const monthStartDate = new Date(currentDate);
-          monthStartDate.setDate(monthStartDate.getDate() - 29);
-          startDateStr = monthStartDate.toISOString().split('T')[0];
-          endDateStr = currentDateStr;
-          break;
-        default:
-          // Default to week
-          const defaultStartDate = new Date(currentDate);
-          defaultStartDate.setDate(defaultStartDate.getDate() - 6);
-          startDateStr = defaultStartDate.toISOString().split('T')[0];
-          endDateStr = currentDateStr;
-      }
-      
-      // Fetch all data in parallel using clean date strings
-      const [
-        collections,
-        monthlyTotals,
-        qualityTrends,
-        qualityStandards,
-        alerts
-      ] = await Promise.all([
-        fetchMilkCollections(startDateStr, endDateStr),
-        fetchMonthlyTotals(currentDate.getFullYear()),
-        fetchQualityTrends(dateRange === 'today' ? 1 : dateRange === 'week' ? 7 : 30),
-        getQualityStandards(),
-        getMilkAlerts()
-      ]);
-      
-      setMilkData({
-        dailyCollections: collections,
-        monthlyTotals,
-        qualityTrends,
-        qualityStandards,
-        alerts
-      });
-    } catch (error) {
-      console.error('Error loading milk data:', error);
-      setError(error.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
-  // Load data based on the selected date range
-  // Inside the useEffect for data loading:
-useEffect(() => {
-  const loadMilkData = async () => {
-    try {
-      setIsLoading(true);
-      
       // Create clean date strings (no time component) for exact date matching
       const currentDateStr = currentDate.toISOString().split('T')[0];
       let startDateStr;
       let endDateStr;
-      
+
       switch(dateRange) {
         case 'today':
           // For today, use the same date for start and end
@@ -235,7 +166,7 @@ useEffect(() => {
           startDateStr = defaultStartDate.toISOString().split('T')[0];
           endDateStr = currentDateStr;
       }
-      
+
       // Fetch all data in parallel using clean date strings
       const [
         collections,
@@ -250,7 +181,7 @@ useEffect(() => {
         getQualityStandards(),
         getMilkAlerts()
       ]);
-      
+
       setMilkData({
         dailyCollections: collections,
         monthlyTotals,
@@ -264,10 +195,12 @@ useEffect(() => {
     } finally {
       setIsLoading(false);
     }
-  };
-  
-  loadMilkData();
-}, [dateRange, currentDate]);
+  }, [dateRange, currentDate]);
+
+  // Load data when dependencies change
+  useEffect(() => {
+    loadMilkData();
+  }, [loadMilkData]);
   
   // Calculate statistics safely
   const getTotal = (data) => {

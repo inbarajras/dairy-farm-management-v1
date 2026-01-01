@@ -70,31 +70,25 @@ export const updateRevenueData = async () => {
     // Calculate profit for each month
     Object.keys(monthlyData).forEach(key => {
       monthlyData[key].profit = monthlyData[key].income - monthlyData[key].expenses;
-      
-      // Add date as the first day of the month for compatibility with existing code
-      const year = monthlyData[key].year;
-      const month = monthlyData[key].month.padStart(2, '0');
-      monthlyData[key].date = `${year}-${month}-01`;
     });
-    
+
     // Upsert data into revenue_data table
     const upsertData = Object.values(monthlyData).map(item => ({
       month: item.month,
       year: item.year,
       income: item.income,
       expenses: item.expenses,
-      profit: item.profit,
-      date: item.date
+      profit: item.profit
     }));
-    
+
     if (upsertData.length > 0) {
       const { error: upsertError } = await supabase
         .from('revenue_data')
-        .upsert(upsertData, { 
-          onConflict: 'month,year',
-          returning: false 
-        });
-        
+        .upsert(upsertData, {
+          onConflict: 'month,year'
+        })
+        .select();
+
       if (upsertError) throw upsertError;
       console.log(`Updated ${upsertData.length} months of revenue data`);
     }
@@ -177,37 +171,35 @@ export const updateRevenueCategories = async () => {
       }
     });
     
-    // Format the data for insertion
+    // Format the data for upsert
     const categoryColors = {
       'Milk Sales': '#2E7D32',
       'Cattle Sales': '#1565C0',
       'Manure Sales': '#FFA000',
       'Other': '#6D4C41'
     };
-    
-    // First, delete existing categories
-    const { error: deleteError } = await supabase
-      .from('revenue_categories')
-      .delete()
-      .gte('created_at', startOfYear);
-    
-    if (deleteError) throw deleteError;
-    
-    // Then insert new category data
+
+    // Use UPSERT to update existing or insert new categories
     const categoryData = Object.entries(categories).map(([name, value]) => ({
       name,
       value,
       percentage: totalRevenue > 0 ? Math.round((value / totalRevenue) * 100) : 0,
-      color: categoryColors[name] || '#607D8B'
+      color: categoryColors[name] || '#607D8B',
+      updated_at: new Date().toISOString()
     }));
-    
+
     if (categoryData.length > 0) {
-      const { error: insertError } = await supabase
+      const { data, error: upsertError } = await supabase
         .from('revenue_categories')
-        .insert(categoryData);
-        
-      if (insertError) throw insertError;
-      console.log(`Inserted ${categoryData.length} revenue categories`);
+        .upsert(categoryData, {
+          onConflict: 'name',
+          ignoreDuplicates: false
+        })
+        .select();
+
+      if (upsertError) throw upsertError;
+      console.log(`Upserted ${categoryData.length} revenue categories`);
+      return data;
     }
     
     return true;

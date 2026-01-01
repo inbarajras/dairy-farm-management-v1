@@ -1,4 +1,19 @@
-import { supabase } from '../../lib/supabase'
+import { supabase } from '../../lib/supabase';
+import { sortMilkProductionRecords, compareMilkProductionRecords } from '../utils/cowSorting';
+import {
+  COW_HEAT_CYCLE_DAYS,
+  COW_GESTATION_DAYS,
+  FRESH_COW_PERIOD_DAYS,
+  CALF_FIRST_WEEK_DAYS,
+  DAYS_PER_MONTH,
+  MONTHS_PER_YEAR,
+  DEFAULT_QUALITY,
+  SHIFT_TYPES,
+  REPRODUCTIVE_STATUS,
+  EVENT_TYPES,
+  BREEDING_RESULTS,
+  GROWTH_MILESTONES
+} from '../utils/cowConstants';
 
 // Fetch all cows
 export const fetchCows = async () => {
@@ -21,56 +36,30 @@ export const fetchCows = async () => {
       status: cow.status,
       healthStatus: cow.health_status,
       owner: cow.owner,
-      milkProduction: cow.milk_production
-        .map(record => ({
+      milkProduction: sortMilkProductionRecords(
+        cow.milk_production.map(record => ({
           date: record.date,
           amount: record.amount,
-          shift: record.shift || 'Morning',
-          quality: record.quality || 'Good',
+          shift: record.shift || SHIFT_TYPES.MORNING,
+          quality: record.quality || DEFAULT_QUALITY,
           notes: record.notes || ''
         }))
-        .sort((a, b) => {
-          // Enhanced sorting: First by date (newest first), then by shift priority (Evening > Morning) for same day
-          const dateA = new Date(a.date);
-          const dateB = new Date(b.date);
-          
-          // Check for invalid dates
-          if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
-            console.warn('Invalid date found in milk production records:', { a: a.date, b: b.date });
-            return 0;
-          }
-          
-          const dateComparison = dateB.getTime() - dateA.getTime();
-          
-          // If dates are the same, prioritize Evening shift over Morning shift
-          if (dateComparison === 0) {
-            const shiftA = a.shift || 'Morning';
-            const shiftB = b.shift || 'Morning';
-            
-            // Evening has higher priority than Morning
-            if (shiftA === 'Evening' && shiftB === 'Morning') {
-              return -1; // a comes first (Evening before Morning)
-            }
-            if (shiftA === 'Morning' && shiftB === 'Evening') {
-              return 1; // b comes first (Evening before Morning)
-            }
-            
-            // If both are the same shift, maintain original order
-            return 0;
-          }
-          
-          return dateComparison;
-        }),
+      ),
       lastHealthCheck: cow.last_health_check,
       vaccinationStatus: cow.vaccination_status,
       alerts: cow.alerts ? JSON.parse(cow.alerts) : [],
-      image: cow.image_url || '/api/placeholder/160/160',
+      image: cow.image_url || null,
+      photo: cow.image_url || null,
       purchaseDate: cow.purchase_date,
       purchasePrice: cow.purchase_price,
       initialWeight: cow.initial_weight,
       currentWeight: cow.current_weight,
       growthRate: cow.growth_rate,
-      notes: cow.notes
+      notes: cow.notes,
+      mother: cow.mother,
+      father: cow.father,
+      birthType: cow.birth_type,
+      isCalf: cow.is_calf
     }));
   } catch (error) {
     console.error('Error fetching cows:', error);
@@ -97,7 +86,7 @@ export const addCow = async (cowData) => {
       purchase_date: cowData.purchaseDate || null,
       purchase_price: cowData.purchasePrice || null,
       initial_weight: cowData.initialWeight || null,
-      current_weight: cowData.initialWeight || null, // Initialize current_weight with initial_weight
+      current_weight: cowData.currentWeight || cowData.initialWeight || null,
       notes: cowData.notes || null,
       // Add calf-specific fields
       mother: cowData.mother || null,
@@ -113,8 +102,36 @@ export const addCow = async (cowData) => {
       .select()
 
     if (error) throw error
-    
-    return data[0]
+
+    // Transform the returned data to camelCase format
+    const cow = data[0];
+    return {
+      id: cow.id,
+      tagNumber: cow.tag_number,
+      name: cow.name,
+      breed: cow.breed,
+      dateOfBirth: cow.date_of_birth,
+      age: calculateAge(cow.date_of_birth),
+      status: cow.status,
+      healthStatus: cow.health_status,
+      owner: cow.owner,
+      milkProduction: cowData.milkProduction || [],
+      lastHealthCheck: cow.last_health_check,
+      vaccinationStatus: cow.vaccination_status,
+      alerts: cow.alerts ? JSON.parse(cow.alerts) : [],
+      image: cow.image_url || null,
+      photo: cow.image_url || null,
+      purchaseDate: cow.purchase_date,
+      purchasePrice: cow.purchase_price,
+      initialWeight: cow.initial_weight,
+      currentWeight: cow.current_weight,
+      growthRate: cow.growth_rate,
+      notes: cow.notes,
+      mother: cow.mother,
+      father: cow.father,
+      birthType: cow.birth_type,
+      isCalf: cow.is_calf
+    };
   } catch (error) {
     console.error('Error adding cow:', error)
     throw error
@@ -188,36 +205,42 @@ export const updateCow = async (cowId, cowData) => {
     
     console.log('Update successful, returned data:', data);
     
-    // Transform the data back to frontend format
+    // Transform the data back to frontend format (consistent with fetchCows and addCow)
+    const cow = data[0];
     const transformedCow = {
-      id: data[0].id,
-      tagNumber: data[0].tag_number,
-      name: data[0].name,
-      breed: data[0].breed,
-      dateOfBirth: data[0].date_of_birth,
-      status: data[0].status,
-      healthStatus: data[0].health_status,
-      owner: data[0].owner,
-      lastHealthCheck: data[0].last_health_check,
-      vaccinationStatus: data[0].vaccination_status,
-      alerts: data[0].alerts ? JSON.parse(data[0].alerts) : [],
-      image: data[0].image_url || '/api/placeholder/160/160',
-      purchaseDate: data[0].purchase_date,
-      purchasePrice: data[0].purchase_price,
-      initialWeight: data[0].initial_weight,
-      currentWeight: data[0].current_weight,
-      notes: data[0].notes,
-      milkProduction: data[0].milk_production ? data[0].milk_production.sort((a, b) => {
-        const dateComparison = new Date(b.date) - new Date(a.date);
-        if (dateComparison === 0) {
-          const shiftA = a.shift || 'Morning';
-          const shiftB = b.shift || 'Morning';
-          if (shiftA === 'Evening' && shiftB === 'Morning') return -1;
-          if (shiftA === 'Morning' && shiftB === 'Evening') return 1;
-          return 0;
-        }
-        return dateComparison;
-      }) : []
+      id: cow.id,
+      tagNumber: cow.tag_number,
+      name: cow.name,
+      breed: cow.breed,
+      dateOfBirth: cow.date_of_birth,
+      age: calculateAge(cow.date_of_birth),
+      status: cow.status,
+      healthStatus: cow.health_status,
+      owner: cow.owner,
+      lastHealthCheck: cow.last_health_check,
+      vaccinationStatus: cow.vaccination_status,
+      alerts: cow.alerts ? JSON.parse(cow.alerts) : [],
+      image: cow.image_url || null,
+      photo: cow.image_url || null,
+      purchaseDate: cow.purchase_date,
+      purchasePrice: cow.purchase_price,
+      initialWeight: cow.initial_weight,
+      currentWeight: cow.current_weight,
+      growthRate: cow.growth_rate,
+      notes: cow.notes,
+      mother: cow.mother,
+      father: cow.father,
+      birthType: cow.birth_type,
+      isCalf: cow.is_calf,
+      milkProduction: cow.milk_production ? sortMilkProductionRecords(
+        cow.milk_production.map(record => ({
+          date: record.date,
+          amount: record.amount,
+          shift: record.shift || SHIFT_TYPES.MORNING,
+          quality: record.quality || DEFAULT_QUALITY,
+          notes: record.notes || ''
+        }))
+      ) : []
     };
     
     return transformedCow;
@@ -301,7 +324,7 @@ export const recordMilkProduction = async (cowId, recordData) => {
         .select('id')
         .eq('cow_id', cowId)
         .eq('date', recordData.date)
-        .eq('shift', recordData.shift || 'Morning');
+        .eq('shift', recordData.shift || SHIFT_TYPES.MORNING);
       
       if (checkError) {
         console.error('Error checking for existing records:', checkError);
@@ -315,7 +338,7 @@ export const recordMilkProduction = async (cowId, recordData) => {
       if (existingRecords && existingRecords.length > 0) {
         return {
           success: false,
-          message: `Milk production record already exists for this cow on ${recordData.date} for ${recordData.shift || 'Morning'} shift. Duplicate records are not allowed.`
+          message: `Milk production record already exists for this cow on ${recordData.date} for ${recordData.shift || SHIFT_TYPES.MORNING} shift. Duplicate records are not allowed.`
         };
       }
       
@@ -325,8 +348,8 @@ export const recordMilkProduction = async (cowId, recordData) => {
           cow_id: cowId,
           date: recordData.date,
           amount: recordData.amount,
-          shift: recordData.shift || 'Morning',
-          quality: recordData.quality || 'Good',
+          shift: recordData.shift || SHIFT_TYPES.MORNING,
+          quality: recordData.quality || DEFAULT_QUALITY,
           notes: recordData.notes || ''
         })
         .select('*');
@@ -365,8 +388,8 @@ export const fetchCowMilkProduction = async (cowId) => {
       return data.map(record => ({
         date: record.date,
         amount: parseFloat(record.amount),
-        shift: record.shift || 'Morning',
-        quality: record.quality || 'Good',
+        shift: record.shift || SHIFT_TYPES.MORNING,
+        quality: record.quality || DEFAULT_QUALITY,
         notes: record.notes || ''
       }));
     } catch (error) {
@@ -425,7 +448,7 @@ export const updateReproductiveStatus = async (cowId) => {
     const updates = {
       id: currentStatus?.id, // Keep the existing ID to ensure update instead of insert
       cow_id: cowId,
-      status: currentStatus?.status || 'Open',
+      status: currentStatus?.status || REPRODUCTIVE_STATUS.OPEN,
       calving_count: currentStatus?.calving_count || 0,
       breeding_plan: currentStatus?.breeding_plan || 'Not set',
       last_heat_date: currentStatus?.last_heat_date || null,
@@ -463,52 +486,52 @@ export const updateReproductiveStatus = async (cowId) => {
       const eventDate = new Date(event.date);
       
       switch(event.event_type) {
-        case 'Heat Detection':
-          if (event.result === 'Confirmed') {
+        case EVENT_TYPES.HEAT_DETECTION:
+          if (event.result === BREEDING_RESULTS.CONFIRMED) {
             lastHeatDate = event.date;
             // Only update status to "In Heat" if there's no more recent pregnancy confirmation
-            if (!lastPregnancyCheckResult || lastPregnancyCheckResult !== 'Positive') {
-              updates.status = 'In Heat';
+            if (!lastPregnancyCheckResult || lastPregnancyCheckResult !== BREEDING_RESULTS.POSITIVE) {
+              updates.status = REPRODUCTIVE_STATUS.IN_HEAT;
             }
           }
           break;
-          
-        case 'Insemination':
-          if (event.result === 'Completed') {
+
+        case EVENT_TYPES.INSEMINATION:
+          if (event.result === BREEDING_RESULTS.COMPLETED) {
             lastInseminationDate = event.date;
             // Only update to inseminated if there's no later pregnancy check
             if (!lastPregnancyCheckDate || new Date(lastPregnancyCheckDate) < eventDate) {
-              updates.status = 'Inseminated';
+              updates.status = REPRODUCTIVE_STATUS.INSEMINATED;
               updates.breeding_plan = 'Waiting for pregnancy check';
             }
           }
           break;
-          
-        case 'Pregnancy Check':
+
+        case EVENT_TYPES.PREGNANCY_CHECK:
           lastPregnancyCheckDate = event.date;
           lastPregnancyCheckResult = event.result;
-          
-          if (event.result === 'Positive') {
-            updates.status = 'Pregnant';
+
+          if (event.result === BREEDING_RESULTS.POSITIVE) {
+            updates.status = REPRODUCTIVE_STATUS.PREGNANT;
             // Calculate expected calving date (approximately 280 days after last insemination)
             if (lastInseminationDate) {
               const dueDate = new Date(lastInseminationDate);
-              dueDate.setDate(dueDate.getDate() + 280);
+              dueDate.setDate(dueDate.getDate() + COW_GESTATION_DAYS);
               expectedCalvingDate = dueDate.toISOString().split('T')[0];
               // Store this in breeding_plan since we don't have expected_calving_date column
               updates.breeding_plan = `Due: ${expectedCalvingDate}`;
             }
-          } else if (event.result === 'Negative') {
-            updates.status = 'Open';
+          } else if (event.result === BREEDING_RESULTS.NEGATIVE) {
+            updates.status = REPRODUCTIVE_STATUS.OPEN;
             updates.breeding_plan = 'Rebreeding needed';
             expectedCalvingDate = null;
           }
           break;
-          
-        case 'Calving':
-          if (event.result === 'Healthy' || event.result === 'Complications') {
+
+        case EVENT_TYPES.CALVING:
+          if (event.result === BREEDING_RESULTS.HEALTHY || event.result === BREEDING_RESULTS.COMPLICATIONS) {
             lastCalvingDate = event.date;
-            updates.status = 'Fresh';
+            updates.status = REPRODUCTIVE_STATUS.FRESH;
             updates.last_calving_date = event.date;
             updates.calving_count = (currentStatus?.calving_count || 0) + 1;
             updates.breeding_plan = 'Post-calving rest';
@@ -519,21 +542,21 @@ export const updateReproductiveStatus = async (cowId) => {
     });
     
     // Calculate next heat date if we have a last heat date and the cow is not pregnant
-    if (lastHeatDate && updates.status !== 'Pregnant') {
+    if (lastHeatDate && updates.status !== REPRODUCTIVE_STATUS.PREGNANT) {
       const nextHeatDate = new Date(lastHeatDate);
-      nextHeatDate.setDate(nextHeatDate.getDate() + 21); // 21 days heat cycle for cows
+      nextHeatDate.setDate(nextHeatDate.getDate() + COW_HEAT_CYCLE_DAYS);
       updates.last_heat_date = lastHeatDate;
       updates.next_heat_date = nextHeatDate.toISOString().split('T')[0];
     }
-    
+
     // If the cow has calved, but there are no subsequent events indicating otherwise,
-    // we should update from 'Fresh' to 'Open' after a certain period (e.g., 45 days)
-    if (updates.status === 'Fresh' && lastCalvingDate) {
+    // we should update from 'Fresh' to 'Open' after a certain period
+    if (updates.status === REPRODUCTIVE_STATUS.FRESH && lastCalvingDate) {
       const freshCutoff = new Date(lastCalvingDate);
-      freshCutoff.setDate(freshCutoff.getDate() + 45); 
+      freshCutoff.setDate(freshCutoff.getDate() + FRESH_COW_PERIOD_DAYS); 
       
       if (new Date() > freshCutoff) {
-        updates.status = 'Open';
+        updates.status = REPRODUCTIVE_STATUS.OPEN;
         if (updates.breeding_plan === 'Post-calving rest') {
           updates.breeding_plan = 'Ready for breeding';
         }
@@ -585,11 +608,25 @@ export const fetchHealthHistory = async (cowId) => {
     if (error) throw error;
     
     return data.map(event => {
-      // This is where the error is happening - trying to parse medications that might be a string
-      const medications = typeof event.medications === 'string' 
-        ? (event.medications === '[object Object]' ? [] : JSON.parse(event.medications)) 
-        : (Array.isArray(event.medications) ? event.medications : []);
-      
+      // Safely parse medications field with error handling
+      let medications = [];
+
+      try {
+        if (typeof event.medications === 'string' && event.medications.trim() !== '') {
+          // Avoid parsing obvious bad strings
+          if (event.medications === '[object Object]') {
+            medications = [];
+          } else {
+            medications = JSON.parse(event.medications);
+          }
+        } else if (Array.isArray(event.medications)) {
+          medications = event.medications;
+        }
+      } catch (parseError) {
+        console.warn('Failed to parse medications for event:', event.id, parseError);
+        medications = [];
+      }
+
       return {
         ...event,
         medications
@@ -635,7 +672,7 @@ export const fetchHealthHistory = async (cowId) => {
         console.log('No reproductive status found for cow, creating default');
         const defaultStatus = {
           cow_id: cowId,
-          status: 'Open',
+          status: REPRODUCTIVE_STATUS.OPEN,
           calving_count: 0,
           breeding_plan: 'Not set',
           updated_at: new Date().toISOString()
@@ -762,7 +799,7 @@ export const fetchGrowthMilestones = async (cowId) => {
       .from('health_events')
       .select('id, event_date, event_type, description, notes')
       .eq('cow_id', cowId)
-      .eq('event_type', 'Weight Measurement')
+      .eq('event_type', EVENT_TYPES.WEIGHT_MEASUREMENT)
       .order('event_date', { ascending: true });
     
     if (healthError) throw healthError;
@@ -771,7 +808,7 @@ export const fetchGrowthMilestones = async (cowId) => {
     const milestones = [{
       id: `birth-${cowId}`,
       date: cowData.date_of_birth,
-      milestone: 'Birth',
+      milestone: GROWTH_MILESTONES.BIRTH,
       weight: parseFloat(cowData.initial_weight) || 0,
       notes: 'Birth weight record',
       ageInDays: 0
@@ -811,7 +848,7 @@ export const fetchGrowthMilestones = async (cowId) => {
       milestones.push({
         id: `transition-${cowId}`,
         date: cowData.transition_date,
-        milestone: 'Status Transition',
+        milestone: GROWTH_MILESTONES.STATUS_TRANSITION,
         weight: parseFloat(cowData.current_weight) || milestones[milestones.length - 1].weight,
         notes: 'Transition to new status',
         ageInDays
@@ -841,16 +878,16 @@ export const fetchGrowthMilestones = async (cowId) => {
 
 // Generate milestone name based on age
 const generateMilestoneName = (ageInDays) => {
-  if (ageInDays < 7) return 'First Week';
-  if (ageInDays < 30) return 'First Month';
-  
-  const months = Math.floor(ageInDays / 30);
+  if (ageInDays < CALF_FIRST_WEEK_DAYS) return GROWTH_MILESTONES.FIRST_WEEK;
+  if (ageInDays < DAYS_PER_MONTH) return GROWTH_MILESTONES.FIRST_MONTH;
+
+  const months = Math.floor(ageInDays / DAYS_PER_MONTH);
   if (months === 1) return '1 Month';
-  if (months < 12) return `${months} Months`;
-  
-  const years = Math.floor(months / 12);
-  const remainingMonths = months % 12;
-  
+  if (months < MONTHS_PER_YEAR) return `${months} Months`;
+
+  const years = Math.floor(months / MONTHS_PER_YEAR);
+  const remainingMonths = months % MONTHS_PER_YEAR;
+
   if (remainingMonths === 0) return `${years} Year${years > 1 ? 's' : ''}`;
   return `${years} Year${years > 1 ? 's' : ''}, ${remainingMonths} Month${remainingMonths > 1 ? 's' : ''}`;
 };
@@ -861,7 +898,7 @@ export const recordGrowthMilestone = async (cowId, milestoneData) => {
     // Create a health event of type "Weight Measurement"
     const healthEvent = {
       cow_id: cowId,
-      event_type: 'Weight Measurement',
+      event_type: EVENT_TYPES.WEIGHT_MEASUREMENT,
       event_date: milestoneData.date,
       description: milestoneData.milestone,
       notes: `Weight: ${milestoneData.weight} kg. ${milestoneData.notes || ''}`,
@@ -876,55 +913,33 @@ export const recordGrowthMilestone = async (cowId, milestoneData) => {
       
     if (error) throw error;
     
-    // Get previous milestones to calculate growth rate
-    const previousMilestones = await fetchGrowthMilestones(cowId);
+    // Fetch all milestones to calculate growth rate
+    const milestones = await fetchGrowthMilestones(cowId);
     let growthRate = null;
-    
-    if (previousMilestones.length > 0) {
-      const lastMilestone = previousMilestones[previousMilestones.length - 1];
-      const currentMilestoneDate = new Date(milestoneData.date);
-      const lastMilestoneDate = new Date(lastMilestone.date);
-      const daysPassed = Math.max(1, Math.floor((currentMilestoneDate - lastMilestoneDate) / (24 * 60 * 60 * 1000)));
-      
-      // Calculate monthly growth rate
-      const weightDiff = parseFloat(milestoneData.weight) - parseFloat(lastMilestone.weight);
-      growthRate = (weightDiff / daysPassed) * 30; // kg per month
+
+    // Calculate growth rate if we have at least 2 milestones
+    if (milestones.length > 1) {
+      const latestMilestone = milestones[milestones.length - 1];
+      growthRate = latestMilestone.growthRate || null;
     }
-    
-    // Update the cow's current weight and growth rate if calculated
+
+    // Update the cow's current weight and growth rate
     const updateData = {
       current_weight: milestoneData.weight,
       updated_at: new Date().toISOString()
     };
-    
+
     // Only add growth rate if we could calculate it
     if (growthRate !== null) {
       updateData.growth_rate = growthRate.toFixed(2);
     }
-    
+
     const { error: updateError } = await supabase
       .from('cows')
       .update(updateData)
       .eq('id', cowId);
-      
+
     if (updateError) throw updateError;
-    
-    // Calculate growth rate if this isn't the first weight measurement
-    const milestones = await fetchGrowthMilestones(cowId);
-    if (milestones.length > 1) {
-      const latestMilestone = milestones[milestones.length - 1];
-      
-      // Update cow's growth rate
-      const { error: rateError } = await supabase
-        .from('cows')
-        .update({
-          growth_rate: latestMilestone.growthRate || 0,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', cowId);
-        
-      if (rateError) throw rateError;
-    }
     
     return data[0];
   } catch (error) {
