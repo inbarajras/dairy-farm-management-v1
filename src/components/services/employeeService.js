@@ -158,22 +158,22 @@ export const updateEmployee = async (employeeId, employeeData) => {
         job_title: employeeData.jobTitle,
         department: employeeData.department,
         date_joined: employeeData.dateJoined,
-        status: 'Active',
+        status: employeeData.status || 'Active', // Preserve status from input
         salary: parseFloat(employeeData.salary),
         schedule: employeeData.schedule,
-        attendance_rate: employeeData.attendanceRate, // Default for new employee
-        performance_rating: null, // Default for new employee
-        skills: [],
-        certifications: []
+        attendance_rate: employeeData.attendanceRate,
+        performance_rating: employeeData.performance_rating || null,
+        skills: employeeData.skills || [],
+        certifications: employeeData.certifications || []
       };
 
-    const { data, error } = await supabase
+    const { data, error} = await supabase
       .from('employees')
       .update(employee)
       .eq('id', employeeId)
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   } catch (error) {
@@ -186,7 +186,7 @@ export const updateEmployee = async (employeeId, employeeData) => {
 export const recordAttendance = async (attendanceData) => {
     try {
       const { employeeId, date, status, hours_worked, notes, id } = attendanceData;
-      
+
       // Check if attendance already exists for this employee and date
       const { data: existingRecord, error: checkError } = await supabase
         .from('employee_attendance')
@@ -194,17 +194,17 @@ export const recordAttendance = async (attendanceData) => {
         .eq('employee_id', employeeId)
         .eq('date', date)
         .maybeSingle();
-      
+
       if (checkError) {
         console.error('Error checking for existing attendance record:', checkError);
         throw checkError;
       }
-      
+
       let result;
-      
+
       // If record exists and no ID was provided, or if ID was provided but doesn't match existing, use existing ID
       const recordId = id || (existingRecord?.id);
-      
+
       if (recordId) {
         // Update existing record
         const { data, error } = await supabase
@@ -217,7 +217,7 @@ export const recordAttendance = async (attendanceData) => {
           .eq('id', recordId)
           .select()
           .single();
-        
+
         if (error) throw error;
         result = data;
       } else {
@@ -233,11 +233,19 @@ export const recordAttendance = async (attendanceData) => {
           })
           .select()
           .single();
-        
+
         if (error) throw error;
         result = data;
       }
-      
+
+      // Auto-update employee's attendance rate after recording attendance
+      try {
+        await updateEmployeeAttendanceRate(employeeId);
+      } catch (updateError) {
+        console.warn('Could not update employee attendance rate:', updateError);
+        // Don't fail the attendance recording if rate update fails
+      }
+
       return result;
     } catch (error) {
       console.error('Error recording attendance:', error);
@@ -794,7 +802,7 @@ export const getPerformanceReviews = async () => {
         .from('performance_reviews')
         .delete()
         .eq('id', reviewId);
-        
+
       if (error) throw error;
       return true;
     } catch (error) {
@@ -802,3 +810,62 @@ export const getPerformanceReviews = async () => {
       throw error;
     }
   };
+
+// Delete an employee
+export const deleteEmployee = async (employeeId) => {
+  try {
+    const { error } = await supabase
+      .from('employees')
+      .delete()
+      .eq('id', employeeId);
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error(`Error deleting employee ${employeeId}:`, error);
+    throw error;
+  }
+};
+
+// Update employee attendance rate based on actual attendance records
+export const updateEmployeeAttendanceRate = async (employeeId) => {
+  try {
+    // Get all attendance records for this employee in the last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const startDate = thirtyDaysAgo.toISOString().split('T')[0];
+
+    const { data: attendanceRecords, error: fetchError } = await supabase
+      .from('employee_attendance')
+      .select('status')
+      .eq('employee_id', employeeId)
+      .gte('date', startDate);
+
+    if (fetchError) throw fetchError;
+
+    // Calculate attendance rate
+    let attendanceRate = 100; // Default if no records
+
+    if (attendanceRecords && attendanceRecords.length > 0) {
+      const presentCount = attendanceRecords.filter(
+        record => record.status === 'Present' || record.status === 'Late'
+      ).length;
+      const totalDays = attendanceRecords.length;
+      attendanceRate = Math.round((presentCount / totalDays) * 100);
+    }
+
+    // Update employee record
+    const { data, error: updateError } = await supabase
+      .from('employees')
+      .update({ attendance_rate: attendanceRate })
+      .eq('id', employeeId)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+    return data;
+  } catch (error) {
+    console.error(`Error updating attendance rate for employee ${employeeId}:`, error);
+    throw error;
+  }
+};

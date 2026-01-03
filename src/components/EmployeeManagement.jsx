@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, 
   Calendar, Clock, Mail, Phone, MapPin, Users, Award, FileText, Briefcase, 
   UserX, Download, AlertTriangle,X, IndianRupee,UserCheck,TrendingUp,AlertCircle,Info } from 'lucide-react';
-import { 
-  fetchEmployees, 
+import {
+  fetchEmployees,
   fetchEmployeeById,
-  addEmployee, 
-  updateEmployee, 
+  addEmployee,
+  updateEmployee,
+  deleteEmployee,
   recordAttendance,
   getMonthlyAttendanceSummary,
   getAttendanceStatistics,
@@ -19,7 +20,8 @@ import {
   updatePerformanceReview,
   createPerformanceReview,
   deletePerformanceReview,
-  getEmployeePerformanceReviews
+  getEmployeePerformanceReviews,
+  updateEmployeeAttendanceRate
 } from './services/employeeService';
 import { getEmployeePayrollHistory, getEmployeeSalaryHistory } from './services/financialService';
 import { getShiftTemplates, addShiftTemplate, updateShiftTemplate, deleteShiftTemplate } from './services/shiftTemplateService';
@@ -148,17 +150,18 @@ const EmployeeManagement = () => {
           setIsLoading(false);
         } else if (activeTab === 'shifts') {
           setIsLoading(true);
-          
+
           // Get current date for week start
           const today = new Date();
           const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, ...
           const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust to get Monday
-          const weekStart = new Date(today.setDate(diff));
-          
+          const weekStart = new Date(today);
+          weekStart.setDate(diff);
+
           // Fetch shifts data
           const shifts = await getEmployeeShifts(weekStart);
           setShiftsData(shifts);
-          
+
           setIsLoading(false);
         } else if (activeTab === 'performance') {
           // Load performance data
@@ -226,13 +229,14 @@ const EmployeeManagement = () => {
   const refreshShiftsData = async (date = new Date()) => {
     if (activeTab === 'shifts') {
       setIsLoading(true);
-      
+
       // Get current date for week start if none provided
       const targetDate = date || new Date();
       const dayOfWeek = targetDate.getDay(); // 0 = Sunday, 1 = Monday, ...
       const diff = targetDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust to get Monday
-      const weekStart = new Date(targetDate.setDate(diff));
-      
+      const weekStart = new Date(targetDate);
+      weekStart.setDate(diff);
+
       // Fetch shifts data
       try {
         const shifts = await getEmployeeShifts(weekStart);

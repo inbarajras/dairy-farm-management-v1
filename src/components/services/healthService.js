@@ -315,9 +315,11 @@ export const createVaccinationScheduleIfNeeded = async () => {
 // Fetch vaccination schedule
 export const fetchVaccinationSchedule = async () => {
   try {
+    const today = new Date().toISOString().split('T')[0];
+
     // Check if table exists first
     await createVaccinationScheduleIfNeeded();
-    
+
     // Get vaccinations from vaccination_schedule table
     const { data: vacScheduleData, error: vacScheduleError } = await supabase
       .from('vaccination_schedule')
@@ -333,12 +335,35 @@ export const fetchVaccinationSchedule = async () => {
       `)
       .not('status', 'eq', 'Completed')
       .order('due_date');
-    
+
     if (vacScheduleError) throw vacScheduleError;
-    
-    // Format data to match expected structure
-    return vacScheduleData.map(vac => ({
-      id: vac.id,
+
+    // Also get scheduled vaccinations from health_events table
+    // Only get events that are explicitly scheduled (not completed ones with follow-up dates)
+    const { data: healthEventsVac, error: healthError } = await supabase
+      .from('health_events')
+      .select(`
+        id,
+        cow_id,
+        event_type,
+        event_date,
+        status,
+        performed_by,
+        description,
+        cows:cow_id (id, name, tag_number)
+      `)
+      .eq('event_type', 'Vaccination')
+      .eq('status', 'Scheduled')
+      .gte('event_date', today)
+      .order('event_date');
+
+    if (healthError) {
+      console.log('No health events vaccinations found:', healthError);
+    }
+
+    // Combine both sources
+    const scheduledVaccinations = vacScheduleData.map(vac => ({
+      id: `vac-${vac.id}`,
       cowId: vac.cow_id,
       cowName: vac.cows ? vac.cows.name : 'Unknown',
       cowTag: vac.cows ? vac.cows.tag_number : 'N/A',
@@ -347,6 +372,23 @@ export const fetchVaccinationSchedule = async () => {
       status: vac.status || 'Scheduled',
       assignedTo: vac.assigned_to || 'Unassigned'
     }));
+
+    const healthEventsVaccinations = healthEventsVac ? healthEventsVac.map(event => ({
+      id: `event-${event.id}`,
+      cowId: event.cow_id,
+      cowName: event.cows ? event.cows.name : 'Unknown',
+      cowTag: event.cows ? event.cows.tag_number : 'N/A',
+      vaccinationType: event.description || 'Vaccination',
+      dueDate: event.event_date,
+      status: event.status || 'Scheduled',
+      assignedTo: event.performed_by || 'Unassigned'
+    })) : [];
+
+    // Merge and sort by due date
+    const allVaccinations = [...scheduledVaccinations, ...healthEventsVaccinations];
+    allVaccinations.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+
+    return allVaccinations;
   } catch (error) {
     console.error('Error fetching vaccination schedule:', error);
     return [];

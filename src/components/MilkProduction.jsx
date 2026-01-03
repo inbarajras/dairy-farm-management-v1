@@ -294,7 +294,8 @@ const MilkProduction = () => {
           totalQuantity: 0,
           morningQuantity: 0,
           eveningQuantity: 0,
-          collections: []
+          collections: [],
+          uniqueCows: new Set() // Track unique cow IDs
         };
       }
       
@@ -310,6 +311,11 @@ const MilkProduction = () => {
           groupedByDate[dateKey].eveningQuantity += quantity;
         }
         
+        // Track unique cows for count
+        if (record.cowId) {
+          groupedByDate[dateKey].uniqueCows.add(record.cowId);
+        }
+
         // Keep track of individual collections for detailed view
         groupedByDate[dateKey].collections.push({
           id: record.id || `${dateKey}-${groupedByDate[dateKey].collections.length}`,
@@ -318,12 +324,15 @@ const MilkProduction = () => {
         });
       }
     });
-    
+
     console.log("Daily totals:", dailyTotals);
     console.log("Grouped data:", groupedByDate);
-    
-    // Convert object to array and sort by date
-    return Object.values(groupedByDate).sort((a, b) => 
+
+    // Convert object to array, add cow count, and sort by date
+    return Object.values(groupedByDate).map(day => ({
+      ...day,
+      cowCount: day.uniqueCows.size // Convert Set to count
+    })).sort((a, b) =>
       new Date(a.date) - new Date(b.date)
     );
   };
@@ -723,6 +732,10 @@ const MilkProduction = () => {
                           <stop offset="5%" stopColor="#4CAF50" stopOpacity={0.8}/>
                           <stop offset="95%" stopColor="#4CAF50" stopOpacity={0.1}/>
                         </linearGradient>
+                        <linearGradient id="colorCows" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.6}/>
+                          <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.05}/>
+                        </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                       <XAxis
@@ -731,11 +744,24 @@ const MilkProduction = () => {
                         style={{ fontSize: '12px' }}
                       />
                       <YAxis
-                        stroke="#888"
+                        yAxisId="left"
+                        stroke="#4CAF50"
                         style={{ fontSize: '12px' }}
+                        label={{ value: 'Milk (L)', angle: -90, position: 'insideLeft', style: { fill: '#4CAF50' } }}
+                      />
+                      <YAxis
+                        yAxisId="right"
+                        orientation="right"
+                        stroke="#3B82F6"
+                        style={{ fontSize: '12px' }}
+                        label={{ value: 'Cows', angle: 90, position: 'insideRight', style: { fill: '#3B82F6' } }}
                       />
                       <Tooltip
-                        formatter={(value) => [`${value} L`, 'Milk Production']}
+                        formatter={(value, name) => {
+                          if (name === 'totalQuantity') return [`${value} L`, 'Milk Production'];
+                          if (name === 'cowCount') return [`${value} cows`, 'Number of Cows'];
+                          return [value, name];
+                        }}
                         contentStyle={{
                           background: 'rgba(255, 255, 255, 0.98)',
                           border: '1px solid #e0e0e0',
@@ -746,11 +772,21 @@ const MilkProduction = () => {
                         labelStyle={{ fontWeight: 600, marginBottom: '4px' }}
                       />
                       <Area
+                        yAxisId="left"
                         type="monotone"
                         dataKey="totalQuantity"
                         stroke="#4CAF50"
                         strokeWidth={3}
                         fill="url(#colorMilk)"
+                        animationDuration={1000}
+                      />
+                      <Area
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey="cowCount"
+                        stroke="#3B82F6"
+                        strokeWidth={2}
+                        fill="url(#colorCows)"
                         animationDuration={1000}
                       />
                     </AreaChart>

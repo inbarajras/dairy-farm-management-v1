@@ -2425,82 +2425,196 @@ function createFinancialCsvReport(reportType, data) {
   return new TextEncoder().encode(csvContent);
 }
 
+// Modern PDF Helper Functions
+function addModernHeader(doc, title, subtitle) {
+  // Modern gradient-style header background
+  doc.setFillColor(22, 163, 74); // Green-600
+  doc.rect(0, 0, 210, 45, 'F');
+
+  // Add accent stripe
+  doc.setFillColor(59, 130, 246); // Blue-500
+  doc.rect(0, 0, 210, 3, 'F');
+
+  // Company/Farm Name
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(24);
+  doc.setFont(undefined, 'bold');
+  doc.text('🐄 Dairy Farm Management', 15, 18);
+
+  // Report Title
+  doc.setFontSize(16);
+  doc.setFont(undefined, 'normal');
+  doc.text(title, 15, 28);
+
+  // Subtitle (date/period)
+  if (subtitle) {
+    doc.setFontSize(10);
+    doc.setTextColor(240, 253, 244); // Green-50
+    doc.text(subtitle, 15, 36);
+  }
+
+  // Generated date and time on the right
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  doc.setFontSize(9);
+  doc.setTextColor(240, 253, 244);
+  doc.text(`Generated: ${dateStr} at ${timeStr}`, 210 - 15, 36, { align: 'right' });
+
+  // Reset text color
+  doc.setTextColor(0, 0, 0);
+
+  return 52; // Return starting Y position for content
+}
+
+function addSectionHeader(doc, text, y, icon = '📊') {
+  // Section background
+  doc.setFillColor(243, 244, 246); // Gray-100
+  doc.roundedRect(15, y - 5, 180, 12, 2, 2, 'F');
+
+  // Section text
+  doc.setFontSize(14);
+  doc.setFont(undefined, 'bold');
+  doc.setTextColor(31, 41, 55); // Gray-800
+  doc.text(`${icon} ${text}`, 20, y + 3);
+  doc.setFont(undefined, 'normal');
+  doc.setTextColor(0, 0, 0);
+
+  return y + 15;
+}
+
+function addInfoBox(doc, label, value, x, y, width = 85, color = [59, 130, 246]) {
+  // Box background with subtle gradient effect
+  doc.setFillColor(color[0], color[1], color[2], 0.1);
+  doc.roundedRect(x, y, width, 18, 3, 3, 'F');
+
+  // Border
+  doc.setDrawColor(color[0], color[1], color[2]);
+  doc.setLineWidth(0.5);
+  doc.roundedRect(x, y, width, 18, 3, 3, 'S');
+
+  // Label
+  doc.setFontSize(9);
+  doc.setTextColor(107, 114, 128); // Gray-500
+  doc.text(label, x + 4, y + 6);
+
+  // Value
+  doc.setFontSize(12);
+  doc.setFont(undefined, 'bold');
+  doc.setTextColor(color[0], color[1], color[2]);
+  doc.text(value, x + 4, y + 14);
+  doc.setFont(undefined, 'normal');
+  doc.setTextColor(0, 0, 0);
+  doc.setLineWidth(0.2);
+}
+
+function getModernTableStyles(headerColor = [22, 163, 74]) {
+  return {
+    theme: 'grid',
+    headStyles: {
+      fillColor: headerColor,
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 10,
+      halign: 'left',
+      cellPadding: 4
+    },
+    bodyStyles: {
+      fontSize: 9,
+      cellPadding: 3.5,
+      textColor: [31, 41, 55]
+    },
+    alternateRowStyles: {
+      fillColor: [249, 250, 251] // Gray-50
+    },
+    styles: {
+      lineColor: [229, 231, 235], // Gray-200
+      lineWidth: 0.1
+    },
+    margin: { left: 15, right: 15 }
+  };
+}
+
 // Generate PDF report for milk production data
 function createPdfReport(reportType, data) {
   // Create PDF document
   const doc = new jsPDF();
-  
-  // Add title
+
+  // Determine title and subtitle
   let title = '';
+  let subtitle = '';
+  let icon = '📊';
+
   switch (reportType) {
     case 'daily':
-      title = `Daily Production Report - ${formatDateStr(data.date)}`;
+      title = 'Daily Production Report';
+      subtitle = `Date: ${formatDateStr(data.date)}`;
+      icon = '📅';
       break;
     case 'weekly':
-      title = `Weekly Production Report - ${formatDateStr(data.weekStart)} to ${formatDateStr(data.weekEnd)}`;
+      title = 'Weekly Production Report';
+      subtitle = `Period: ${formatDateStr(data.weekStart)} to ${formatDateStr(data.weekEnd)}`;
+      icon = '📈';
       break;
     case 'monthly':
-      title = `Monthly Production Report - ${formatDateStr(data.monthStart)} to ${formatDateStr(data.monthEnd)}`;
+      title = 'Monthly Production Report';
+      subtitle = `Period: ${formatDateStr(data.monthStart)} to ${formatDateStr(data.monthEnd)}`;
+      icon = '📊';
       break;
     case 'quality':
-      title = `Milk Quality Report - ${formatDateStr(data.periodStart)} to ${formatDateStr(data.periodEnd)}`;
+      title = 'Milk Quality Report';
+      subtitle = `Period: ${formatDateStr(data.periodStart)} to ${formatDateStr(data.periodEnd)}`;
+      icon = '⭐';
       break;
     case 'compliance':
-      title = `Compliance Report - ${formatDateStr(data.periodStart)} to ${formatDateStr(data.periodEnd)}`;
+      title = 'Compliance Report';
+      subtitle = `Period: ${formatDateStr(data.periodStart)} to ${formatDateStr(data.periodEnd)}`;
+      icon = '✓';
       break;
     default:
-      title = `Milk Production Report - ${new Date().toLocaleDateString()}`;
+      title = 'Milk Production Report';
+      subtitle = `Generated: ${new Date().toLocaleDateString()}`;
   }
-  
-  // Add title and info
-  doc.setFontSize(20);
-  doc.text(title, 20, 20);
-  doc.setFontSize(12);
-  doc.text(`Generated: ${new Date().toLocaleDateString()}`, 20, 30);
-  doc.line(20, 35, 190, 35);
-  
+
+  // Add modern header
+  let y = addModernHeader(doc, title, subtitle);
+
   // Add content based on report type
-  let y = 45; // Start position for content
-  
   switch (reportType) {
     case 'daily':
-      // Daily summary
-      doc.setFontSize(16);
-      doc.text('Summary', 20, y);
-      y += 10;
-      doc.setFontSize(12);
-      doc.text(`Date: ${formatDateStr(data.date)}`, 20, y); y += 8;
-      doc.text(`Total Milk Production: ${data.totalMilk.toFixed(1)} L`, 20, y); y += 8;
-      doc.text(`Morning Production: ${data.morningMilk.toFixed(1)} L`, 20, y); y += 8;
-      doc.text(`Evening Production: ${data.eveningMilk.toFixed(1)} L`, 20, y); y += 8;
-      doc.text(`Number of Cows: ${data.numberOfCows}`, 20, y); y += 15;
+      // Production Summary Section
+      y = addSectionHeader(doc, 'Production Summary', y, '📊');
+
+      // Info boxes in grid layout
+      addInfoBox(doc, 'Total Production', `${data.totalMilk.toFixed(1)} L`, 15, y, 85, [22, 163, 74]);
+      addInfoBox(doc, 'Number of Cows', `${data.numberOfCows}`, 110, y, 85, [59, 130, 246]);
+      y += 25;
+
+      addInfoBox(doc, 'Morning Shift', `${data.morningMilk.toFixed(1)} L`, 15, y, 85, [249, 115, 22]);
+      addInfoBox(doc, 'Evening Shift', `${data.eveningMilk.toFixed(1)} L`, 110, y, 85, [168, 85, 247]);
+      y += 30;
       
-      // Top producers
-      doc.setFontSize(16);
-      doc.text('Top Producers', 20, y);
-      y += 10;
-      
+      // Top Producers Section
+      y = addSectionHeader(doc, 'Top Producers', y, '🏆');
+
       const topProducersData = data.topProducers.map(cow => [
         cow.name,
         cow.tagNumber,
         `${cow.totalAmount.toFixed(1)} L`
       ]);
-      
+
       autoTable(doc, {
         startY: y,
         head: [['Cow Name', 'Tag Number', 'Total Production']],
         body: topProducersData,
-        theme: 'striped',
-        headStyles: { fillColor: [76, 175, 80] }
+        ...getModernTableStyles([22, 163, 74])
       });
-      
-      y = doc.lastAutoTable.finalY + 15;
-      
-      // Collections
-      doc.setFontSize(16);
-      doc.text('Collection Records', 20, y);
-      y += 10;
-      
+
+      y = doc.lastAutoTable.finalY + 20;
+
+      // Collection Records Section
+      y = addSectionHeader(doc, 'Collection Records', y, '📋');
+
       const collectionsData = data.collections.map(c => [
         formatDateStr(c.date),
         c.shift,
@@ -2509,105 +2623,91 @@ function createPdfReport(reportType, data) {
         `${c.amount.toFixed(1)} L`,
         c.quality
       ]);
-      
+
       autoTable(doc, {
         startY: y,
         head: [['Date', 'Shift', 'Cow', 'Tag', 'Amount', 'Quality']],
         body: collectionsData,
-        theme: 'striped',
-        headStyles: { fillColor: [76, 175, 80] }
+        ...getModernTableStyles([59, 130, 246])
       });
       break;
     
     case 'weekly':
-      // Weekly summary
-      doc.setFontSize(16);
-      doc.text('Weekly Summary', 20, y);
-      y += 10;
-      doc.setFontSize(12);
-      doc.text(`Period: ${formatDateStr(data.weekStart)} to ${formatDateStr(data.weekEnd)}`, 20, y); y += 8;
-      doc.text(`Total Weekly Production: ${data.totalMilk.toFixed(1)} L`, 20, y); y += 8;
-      doc.text(`Average Daily Production: ${data.averageDailyMilk.toFixed(1)} L`, 20, y); y += 15;
-      
-      // Daily breakdown
-      doc.setFontSize(16);
-      doc.text('Daily Breakdown', 20, y);
-      y += 10;
-      
+      // Weekly Summary Section
+      y = addSectionHeader(doc, 'Weekly Summary', y, '📈');
+
+      // Info boxes for key metrics
+      addInfoBox(doc, 'Total Weekly Production', `${data.totalMilk.toFixed(1)} L`, 15, y, 85, [22, 163, 74]);
+      addInfoBox(doc, 'Average Daily Production', `${data.averageDailyMilk.toFixed(1)} L`, 110, y, 85, [59, 130, 246]);
+      y += 30;
+
+      // Daily Breakdown Section
+      y = addSectionHeader(doc, 'Daily Breakdown', y, '📅');
+
       const dailyData = data.dailyBreakdown.map(day => [
         formatDateStr(day.date),
         `${day.morningAmount.toFixed(1)} L`,
         `${day.eveningAmount.toFixed(1)} L`,
         `${day.totalAmount.toFixed(1)} L`
       ]);
-      
+
       autoTable(doc, {
         startY: y,
         head: [['Date', 'Morning', 'Evening', 'Total']],
         body: dailyData,
-        theme: 'striped',
-        headStyles: { fillColor: [76, 175, 80] }
+        ...getModernTableStyles([22, 163, 74])
       });
-      
-      y = doc.lastAutoTable.finalY + 15;
-      
-      // Top producers
-      doc.setFontSize(16);
-      doc.text('Top Producers', 20, y);
-      y += 10;
-      
+
+      y = doc.lastAutoTable.finalY + 20;
+
+      // Top Producers Section
+      y = addSectionHeader(doc, 'Top Producers', y, '🏆');
+
       const weeklyTopProducers = data.topProducers.map(cow => [
         cow.name,
         cow.tagNumber,
         `${cow.totalAmount.toFixed(1)} L`
       ]);
-      
+
       autoTable(doc, {
         startY: y,
         head: [['Cow Name', 'Tag Number', 'Total Production']],
         body: weeklyTopProducers,
-        theme: 'striped',
-        headStyles: { fillColor: [76, 175, 80] }
+        ...getModernTableStyles([22, 163, 74])
       });
       break;
       
     case 'monthly':
-      // Monthly report
-      doc.setFontSize(16);
-      doc.text('Monthly Production Analysis', 20, y);
-      y += 10;
-      doc.setFontSize(12);
-      doc.text(`Period: ${formatDateStr(data.monthStart)} to ${formatDateStr(data.monthEnd)}`, 20, y); y += 8;
-      doc.text(`Total Monthly Production: ${data.totalMilk.toFixed(1)} L`, 20, y); y += 8;
-      doc.text(`Average Daily Production: ${data.averageDailyMilk.toFixed(1)} L`, 20, y); y += 15;
-      
-      // Weekly breakdown
-      doc.setFontSize(16);
-      doc.text('Weekly Breakdown', 20, y);
-      y += 10;
-      
+      // Monthly Production Analysis Section
+      y = addSectionHeader(doc, 'Monthly Production Analysis', y, '📊');
+
+      // Info boxes for key metrics
+      addInfoBox(doc, 'Total Monthly Production', `${data.totalMilk.toFixed(1)} L`, 15, y, 85, [22, 163, 74]);
+      addInfoBox(doc, 'Average Daily Production', `${data.averageDailyMilk.toFixed(1)} L`, 110, y, 85, [59, 130, 246]);
+      y += 30;
+
+      // Weekly Breakdown Section
+      y = addSectionHeader(doc, 'Weekly Breakdown', y, '📈');
+
       const weeklyData = data.weeklyBreakdown.map(week => [
         `Week ${week.week} (${week.year})`,
         formatDateStr(week.startDate),
         formatDateStr(week.endDate),
         `${week.totalAmount.toFixed(1)} L`
       ]);
-      
+
       autoTable(doc, {
         startY: y,
         head: [['Week', 'Start Date', 'End Date', 'Total Production']],
         body: weeklyData,
-        theme: 'striped',
-        headStyles: { fillColor: [76, 175, 80] }
+        ...getModernTableStyles([22, 163, 74])
       });
-      
-      y = doc.lastAutoTable.finalY + 15;
-      
-      // Top performing cows
-      doc.setFontSize(16);
-      doc.text('Top Performing Cows', 20, y);
-      y += 10;
-      
+
+      y = doc.lastAutoTable.finalY + 20;
+
+      // Top Performing Cows Section
+      y = addSectionHeader(doc, 'Top Performing Cows', y, '🏆');
+
       const topCows = data.cowPerformance.slice(0, 10).map(cow => [
         cow.name,
         cow.tagNumber,
@@ -2615,51 +2715,45 @@ function createPdfReport(reportType, data) {
         `${cow.avgPerDay.toFixed(1)} L`,
         cow.collectionDays
       ]);
-      
+
       autoTable(doc, {
         startY: y,
         head: [['Cow Name', 'Tag Number', 'Total Production', 'Avg Per Day', 'Days Collected']],
         body: topCows,
-        theme: 'striped',
-        headStyles: { fillColor: [76, 175, 80] }
+        ...getModernTableStyles([22, 163, 74])
       });
       break;
     
     case 'quality':
-      // Quality report
-      doc.setFontSize(16);
-      doc.text('Milk Quality Analysis', 20, y);
-      y += 10;
-      doc.setFontSize(12);
-      doc.text(`Period: ${formatDateStr(data.periodStart)} to ${formatDateStr(data.periodEnd)}`, 20, y); y += 8;
-      doc.text(`Total Samples: ${data.sampleCount}`, 20, y); y += 15;
-      
-      // Quality averages
-      doc.setFontSize(16);
-      doc.text('Quality Parameter Averages', 20, y);
-      y += 10;
-      
+      // Milk Quality Analysis Section
+      y = addSectionHeader(doc, 'Milk Quality Analysis', y, '⭐');
+
+      // Info boxes for key metrics
+      addInfoBox(doc, 'Total Samples', `${data.sampleCount}`, 15, y, 85, [249, 115, 22]);
+      addInfoBox(doc, 'Overall Compliance', `${data.compliance.overall.toFixed(1)}%`, 110, y, 85, [22, 163, 74]);
+      y += 30;
+
+      // Quality Parameter Averages Section
+      y = addSectionHeader(doc, 'Quality Parameter Averages', y, '📊');
+
       const qualityData = [
         ['Fat Content', `${data.qualityAverages.fat.toFixed(2)}%`, `${data.standards.fat.min}% - ${data.standards.fat.max}%`, `${data.compliance.fat.toFixed(1)}%`],
         ['SNF Content', `${data.qualityAverages.snf.toFixed(2)}%`, `${data.standards.snf.min}% - ${data.standards.snf.max}%`, `${data.compliance.snf.toFixed(1)}%`],
         ['Overall Compliance', '', '', `${data.compliance.overall.toFixed(1)}%`]
       ];
-      
+
       autoTable(doc, {
         startY: y,
         head: [['Parameter', 'Average', 'Standard Range', 'Compliance Rate']],
         body: qualityData,
-        theme: 'striped',
-        headStyles: { fillColor: [76, 175, 80] }
+        ...getModernTableStyles([249, 115, 22])
       });
-      
-      y = doc.lastAutoTable.finalY + 15;
-      
-      // Daily trends
-      doc.setFontSize(16);
-      doc.text('Daily Quality Trends', 20, y);
-      y += 10;
-      
+
+      y = doc.lastAutoTable.finalY + 20;
+
+      // Daily Quality Trends Section
+      y = addSectionHeader(doc, 'Daily Quality Trends', y, '📈');
+
       // Show only first 10 days to avoid overcrowding
       const trendsData = data.dailyTrends.slice(0, 10).map(day => [
         formatDateStr(day.date),
@@ -2671,61 +2765,56 @@ function createPdfReport(reportType, data) {
         startY: y,
         head: [['Date', 'Fat %', 'SNF %']],
         body: trendsData,
-        theme: 'striped',
-        headStyles: { fillColor: [76, 175, 80] }
+        ...getModernTableStyles([249, 115, 22])
       });
       break;
       
     case 'compliance':
-      // Compliance report
-      doc.setFontSize(16);
-      doc.text('Milk Quality Compliance Report', 20, y);
-      y += 10;
-      doc.setFontSize(12);
-      doc.text(`Period: ${formatDateStr(data.periodStart)} to ${formatDateStr(data.periodEnd)}`, 20, y); y += 8;
-      doc.text(`Total Samples: ${data.compliance.totalSamples}`, 20, y); y += 8;
-      doc.text(`Compliant Samples: ${data.compliance.compliantSamples} (${data.compliance.complianceRate.toFixed(1)}%)`, 20, y); y += 8;
-      doc.text(`Non-Compliant Samples: ${data.compliance.violationCount}`, 20, y); y += 15;
-      
-      // Compliance summary
-      doc.setFontSize(16);
-      doc.text('Compliance by Parameter', 20, y);
-      y += 10;
-      
+      // Milk Quality Compliance Report Section
+      y = addSectionHeader(doc, 'Milk Quality Compliance Report', y, '✓');
+
+      // Info boxes for key metrics
+      addInfoBox(doc, 'Total Samples', `${data.compliance.totalSamples}`, 15, y, 85, [168, 85, 247]);
+      addInfoBox(doc, 'Compliant Samples', `${data.compliance.compliantSamples}`, 110, y, 85, [22, 163, 74]);
+      y += 25;
+
+      addInfoBox(doc, 'Compliance Rate', `${data.compliance.complianceRate.toFixed(1)}%`, 15, y, 85, [59, 130, 246]);
+      addInfoBox(doc, 'Non-Compliant', `${data.compliance.violationCount}`, 110, y, 85, [239, 68, 68]);
+      y += 30;
+
+      // Compliance by Parameter Section
+      y = addSectionHeader(doc, 'Compliance by Parameter', y, '📊');
+
       const complianceData = [
         ['Fat Content', `${data.compliance.fat.toFixed(1)}%`],
         ['SNF Content', `${data.compliance.snf.toFixed(1)}%`],
         ['Overall', `${data.compliance.overall.toFixed(1)}%`]
       ];
-      
+
       autoTable(doc, {
         startY: y,
         head: [['Parameter', 'Compliance Rate']],
         body: complianceData,
-        theme: 'striped',
-        headStyles: { fillColor: [76, 175, 80] }
+        ...getModernTableStyles([168, 85, 247])
       });
-      
-      y = doc.lastAutoTable.finalY + 15;
-      
-      // Top violations
+
+      y = doc.lastAutoTable.finalY + 20;
+
+      // Compliance Violations Section
       if (data.compliance.violations && data.compliance.violations.length > 0) {
-        doc.setFontSize(16);
-        doc.text('Compliance Violations', 20, y);
-        y += 10;
-        
+        y = addSectionHeader(doc, 'Compliance Violations', y, '⚠️');
+
         const violationsData = data.compliance.violations.slice(0, 10).map(v => [
           formatDateStr(v.date),
           v.violationCount,
           v.violations.join("; ")
         ]);
-        
+
         autoTable(doc, {
           startY: y,
           head: [['Date', 'Violations', 'Details']],
           body: violationsData,
-          theme: 'striped',
-          headStyles: { fillColor: [76, 175, 80] }
+          ...getModernTableStyles([168, 85, 247])
         });
       }
       break;

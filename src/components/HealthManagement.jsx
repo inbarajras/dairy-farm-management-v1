@@ -349,16 +349,29 @@ const handleDeleteEvent = async () => {
   }
   
   return (
-    <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30 overflow-y-auto">
+    <div className="h-full bg-gradient-to-br from-blue-50/50 via-white to-green-50/40 overflow-y-auto">
       <div className="px-4 sm:px-6 py-4 sm:py-6 max-w-[1600px] mx-auto">
-        <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
-          <h1 className="text-xl sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Health Management</h1>
-          <button 
-            onClick={toggleAddEvent}
-            className="flex items-center px-4 py-2 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-lg hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 shadow-sm transition-all duration-300">
-            <Plus size={20} className="mr-2" />
-            Record Health Event
-          </button>
+        {/* Modern Header with Icon */}
+        <div className="mb-6">
+          <div className="flex flex-wrap justify-between items-center gap-4">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-gradient-to-br from-green-500 via-blue-500 to-purple-500 rounded-2xl shadow-lg">
+                <Heart size={28} className="text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-600 via-blue-600 to-purple-600">
+                  Health Management
+                </h1>
+                <p className="text-sm text-gray-500 mt-0.5">Monitor and track animal health status</p>
+              </div>
+            </div>
+            <button
+              onClick={toggleAddEvent}
+              className="group flex items-center px-5 py-2.5 bg-gradient-to-r from-green-500 via-blue-500 to-purple-500 text-white rounded-xl hover:shadow-lg hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-md transition-all duration-300">
+              <Plus size={20} className="mr-2 group-hover:rotate-90 transition-transform duration-300" />
+              Record Health Event
+            </button>
+          </div>
         </div>
         
         {/* Updated tab navigation with consistent styling */}
@@ -420,249 +433,375 @@ const handleDeleteEvent = async () => {
         {/* Dashboard Tab */}
         {activeTab === 'dashboard' && (
           <div>
-            {/* Updated KPI cards with gradient styling */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 mb-8">
-              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
-                <div className="h-2 bg-gradient-to-r from-red-500 to-red-600"></div>
-                <div className="p-5">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-sm font-medium text-gray-500">Active Cases</p>
-                      <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-red-600 to-red-500 mt-1 mb-3">{healthData.healthStats.activeCases}</p>
+            {/* Enhanced KPI cards with modern gradients and animations */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+              {/* Active Cases Card */}
+              <div className="group bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-2xl transition-all duration-300 border border-red-200">
+                <div className="h-1.5 bg-gradient-to-r from-red-400 via-pink-500 to-red-600"></div>
+                <div className="p-6 bg-gradient-to-br from-red-50/30 to-white">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <AlertCircle size={16} className="text-red-500" />
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Active Cases</p>
+                      </div>
+                      <p className="text-3xl font-bold text-red-600 mt-2">
+                        {healthData.healthStats.activeCases}
+                      </p>
                     </div>
-                    <div className="p-2.5 rounded-xl bg-gradient-to-r from-red-500 to-red-600">
-                      <AlertCircle size={20} className="text-white" />
+                    <div className="p-3 rounded-xl bg-gradient-to-br from-red-500 via-pink-500 to-red-600 shadow-lg group-hover:scale-110 transition-transform duration-300">
+                      <AlertCircle size={24} className="text-white" />
                     </div>
                   </div>
-                  <div className="mt-2 text-xs text-red-600 flex items-center">
-                    <span>{healthData.healthStats.activeCases > 0 ? 'Requires attention' : 'No active cases'}</span>
+                  <div className="flex items-center gap-2 pt-3 border-t border-red-100">
+                    <div className={`w-2 h-2 rounded-full ${healthData.healthStats.activeCases > 0 ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`}></div>
+                    <span className={`text-xs font-medium ${healthData.healthStats.activeCases > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {healthData.healthStats.activeCases > 0 ? '⚠️ Requires attention' : '✓ All clear'}
+                    </span>
                   </div>
                 </div>
               </div>
-              
-              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
-                <div className="h-2 bg-gradient-to-r from-green-500 to-green-600"></div>
-                <div className="p-5">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-sm font-medium text-gray-500">Scheduled Checkups</p>
-                      <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-green-500 mt-1 mb-3">{healthData.healthStats.scheduledCheckups}</p>
+
+              {/* Scheduled Checkups Card */}
+              <div className="group bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-2xl transition-all duration-300 border border-green-200">
+                <div className="h-1.5 bg-gradient-to-r from-green-400 via-emerald-500 to-green-600"></div>
+                <div className="p-6 bg-gradient-to-br from-green-50/30 to-white">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Calendar size={16} className="text-green-500" />
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Scheduled Checkups</p>
+                      </div>
+                      <p className="text-3xl font-bold text-green-600 mt-2">
+                        {healthData.healthStats.scheduledCheckups}
+                      </p>
                     </div>
-                    <div className="p-2.5 rounded-xl bg-gradient-to-r from-green-500 to-green-600">
-                      <Calendar size={20} className="text-white" />
+                    <div className="p-3 rounded-xl bg-gradient-to-br from-green-500 via-emerald-500 to-green-600 shadow-lg group-hover:scale-110 transition-transform duration-300">
+                      <Calendar size={24} className="text-white" />
                     </div>
                   </div>
-                  <div className="mt-2 text-xs text-green-600 flex items-center">
-                    <span>
-                      {dashboardStats.upcomingTasks && dashboardStats.upcomingTasks.length > 0 
-                        ? `Next: ${dashboardStats.upcomingTasks[0]?.date || 'Coming soon'}` 
+                  <div className="flex items-center gap-2 pt-3 border-t border-green-100">
+                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                    <span className="text-xs font-medium text-green-600 truncate">
+                      {dashboardStats.upcomingTasks && dashboardStats.upcomingTasks.length > 0
+                        ? `📅 Next: ${dashboardStats.upcomingTasks[0]?.date || 'Coming soon'}`
                         : 'No upcoming checkups'}
                     </span>
                   </div>
                 </div>
               </div>
-              
-              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
-                <div className="h-2 bg-gradient-to-r from-yellow-500 to-yellow-400"></div>
-                <div className="p-5">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-sm font-medium text-gray-500">Treated This Month</p>
-                      <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-yellow-600 to-yellow-500 mt-1 mb-3">{healthData.healthStats.treatedLastMonth}</p>
+
+              {/* Treated This Month Card */}
+              <div className="group bg-yellow-50 rounded-2xl shadow-lg overflow-hidden hover:shadow-2xl transition-all duration-300 border border-yellow-200">
+                <div className="h-1.5 bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-600"></div>
+                <div className="p-6">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Thermometer size={16} className="text-yellow-600" />
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Treated This Month</p>
+                      </div>
+                      <p className="text-3xl font-bold text-yellow-700 mt-2">
+                        {healthData.healthStats.treatedLastMonth}
+                      </p>
                     </div>
-                    <div className="p-2.5 rounded-xl bg-gradient-to-r from-yellow-500 to-yellow-400">
-                      <Thermometer size={20} className="text-white" />
+                    <div className="p-3 rounded-xl bg-gradient-to-br from-yellow-500 via-yellow-600 to-yellow-700 shadow-lg group-hover:scale-110 transition-transform duration-300">
+                      <Thermometer size={24} className="text-white" />
                     </div>
                   </div>
-                  <div className="mt-2 text-xs text-yellow-600 flex items-center">
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round" 
-                        strokeWidth={2} 
-                        d={dashboardStats.healthTrend.direction === 'decrease' 
-                            ? "M5 10l7-7m0 0l7 7m-7-7v18" 
-                            : "M19 14l-7 7m0 0l-7-7m7 7V3"}
+                  <div className="flex items-center gap-2 pt-3 border-t border-yellow-100">
+                    <svg className="w-4 h-4 text-yellow-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d={dashboardStats.healthTrend.direction === 'decrease'
+                            ? "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                            : "M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"}
                       />
                     </svg>
-                    <span>
-                      {dashboardStats.healthTrend.percentage > 0 
-                        ? `${dashboardStats.healthTrend.percentage}% ${dashboardStats.healthTrend.direction} from last month` 
-                        : 'No change from last month'}
+                    <span className="text-xs font-medium text-yellow-700">
+                      {dashboardStats.healthTrend.percentage > 0
+                        ? `${dashboardStats.healthTrend.direction === 'decrease' ? '↓' : '↑'} ${dashboardStats.healthTrend.percentage}% vs last month`
+                        : '→ No change'}
                     </span>
                   </div>
                 </div>
               </div>
-              
-              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
-                <div className="h-2 bg-gradient-to-r from-blue-500 to-blue-600"></div>
-                <div className="p-5">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-sm font-medium text-gray-500">Vaccinations YTD</p>
-                      <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-blue-500 mt-1 mb-3">{healthData.healthStats.totalVaccinations}</p>
+
+              {/* Vaccinations YTD Card */}
+              <div className="group bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-2xl transition-all duration-300 border border-blue-200">
+                <div className="h-1.5 bg-gradient-to-r from-blue-400 via-indigo-500 to-blue-600"></div>
+                <div className="p-6 bg-gradient-to-br from-blue-50/30 to-white">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Heart size={16} className="text-blue-500" />
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Vaccinations YTD</p>
+                      </div>
+                      <p className="text-3xl font-bold text-blue-600 mt-2">
+                        {healthData.healthStats.totalVaccinations}
+                      </p>
                     </div>
-                    <div className="p-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600">
-                      <Heart size={20} className="text-white" />
+                    <div className="p-3 rounded-xl bg-gradient-to-br from-blue-500 via-indigo-500 to-blue-600 shadow-lg group-hover:scale-110 transition-transform duration-300">
+                      <Heart size={24} className="text-white" />
                     </div>
                   </div>
-                  <div className="mt-2 text-xs text-blue-600 flex items-center">
-                    <span>Herd immunity: {healthData.healthStats.totalVaccinations > 50 ? 'Good' : 'Needs attention'}</span>
+                  <div className="flex items-center gap-2 pt-3 border-t border-blue-100">
+                    <div className={`w-2 h-2 rounded-full ${healthData.healthStats.totalVaccinations > 50 ? 'bg-green-500' : 'bg-amber-500 animate-pulse'}`}></div>
+                    <span className={`text-xs font-medium ${healthData.healthStats.totalVaccinations > 50 ? 'text-green-600' : 'text-amber-600'}`}>
+                      {healthData.healthStats.totalVaccinations > 50 ? '✓ Good coverage' : '⚠️ Needs attention'}
+                    </span>
                   </div>
                 </div>
               </div>
             </div>
             
-            {/* Charts section with consistent card styling */}
+            {/* Enhanced Charts section with modern styling */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
-                <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+              {/* Treatment History Chart */}
+              <div className="group bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-2xl transition-all duration-300 border border-orange-100">
+                <div className="h-1.5 bg-gradient-to-r from-amber-400 via-orange-500 to-green-500"></div>
                 <div className="p-6">
-                  <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">Treatment History</h2>
-                  <div className="h-60 sm:h-72">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={healthData.healthStats.monthlyData}
-                        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                        barSize={25}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="month" />
-                        <YAxis />
-                        <Tooltip 
-                          cursor={{ fill: 'rgba(0, 0, 0, 0.05)' }}
-                          contentStyle={{ border: '1px solid #e2e8f0', borderRadius: '0.375rem' }}
-                        />
-                        <Legend />
-                        <Bar dataKey="treatments" name="Treatments" fill="#FFA000" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="checkups" name="Checkups" fill="#2E7D32" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="p-2 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 shadow-md">
+                      <Clipboard size={20} className="text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-orange-700">
+                        Treatment History
+                      </h2>
+                      <p className="text-xs text-gray-500">Monthly treatments and checkups overview</p>
+                    </div>
                   </div>
+                    <div className="h-64 sm:h-72">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={healthData.healthStats.monthlyData}
+                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                          barSize={28}
+                        >
+                          <defs>
+                            <linearGradient id="colorTreatments" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#FB8C00" stopOpacity={0.9}/>
+                              <stop offset="95%" stopColor="#FFA726" stopOpacity={0.7}/>
+                            </linearGradient>
+                            <linearGradient id="colorCheckups" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#388E3C" stopOpacity={0.9}/>
+                              <stop offset="95%" stopColor="#66BB6A" stopOpacity={0.7}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                          <XAxis
+                            dataKey="month"
+                            tick={{ fill: '#6B7280', fontSize: 12 }}
+                            axisLine={{ stroke: '#E5E7EB' }}
+                          />
+                          <YAxis
+                            tick={{ fill: '#6B7280', fontSize: 12 }}
+                            axisLine={{ stroke: '#E5E7EB' }}
+                          />
+                          <Tooltip
+                            cursor={{ fill: 'rgba(251, 140, 0, 0.1)' }}
+                            contentStyle={{
+                              border: 'none',
+                              borderRadius: '0.75rem',
+                              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                              background: 'white'
+                            }}
+                          />
+                          <Legend
+                            wrapperStyle={{ paddingTop: '10px' }}
+                            iconType="circle"
+                          />
+                          <Bar dataKey="treatments" name="Treatments" fill="url(#colorTreatments)" radius={[8, 8, 0, 0]} />
+                          <Bar dataKey="checkups" name="Checkups" fill="url(#colorCheckups)" radius={[8, 8, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
                 </div>
               </div>
-              
-              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
-                <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+
+              {/* Common Health Issues Chart */}
+              <div className="group bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-2xl transition-all duration-300 border border-purple-100">
+                <div className="h-1.5 bg-gradient-to-r from-purple-400 via-pink-500 to-red-500"></div>
                 <div className="p-6">
-                  <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 mb-4">Common Health Issues</h2>
-                  <div className="h-72">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={healthIssuesData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={60}
-                          outerRadius={90}
-                          fill="#8884d8"
-                          paddingAngle={2}
-                          dataKey="count"
-                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                          labelLine={false}
-                        >
-                          {healthIssuesData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip 
-                          formatter={(value, name, props) => [`${value} cases`, name]}
-                          contentStyle={{ 
-                            background: 'rgba(255, 255, 255, 0.95)', 
-                            border: '1px solid #e2e8f0', 
-                            borderRadius: '0.375rem',
-                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                          }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="p-2 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 shadow-md">
+                      <AlertTriangle size={20} className="text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-purple-700">
+                        Common Health Issues
+                      </h2>
+                      <p className="text-xs text-gray-500">Distribution of health concerns</p>
+                    </div>
                   </div>
+                    <div className="h-72">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <defs>
+                            {COLORS.map((color, index) => (
+                              <linearGradient key={`gradient-${index}`} id={`pieGradient${index}`} x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor={color} stopOpacity={0.9}/>
+                                <stop offset="100%" stopColor={color} stopOpacity={0.7}/>
+                              </linearGradient>
+                            ))}
+                          </defs>
+                          <Pie
+                            data={healthIssuesData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={65}
+                            outerRadius={95}
+                            paddingAngle={3}
+                            dataKey="count"
+                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                            labelLine={false}
+                          >
+                            {healthIssuesData.map((entry, index) => (
+                              <Cell
+                                key={`cell-${index}`}
+                                fill={`url(#pieGradient${index % COLORS.length})`}
+                                stroke="white"
+                                strokeWidth={2}
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            formatter={(value, name, props) => [`${value} cases`, name]}
+                            contentStyle={{
+                              background: 'white',
+                              border: 'none',
+                              borderRadius: '0.75rem',
+                              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                            }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
                 </div>
               </div>
             </div>
             
-            {/* Recent activities cards */}
+            {/* Enhanced Recent Activities Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
-                <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-                <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                  <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Recent Health Events</h2>
-                  <button
-                    onClick={() => setActiveTab('events')}
-                    className="text-sm text-green-600 hover:text-green-500 font-medium"
-                  >
-                    View All
-                  </button>
-                </div>
-                <div className="divide-y divide-gray-200">
-                  {healthData.healthEvents.slice(0, 3).map(event => (
-                    <div key={event.id} className="px-6 py-4 hover:bg-gray-50 transition-colors duration-200">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="flex items-center">
-                            <span className="text-sm font-medium text-gray-800 mr-2">{event.cowName} ({event.cowTag})</span>
-                            <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColors[event.status]}`}>
-                              {event.status}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-600 mt-1">{event.eventType} - {event.description}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm text-gray-600">{formatDate(event.eventDate)}</p>
-                          <p className="text-xs text-gray-500 mt-1">By: {event.performedBy}</p>
-                        </div>
+              {/* Recent Health Events Card */}
+              <div className="group bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-2xl transition-all duration-300 border border-blue-100">
+                <div className="h-1.5 bg-gradient-to-r from-blue-400 via-cyan-500 to-blue-600"></div>
+                <div className="px-6 py-4 border-b border-blue-100 bg-blue-50/50">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 shadow-md">
+                        <Clipboard size={18} className="text-white" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-bold text-blue-700">
+                          Recent Health Events
+                        </h2>
+                        <p className="text-xs text-gray-500">Latest health records</p>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
-                <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-                <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                  <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Upcoming Vaccinations</h2>
-                  <button
-                    onClick={() => setActiveTab('vaccinations')}
-                    className="text-sm text-green-600 hover:text-green-500 font-medium"
-                  >
-                    View All
-                  </button>
-                </div>
-                <div className="divide-y divide-gray-200">
-                  {healthData.vaccinationSchedule.map(vac => (
-                    <div key={vac.id} className="px-6 py-4 hover:bg-gray-50 transition-colors duration-200">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="flex items-center">
-                            <span className="text-sm font-medium text-gray-800 mr-2">{vac.cowName} ({vac.cowTag})</span>
-                            <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColors[getStatusWithDate(vac.dueDate)]}`}>
-                              {getStatusWithDate(vac.dueDate)}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-600 mt-1">{vac.vaccinationType}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm text-gray-600">{formatDate(vac.dueDate)}</p>
-                          <p className="text-xs text-gray-500 mt-1">Assigned to: {vac.assignedTo}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  <div className="px-6 py-4">
-                    <button 
-                      className="w-full py-2 px-4 border border-dashed border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:border-gray-400 hover:bg-gray-50 transition-all duration-200 flex items-center justify-center"
-                      onClick={() => setActiveTab('vaccinations')}
+                    <button
+                      onClick={() => setActiveTab('events')}
+                      className="group/btn flex items-center gap-1 px-3 py-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700 bg-white hover:bg-blue-50 rounded-lg transition-all duration-200 border border-blue-200"
                     >
-                      <Plus size={16} className="mr-2" />
-                      Schedule New Vaccination
+                      View All
+                      <ChevronRight size={16} className="group-hover/btn:translate-x-0.5 transition-transform" />
                     </button>
                   </div>
                 </div>
+                  <div className="divide-y divide-blue-50">
+                    {healthData.healthEvents.slice(0, 3).map(event => (
+                      <div key={event.id} className="px-6 py-4 hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-transparent transition-all duration-200 group/item">
+                        <div className="flex justify-between items-start gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <span className="text-sm font-semibold text-gray-800 truncate">{event.cowName}</span>
+                                <span className="text-xs text-gray-500 flex-shrink-0">({event.cowTag})</span>
+                              </div>
+                              <span className={`px-2.5 py-1 inline-flex text-xs font-semibold rounded-full flex-shrink-0 ${statusColors[event.status]}`}>
+                                {event.status}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600 line-clamp-2">
+                              <span className="font-medium text-blue-600">{event.eventType}</span> - {event.description}
+                            </p>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-xs font-medium text-gray-700">{formatDate(event.eventDate)}</p>
+                            <p className="text-xs text-gray-500 mt-1">By: {event.performedBy}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+              </div>
+
+              {/* Upcoming Vaccinations Card */}
+              <div className="group bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-2xl transition-all duration-300 border border-green-100">
+                <div className="h-1.5 bg-gradient-to-r from-green-400 via-emerald-500 to-green-600"></div>
+                <div className="px-6 py-4 border-b border-green-100 bg-green-50/50">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-gradient-to-br from-green-500 to-emerald-500 shadow-md">
+                        <Calendar size={18} className="text-white" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-bold text-green-700">
+                          Upcoming Vaccinations
+                        </h2>
+                        <p className="text-xs text-gray-500">Scheduled immunizations</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab('vaccinations')}
+                      className="group/btn flex items-center gap-1 px-3 py-1.5 text-sm font-semibold text-green-600 hover:text-green-700 bg-white hover:bg-green-50 rounded-lg transition-all duration-200 border border-green-200"
+                    >
+                      View All
+                      <ChevronRight size={16} className="group-hover/btn:translate-x-0.5 transition-transform" />
+                    </button>
+                  </div>
+                </div>
+                  <div className="divide-y divide-green-50">
+                    {healthData.vaccinationSchedule.slice(0, 3).map(vac => (
+                      <div key={vac.id} className="px-6 py-4 hover:bg-gradient-to-r hover:from-green-50/50 hover:to-transparent transition-all duration-200 group/item">
+                        <div className="flex justify-between items-start gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <span className="text-sm font-semibold text-gray-800 truncate">{vac.cowName}</span>
+                                <span className="text-xs text-gray-500 flex-shrink-0">({vac.cowTag})</span>
+                              </div>
+                              <span className={`px-2.5 py-1 inline-flex text-xs font-semibold rounded-full flex-shrink-0 ${statusColors[getStatusWithDate(vac.dueDate)]}`}>
+                                {getStatusWithDate(vac.dueDate)}
+                              </span>
+                            </div>
+                            <p className="text-sm font-medium text-green-600">{vac.vaccinationType}</p>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-xs font-medium text-gray-700">{formatDate(vac.dueDate)}</p>
+                            <p className="text-xs text-gray-500 mt-1">Assigned: {vac.assignedTo}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="px-6 py-4">
+                      <button
+                        className="group/add w-full py-2.5 px-4 border-2 border-dashed border-green-200 hover:border-green-400 rounded-xl text-sm font-semibold text-green-600 hover:text-green-700 hover:bg-green-50/50 transition-all duration-200 flex items-center justify-center gap-2"
+                        onClick={() => setActiveTab('vaccinations')}
+                      >
+                        <Plus size={18} className="group-hover/add:rotate-90 transition-transform duration-300" />
+                        Schedule New Vaccination
+                      </button>
+                    </div>
+                  </div>
               </div>
             </div>
           </div>
         )}
-        
+
         {/* Health Events Tab */}
         {activeTab === 'events' && (
           <div>

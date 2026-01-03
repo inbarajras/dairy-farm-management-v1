@@ -174,12 +174,20 @@ export const updateItem = async (itemId, itemData) => {
 // Delete inventory item
 export const deleteItem = async (itemId) => {
   try {
-    const { error } = await supabase
+    console.log('Attempting to delete item:', itemId);
+
+    const { data, error } = await supabase
       .from('inventory_items')
       .delete()
-      .eq('id', itemId);
-    
-    if (error) throw error;
+      .eq('id', itemId)
+      .select();
+
+    if (error) {
+      console.error('Supabase delete error:', error);
+      throw error;
+    }
+
+    console.log('Delete successful, deleted data:', data);
     return true;
   } catch (error) {
     console.error(`Error deleting item ${itemId}:`, error);
@@ -267,21 +275,26 @@ export const updateOrderStatus = async (orderId, status) => {
   try {
     const { data, error } = await supabase
       .from('purchase_orders')
-      .update({ 
+      .update({
         status: status,
         actual_delivery: status === 'Delivered' ? new Date().toISOString() : null
       })
       .eq('id', orderId)
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     // If status is 'Delivered', update inventory
     if (status === 'Delivered') {
       await updateInventoryFromOrder(orderId);
     }
-    
+
+    // If status is 'Completed', create expense entry in Finance Management
+    if (status === 'Completed') {
+      await createExpenseFromOrder(orderId, data);
+    }
+
     return data;
   } catch (error) {
     console.error(`Error updating order ${orderId} status:`, error);
@@ -350,50 +363,100 @@ const updateInventoryFromOrder = async (orderId) => {
   }
 };
 
+// Create expense entry when order is completed
+const createExpenseFromOrder = async (orderId, orderData) => {
+  try {
+    // Map department to expense category
+    const categoryMapping = {
+      'feed': 'Feed',
+      'milking': 'Utilities',
+      'equipment': 'Maintenance',
+      'health': 'Veterinary'
+    };
+
+    const category = categoryMapping[orderData.department] || 'Other';
+
+    // Create expense data
+    const expenseData = {
+      date: orderData.actual_delivery || orderData.order_date || new Date().toISOString().split('T')[0],
+      category: category,
+      amount: parseFloat(orderData.total_amount || 0),
+      vendor: orderData.supplier_name,
+      description: `Purchase Order ${orderData.order_number} - ${orderData.department} department`,
+      status: 'Paid', // Mark as paid since order is completed
+      payment_method: 'Bank Transfer', // Default payment method for purchase orders
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    // Insert into expenses table
+    const { data, error } = await supabase
+      .from('expenses')
+      .insert([expenseData])
+      .select();
+
+    if (error) throw error;
+
+    console.log(`Expense created for order ${orderId}:`, data[0]);
+    return data[0];
+  } catch (error) {
+    console.error(`Error creating expense from order ${orderId}:`, error);
+    // Don't throw - we don't want to fail the order completion if expense creation fails
+    // Just log the error
+    return null;
+  }
+};
+
 // Adjust stock quantity
 export const adjustStock = async (itemId, adjustment) => {
   try {
     // Get current stock
     const { data: inventoryItem, error: fetchError } = await supabase
       .from('inventory_items')
-      .select('current_stock')
+      .select('current_stock, name')
       .eq('id', itemId)
       .single();
-    
+
     if (fetchError) throw fetchError;
-    
+
     const previousStock = inventoryItem.current_stock;
-    const newStock = previousStock + parseFloat(adjustment);
-    
+    const adjustmentValue = parseFloat(adjustment);
+    const newStock = previousStock + adjustmentValue;
+
+    // Validate that stock won't go negative
+    if (newStock < 0) {
+      throw new Error(`Cannot reduce stock below zero for ${inventoryItem.name}. Current stock: ${previousStock}, Adjustment: ${adjustmentValue}`);
+    }
+
     // Update inventory item
     const { data, error: updateError } = await supabase
       .from('inventory_items')
-      .update({ 
+      .update({
         current_stock: newStock,
         last_updated: new Date().toISOString()
       })
       .eq('id', itemId)
       .select()
       .single();
-    
+
     if (updateError) throw updateError;
-    
+
     // Record stock adjustment
-    const adjustmentType = adjustment > 0 ? 'Addition' : 'Reduction';
+    const adjustmentType = adjustmentValue > 0 ? 'Addition' : 'Reduction';
     const { error: adjustmentError } = await supabase
       .from('stock_adjustments')
       .insert({
         item_id: itemId,
         adjustment_type: adjustmentType,
-        quantity: Math.abs(adjustment),
+        quantity: Math.abs(adjustmentValue),
         reason: 'Manual adjustment',
         previous_stock: previousStock,
         new_stock: newStock,
         adjustment_date: new Date().toISOString()
       });
-    
+
     if (adjustmentError) throw adjustmentError;
-    
+
     return data;
   } catch (error) {
     console.error(`Error adjusting stock for item ${itemId}:`, error);
@@ -476,6 +539,316 @@ const generateOrderNumber = () => {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-  
+
   return `PO-${year}${month}${day}-${random}`;
+};
+
+// Record inventory usage
+export const recordInventoryUsage = async (usageData) => {
+  try {
+    // First, check if sufficient stock is available
+    const { data: item, error: itemError } = await supabase
+      .from('inventory_items')
+      .select('current_stock, name')
+      .eq('id', usageData.item_id)
+      .single();
+
+    if (itemError) throw itemError;
+
+    const quantityUsed = parseFloat(usageData.quantity_used);
+    const newStock = item.current_stock - quantityUsed;
+
+    // Validate stock availability
+    if (newStock < 0) {
+      throw new Error(`Insufficient stock for ${item.name}. Available: ${item.current_stock}, Requested: ${quantityUsed}`);
+    }
+
+    // Record usage
+    const { data, error } = await supabase
+      .from('inventory_usage')
+      .insert([{
+        item_id: usageData.item_id,
+        quantity_used: quantityUsed,
+        usage_date: usageData.usage_date || new Date().toISOString().split('T')[0],
+        used_by: usageData.used_by || 'System',
+        purpose: usageData.purpose || 'Daily operations',
+        department: usageData.department,
+        notes: usageData.notes || null,
+        created_at: new Date().toISOString()
+      }])
+      .select();
+
+    if (error) throw error;
+
+    // Update inventory item stock
+    const { error: updateError } = await supabase
+      .from('inventory_items')
+      .update({
+        current_stock: newStock,
+        last_updated: new Date().toISOString()
+      })
+      .eq('id', usageData.item_id);
+
+    if (updateError) throw updateError;
+
+    return data[0];
+  } catch (error) {
+    console.error('Error recording inventory usage:', error);
+    throw error;
+  }
+};
+
+// Fetch inventory usage records
+export const fetchInventoryUsage = async (filters = {}) => {
+  try {
+    let query = supabase
+      .from('inventory_usage')
+      .select(`
+        *,
+        inventory_items:item_id (
+          id,
+          name,
+          unit,
+          department,
+          category
+        )
+      `)
+      .order('usage_date', { ascending: false });
+
+    if (filters.startDate) {
+      query = query.gte('usage_date', filters.startDate);
+    }
+
+    if (filters.endDate) {
+      query = query.lte('usage_date', filters.endDate);
+    }
+
+    if (filters.department && filters.department !== 'all') {
+      query = query.eq('department', filters.department);
+    }
+
+    if (filters.item_id) {
+      query = query.eq('item_id', filters.item_id);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error fetching inventory usage:', error);
+    throw error;
+  }
+};
+
+// Get daily usage summary
+export const getDailyUsageSummary = async (department = null) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const startDate = thirtyDaysAgo.toISOString().split('T')[0];
+
+    let query = supabase
+      .from('inventory_usage')
+      .select(`
+        *,
+        inventory_items:item_id (
+          id,
+          name,
+          unit,
+          department,
+          category,
+          unit_price
+        )
+      `)
+      .gte('usage_date', startDate)
+      .lte('usage_date', today);
+
+    if (department && department !== 'all') {
+      query = query.eq('department', department);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    // Calculate total usage value
+    const totalValue = data.reduce((sum, record) => {
+      const itemPrice = record.inventory_items?.unit_price || 0;
+      return sum + (record.quantity_used * itemPrice);
+    }, 0);
+
+    // Group by date for trend
+    const usageByDate = data.reduce((acc, record) => {
+      const date = record.usage_date;
+      if (!acc[date]) {
+        acc[date] = { date, totalQuantity: 0, totalValue: 0, count: 0 };
+      }
+      const itemPrice = record.inventory_items?.unit_price || 0;
+      acc[date].totalQuantity += record.quantity_used;
+      acc[date].totalValue += record.quantity_used * itemPrice;
+      acc[date].count += 1;
+      return acc;
+    }, {});
+
+    const usageTrend = Object.values(usageByDate).sort((a, b) =>
+      new Date(a.date) - new Date(b.date)
+    );
+
+    // Group by item for top usage
+    const usageByItem = data.reduce((acc, record) => {
+      const itemId = record.item_id;
+      const itemName = record.inventory_items?.name || 'Unknown';
+      const itemUnit = record.inventory_items?.unit || 'units';
+      const itemPrice = record.inventory_items?.unit_price || 0;
+
+      if (!acc[itemId]) {
+        acc[itemId] = {
+          item_id: itemId,
+          item_name: itemName,
+          unit: itemUnit,
+          totalQuantity: 0,
+          totalValue: 0,
+          count: 0
+        };
+      }
+      acc[itemId].totalQuantity += record.quantity_used;
+      acc[itemId].totalValue += record.quantity_used * itemPrice;
+      acc[itemId].count += 1;
+      return acc;
+    }, {});
+
+    const topUsageItems = Object.values(usageByItem)
+      .sort((a, b) => b.totalValue - a.totalValue)
+      .slice(0, 10);
+
+    // Group by department
+    const usageByDepartment = data.reduce((acc, record) => {
+      const dept = record.department || 'unknown';
+      const itemPrice = record.inventory_items?.unit_price || 0;
+
+      if (!acc[dept]) {
+        acc[dept] = { department: dept, totalValue: 0, count: 0 };
+      }
+      acc[dept].totalValue += record.quantity_used * itemPrice;
+      acc[dept].count += 1;
+      return acc;
+    }, {});
+
+    return {
+      totalRecords: data.length,
+      totalValue,
+      usageTrend,
+      topUsageItems,
+      usageByDepartment: Object.values(usageByDepartment),
+      recentUsage: data.slice(0, 10)
+    };
+  } catch (error) {
+    console.error('Error fetching daily usage summary:', error);
+    throw error;
+  }
+};
+
+// Update inventory usage record
+export const updateInventoryUsage = async (usageId, usageData) => {
+  try {
+    // Get the old usage record first
+    const { data: oldUsage, error: fetchError } = await supabase
+      .from('inventory_usage')
+      .select('*, inventory_items:item_id(current_stock, name)')
+      .eq('id', usageId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    const oldQuantity = oldUsage.quantity_used;
+    const newQuantity = parseFloat(usageData.quantity_used);
+    const quantityDiff = newQuantity - oldQuantity;
+
+    // Get current stock
+    const currentStock = oldUsage.inventory_items.current_stock;
+    const newStock = currentStock - quantityDiff;
+
+    // Validate stock availability
+    if (newStock < 0) {
+      throw new Error(`Insufficient stock for ${oldUsage.inventory_items.name}. Available: ${currentStock}, Additional needed: ${quantityDiff}`);
+    }
+
+    // Update usage record
+    const { data, error } = await supabase
+      .from('inventory_usage')
+      .update({
+        item_id: usageData.item_id || oldUsage.item_id,
+        quantity_used: newQuantity,
+        usage_date: usageData.usage_date,
+        used_by: usageData.used_by,
+        purpose: usageData.purpose,
+        department: usageData.department,
+        notes: usageData.notes,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', usageId)
+      .select();
+
+    if (error) throw error;
+
+    // Update inventory stock if quantity changed
+    if (quantityDiff !== 0) {
+      const { error: updateError } = await supabase
+        .from('inventory_items')
+        .update({
+          current_stock: newStock,
+          last_updated: new Date().toISOString()
+        })
+        .eq('id', oldUsage.item_id);
+
+      if (updateError) throw updateError;
+    }
+
+    return data[0];
+  } catch (error) {
+    console.error(`Error updating inventory usage ${usageId}:`, error);
+    throw error;
+  }
+};
+
+// Delete inventory usage record
+export const deleteInventoryUsage = async (usageId) => {
+  try {
+    // Get the usage record to restore stock
+    const { data: usage, error: fetchError } = await supabase
+      .from('inventory_usage')
+      .select('*, inventory_items:item_id(current_stock)')
+      .eq('id', usageId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    // Delete the usage record
+    const { error: deleteError } = await supabase
+      .from('inventory_usage')
+      .delete()
+      .eq('id', usageId);
+
+    if (deleteError) throw deleteError;
+
+    // Restore the stock (add back the used quantity)
+    const restoredStock = usage.inventory_items.current_stock + usage.quantity_used;
+
+    const { error: updateError } = await supabase
+      .from('inventory_items')
+      .update({
+        current_stock: restoredStock,
+        last_updated: new Date().toISOString()
+      })
+      .eq('id', usage.item_id);
+
+    if (updateError) throw updateError;
+
+    return true;
+  } catch (error) {
+    console.error(`Error deleting inventory usage ${usageId}:`, error);
+    throw error;
+  }
 };

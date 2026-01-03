@@ -38,19 +38,24 @@ import {
   Line 
 } from 'recharts';
 
-import { 
-  fetchAllItems, 
-  fetchItemsByDepartment, 
-  fetchAllOrders, 
-  fetchOrdersByDepartment, 
-  fetchSuppliers, 
-  addItem, 
-  updateItem, 
-  deleteItem, 
-  placeOrder, 
+import {
+  fetchAllItems,
+  fetchItemsByDepartment,
+  fetchAllOrders,
+  fetchOrdersByDepartment,
+  fetchSuppliers,
+  addItem,
+  updateItem,
+  deleteItem,
+  placeOrder,
   updateOrderStatus,
   adjustStock,
-  fetchInventoryStats
+  fetchInventoryStats,
+  recordInventoryUsage,
+  fetchInventoryUsage,
+  getDailyUsageSummary,
+  updateInventoryUsage,
+  deleteInventoryUsage
 } from './services/inventoryService';
 import { supabase } from '../lib/supabase';
 import LoadingSpinner from './LoadingSpinner';
@@ -130,7 +135,7 @@ const handleDownload = (data, filename, fileType) => {
 // Main component
 const InventoryManagement = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [activeDepartment, setActiveDepartment] = useState('feed');
+  const [activeDepartment, setActiveDepartment] = useState('all');
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
   const [isEditItemModalOpen, setIsEditItemModalOpen] = useState(false);
   const [isViewItemModalOpen, setIsViewItemModalOpen] = useState(false);
@@ -164,10 +169,26 @@ const InventoryManagement = () => {
     inventoryByDepartment: [],
     valueByDepartment: [],
     stockTrend: [],
-    ordersByMonth: []
+    ordersByMonth: [],
+    topItemsByValue: []
   });
   const [isDeleteOrderModalOpen, setIsDeleteOrderModalOpen] = useState(false);
-  
+  const [usageData, setUsageData] = useState({
+    records: [],
+    summary: {
+      totalRecords: 0,
+      totalValue: 0,
+      usageTrend: [],
+      topUsageItems: [],
+      usageByDepartment: [],
+      recentUsage: []
+    }
+  });
+  const [isRecordUsageModalOpen, setIsRecordUsageModalOpen] = useState(false);
+  const [isEditUsageModalOpen, setIsEditUsageModalOpen] = useState(false);
+  const [isDeleteUsageModalOpen, setIsDeleteUsageModalOpen] = useState(false);
+  const [selectedUsage, setSelectedUsage] = useState(null);
+
   // Fetch inventory data on component mount
   useEffect(() => {
     fetchInventoryData();
@@ -176,17 +197,21 @@ const InventoryManagement = () => {
   // Fetch data when department or tab changes
   useEffect(() => {
     if (activeTab === 'items') {
-      fetchItemsByDepartment(activeDepartment)
+      const fetchFunction = activeDepartment === 'all' ? fetchAllItems : () => fetchItemsByDepartment(activeDepartment);
+      fetchFunction()
         .then(items => setInventoryData(prev => ({ ...prev, items })))
         .catch(err => setError('Failed to fetch items: ' + err.message));
     } else if (activeTab === 'orders') {
-      fetchOrdersByDepartment(activeDepartment)
+      const fetchFunction = activeDepartment === 'all' ? fetchAllOrders : () => fetchOrdersByDepartment(activeDepartment);
+      fetchFunction()
         .then(orders => setInventoryData(prev => ({ ...prev, orders })))
         .catch(err => setError('Failed to fetch orders: ' + err.message));
     } else if (activeTab === 'suppliers') {
       fetchSuppliers()
         .then(suppliers => setInventoryData(prev => ({ ...prev, suppliers })))
         .catch(err => setError('Failed to fetch suppliers: ' + err.message));
+    } else if (activeTab === 'usage') {
+      fetchUsageData();
     }
   }, [activeTab, activeDepartment]);
   
@@ -272,53 +297,65 @@ const InventoryManagement = () => {
       { name: 'Equipment', value: items.filter(item => item.department === 'equipment').length },
       { name: 'Health', value: items.filter(item => item.department === 'health').length }
     ];
-    
+
     // Value by department
     const valueByDepartment = [
-      { 
-        name: 'Feed', 
+      {
+        name: 'Feed',
         value: items
           .filter(item => item.department === 'feed')
-          .reduce((total, item) => total + (item.current_stock * item.unit_price), 0) 
+          .reduce((total, item) => total + (item.current_stock * item.unit_price), 0)
       },
-      { 
-        name: 'Milking', 
+      {
+        name: 'Milking',
         value: items
           .filter(item => item.department === 'milking')
-          .reduce((total, item) => total + (item.current_stock * item.unit_price), 0) 
+          .reduce((total, item) => total + (item.current_stock * item.unit_price), 0)
       },
-      { 
-        name: 'Equipment', 
+      {
+        name: 'Equipment',
         value: items
           .filter(item => item.department === 'equipment')
-          .reduce((total, item) => total + (item.current_stock * item.unit_price), 0) 
+          .reduce((total, item) => total + (item.current_stock * item.unit_price), 0)
       },
-      { 
-        name: 'Health', 
+      {
+        name: 'Health',
         value: items
           .filter(item => item.department === 'health')
-          .reduce((total, item) => total + (item.current_stock * item.unit_price), 0) 
+          .reduce((total, item) => total + (item.current_stock * item.unit_price), 0)
       }
     ];
-    
+
     // Orders by month
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const ordersByMonth = monthNames.map(month => {
       return { month, count: 0, value: 0 };
     });
-    
+
     orders.forEach(order => {
       const date = new Date(order.order_date);
       const monthIndex = date.getMonth();
-      
+
       ordersByMonth[monthIndex].count += 1;
       ordersByMonth[monthIndex].value += order.total_amount;
     });
-    
+
+    // Top items by stock value
+    const topItemsByValue = items
+      .map(item => ({
+        name: item.name.length > 15 ? item.name.substring(0, 15) + '...' : item.name,
+        fullName: item.name,
+        value: item.current_stock * item.unit_price,
+        department: item.department
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+
     return {
       inventoryByDepartment,
       valueByDepartment,
-      ordersByMonth
+      ordersByMonth,
+      topItemsByValue
     };
   };
   
@@ -472,24 +509,32 @@ const InventoryManagement = () => {
     try {
       setIsLoading(true);
       await deleteItem(itemId);
-      
-      // Update local state
-      setInventoryData(prev => {
-        const filteredItems = prev.items.filter(item => item.id !== itemId);
-        
-        return {
-          ...prev,
-          items: filteredItems,
-          totalItems: filteredItems.length
-        };
-      });
-      
+
+      // Close modal first to prevent re-renders
       setIsDeleteItemModalOpen(false);
+      setSelectedItem(null);
+
+      // Refresh inventory data from database
+      if (activeDepartment === 'all') {
+        const items = await fetchAllItems();
+        setInventoryData(prev => ({ ...prev, items }));
+      } else {
+        const items = await fetchItemsByDepartment(activeDepartment);
+        setInventoryData(prev => ({ ...prev, items }));
+      }
+
       setIsLoading(false);
+
+      // Show success message only once after everything is done
+      toast.success('Item deleted successfully');
       return true;
     } catch (err) {
-      setError('Failed to delete item: ' + err.message);
       setIsLoading(false);
+      setIsDeleteItemModalOpen(false);
+      setSelectedItem(null);
+
+      // Show error toast only
+      toast.error('Failed to delete item: ' + err.message);
       return false;
     }
   };
@@ -689,7 +734,146 @@ const InventoryManagement = () => {
   const filteredOrders = filterOrders(inventoryData.orders);
   const currentOrders = filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
   const totalOrderPages = Math.ceil(filteredOrders.length / itemsPerPage);
-  
+
+  // Fetch usage data
+  const fetchUsageData = async () => {
+    try {
+      setIsLoading(true);
+      const [records, summary] = await Promise.all([
+        fetchInventoryUsage({ department: activeDepartment }),
+        getDailyUsageSummary(activeDepartment)
+      ]);
+
+      setUsageData({
+        records,
+        summary
+      });
+
+      setIsLoading(false);
+    } catch (err) {
+      setError('Failed to fetch usage data: ' + err.message);
+      setIsLoading(false);
+    }
+  };
+
+  // Handle record usage
+  const handleRecordUsage = async (usageRecord) => {
+    try {
+      setIsLoading(true);
+      await recordInventoryUsage(usageRecord);
+
+      // Close modal
+      setIsRecordUsageModalOpen(false);
+
+      // Refresh usage data
+      await fetchUsageData();
+
+      // Refresh items and stats
+      const [items, orders, stats] = await Promise.all([
+        activeDepartment === 'all' ? fetchAllItems() : fetchItemsByDepartment(activeDepartment),
+        fetchAllOrders(),
+        fetchInventoryStats()
+      ]);
+
+      const calculatedStats = calculateStats(items, orders);
+      setInventoryData(prev => ({
+        ...prev,
+        items,
+        orders,
+        stats: { ...calculatedStats, ...stats }
+      }));
+
+      setIsLoading(false);
+      toast.success('Usage recorded successfully');
+      return true;
+    } catch (err) {
+      setIsLoading(false);
+      setIsRecordUsageModalOpen(false);
+      toast.error('Failed to record usage: ' + err.message);
+      return false;
+    }
+  };
+
+  // Handle edit usage
+  const handleEditUsage = async (usageRecord) => {
+    try {
+      setIsLoading(true);
+      await updateInventoryUsage(selectedUsage.id, usageRecord);
+
+      // Close modal
+      setIsEditUsageModalOpen(false);
+      setSelectedUsage(null);
+
+      // Refresh usage data
+      await fetchUsageData();
+
+      // Refresh items and stats
+      const [items, orders, stats] = await Promise.all([
+        activeDepartment === 'all' ? fetchAllItems() : fetchItemsByDepartment(activeDepartment),
+        fetchAllOrders(),
+        fetchInventoryStats()
+      ]);
+
+      const calculatedStats = calculateStats(items, orders);
+      setInventoryData(prev => ({
+        ...prev,
+        items,
+        orders,
+        stats: { ...calculatedStats, ...stats }
+      }));
+
+      setIsLoading(false);
+      toast.success('Usage updated successfully');
+      return true;
+    } catch (err) {
+      setIsLoading(false);
+      setIsEditUsageModalOpen(false);
+      setSelectedUsage(null);
+      toast.error('Failed to update usage: ' + err.message);
+      return false;
+    }
+  };
+
+  // Handle delete usage
+  const handleDeleteUsage = async (usageId) => {
+    try {
+      setIsLoading(true);
+      await deleteInventoryUsage(usageId);
+
+      // Close modal
+      setIsDeleteUsageModalOpen(false);
+      setSelectedUsage(null);
+
+      // Refresh usage data
+      await fetchUsageData();
+
+      // Refresh items and stats
+      const [items, orders, stats] = await Promise.all([
+        activeDepartment === 'all' ? fetchAllItems() : fetchItemsByDepartment(activeDepartment),
+        fetchAllOrders(),
+        fetchInventoryStats()
+      ]);
+
+      const calculatedStats = calculateStats(items, orders);
+      setInventoryData(prev => ({
+        ...prev,
+        items,
+        orders,
+        stats: { ...calculatedStats, ...stats }
+      }));
+
+      setIsLoading(false);
+      toast.success('Usage deleted successfully');
+      return true;
+    } catch (err) {
+      setIsLoading(false);
+      setIsDeleteUsageModalOpen(false);
+      setSelectedUsage(null);
+      toast.error('Failed to delete usage: ' + err.message);
+      return false;
+    }
+  };
+
   // Helper functions
   const capitalizeFirstLetter = (string) => {
     return string.charAt(0).toUpperCase() + string.slice(1);
@@ -825,6 +1009,16 @@ return (
                 Suppliers
             </button>
             <button
+                onClick={() => setActiveTab('usage')}
+                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap transition-all duration-300 ${
+                activeTab === 'usage'
+                    ? 'border-green-500 text-green-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+            >
+                Usage Tracking
+            </button>
+            <button
                 onClick={() => setActiveTab('reports')}
                 className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap transition-all duration-300 ${
                 activeTab === 'reports'
@@ -839,11 +1033,21 @@ return (
         
         {(activeTab === 'items' || activeTab === 'orders') && (
             <div className="mb-6 overflow-x-auto">
-            <div className="flex gap-2 min-w-[500px]">
+            <div className="flex gap-2 min-w-[600px]">
+              <button
+                onClick={() => setActiveDepartment('all')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-300 ${
+                  activeDepartment === 'all'
+                    ? 'bg-gradient-to-r from-purple-500 to-indigo-600 text-white shadow-md'
+                    : 'bg-white text-gray-700 hover:bg-gray-50 shadow-sm'
+                }`}
+              >
+                All Departments
+              </button>
               <button
                 onClick={() => setActiveDepartment('feed')}
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-300 ${
-                  activeDepartment === 'feed' 
+                  activeDepartment === 'feed'
                     ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-md'
                     : 'bg-white text-gray-700 hover:bg-gray-50 shadow-sm'
                 }`}
@@ -853,7 +1057,7 @@ return (
             <button
                 onClick={() => setActiveDepartment('milking')}
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-300 ${
-                activeDepartment === 'milking' 
+                activeDepartment === 'milking'
                     ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-md'
                     : 'bg-white text-gray-700 hover:bg-gray-50 shadow-sm'
                 }`}
@@ -863,7 +1067,7 @@ return (
             <button
                 onClick={() => setActiveDepartment('equipment')}
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-300 ${
-                activeDepartment === 'equipment' 
+                activeDepartment === 'equipment'
                     ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-md'
                     : 'bg-white text-gray-700 hover:bg-gray-50 shadow-sm'
                 }`}
@@ -873,7 +1077,7 @@ return (
             <button
                 onClick={() => setActiveDepartment('health')}
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-300 ${
-                activeDepartment === 'health' 
+                activeDepartment === 'health'
                     ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-md'
                     : 'bg-white text-gray-700 hover:bg-gray-50 shadow-sm'
                 }`}
@@ -1108,7 +1312,7 @@ return (
                 </div>
             </div>
             
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
                 <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
                 <div className="p-6">
@@ -1130,17 +1334,17 @@ return (
                             label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                         >
                             {chartData.inventoryByDepartment.map((entry, index) => (
-                            <Cell 
-                                key={`cell-${index}`} 
-                                fill={COLORS[index % COLORS.length]} 
+                            <Cell
+                                key={`cell-${index}`}
+                                fill={COLORS[index % COLORS.length]}
                             />
                             ))}
                         </Pie>
-                        <Tooltip 
+                        <Tooltip
                             formatter={(value, name, props) => [`${value} items`, name]}
-                            contentStyle={{ 
-                            background: 'rgba(255, 255, 255, 0.95)', 
-                            border: '1px solid #f1f1f1', 
+                            contentStyle={{
+                            background: 'rgba(255, 255, 255, 0.95)',
+                            border: '1px solid #f1f1f1',
                             borderRadius: '8px',
                             boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                             }}
@@ -1150,8 +1354,69 @@ return (
                     </div>
                 </div>
                 </div>
-                
-                <div className="col-span-2 bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
+
+                <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
+                <div className="h-1 bg-gradient-to-r from-purple-400 to-indigo-500"></div>
+                <div className="p-6">
+                    <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-indigo-600 mb-4">
+                    Top 10 Items by Stock Value
+                    </h2>
+                    <div className="h-60 sm:h-72 md:h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                        data={chartData.topItemsByValue}
+                        layout="vertical"
+                        margin={{ top: 5, right: 30, left: 80, bottom: 5 }}
+                        >
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                        <XAxis
+                            type="number"
+                            tickFormatter={(value) =>
+                            new Intl.NumberFormat('en-IN', {
+                                style: 'currency',
+                                currency: 'INR',
+                                notation: 'compact',
+                                compactDisplay: 'short'
+                            }).format(value)
+                            }
+                        />
+                        <YAxis
+                            type="category"
+                            dataKey="name"
+                            width={75}
+                            tick={{ fontSize: 11 }}
+                        />
+                        <Tooltip
+                            formatter={(value) => [formatCurrency(value), 'Stock Value']}
+                            labelFormatter={(label, payload) => payload?.[0]?.payload?.fullName || label}
+                            contentStyle={{
+                            background: 'rgba(255, 255, 255, 0.95)',
+                            border: '1px solid #f1f1f1',
+                            borderRadius: '8px',
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                            }}
+                        />
+                        <Bar
+                            dataKey="value"
+                            fill="#8b5cf6"
+                            radius={[0, 4, 4, 0]}
+                        >
+                            {chartData.topItemsByValue.map((entry, index) => (
+                            <Cell
+                                key={`cell-${index}`}
+                                fill={COLORS[index % COLORS.length]}
+                            />
+                            ))}
+                        </Bar>
+                        </BarChart>
+                    </ResponsiveContainer>
+                    </div>
+                </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-1 gap-6 mb-6">
+                <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
                 <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
                 <div className="px-6 py-4 border-b border-gray-200">
                     <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">
@@ -1306,6 +1571,11 @@ return (
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Name
                         </th>
+                        {activeDepartment === 'all' && (
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Department
+                        </th>
+                        )}
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Category
                         </th>
@@ -1337,6 +1607,13 @@ return (
                             <div className="text-sm font-medium text-gray-900">{item.name}</div>
                             <div className="text-xs text-gray-500">{item.id}</div>
                             </td>
+                            {activeDepartment === 'all' && (
+                            <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800 capitalize">
+                                {item.department}
+                            </span>
+                            </td>
+                            )}
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {item.category}
                             </td>
@@ -1843,7 +2120,246 @@ return (
                 </div>
                 </div>
             )}
-            
+
+            {/* Usage Tracking Tab */}
+            {activeTab === 'usage' && (
+                <div>
+                {/* Usage Summary Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
+                    <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500">
+                    <div className="flex items-center justify-between">
+                        <div>
+                        <p className="text-sm text-gray-600">Total Usage Records</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">
+                            {usageData.summary.totalRecords}
+                        </p>
+                        </div>
+                        <div className="p-3 bg-purple-100 rounded-lg">
+                        <Archive className="h-6 w-6 text-purple-600" />
+                        </div>
+                    </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500">
+                    <div className="flex items-center justify-between">
+                        <div>
+                        <p className="text-sm text-gray-600">Total Usage Value</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">
+                            {formatCurrency(usageData.summary.totalValue)}
+                        </p>
+                        </div>
+                        <div className="p-3 bg-blue-100 rounded-lg">
+                        <DollarSign className="h-6 w-6 text-blue-600" />
+                        </div>
+                    </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500">
+                    <div className="flex items-center justify-between">
+                        <div>
+                        <p className="text-sm text-gray-600">Most Used Item</p>
+                        <p className="text-lg font-bold text-gray-900 mt-1">
+                            {usageData.summary.topUsageItems[0]?.item_name?.substring(0, 15) || 'N/A'}
+                        </p>
+                        </div>
+                        <div className="p-3 bg-green-100 rounded-lg">
+                        <TrendingUp className="h-6 w-6 text-green-600" />
+                        </div>
+                    </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-amber-500">
+                    <div className="flex items-center justify-between">
+                        <div>
+                        <p className="text-sm text-gray-600">Avg Daily Usage</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">
+                            {usageData.summary.usageTrend.length > 0
+                            ? formatCurrency(usageData.summary.totalValue / usageData.summary.usageTrend.length)
+                            : formatCurrency(0)}
+                        </p>
+                        </div>
+                        <div className="p-3 bg-amber-100 rounded-lg">
+                        <BarChart2 className="h-6 w-6 text-amber-600" />
+                        </div>
+                    </div>
+                    </div>
+                </div>
+
+                {/* Usage Charts */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                    {/* Usage Trend Chart */}
+                    <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
+                    <div className="h-1 bg-gradient-to-r from-purple-400 to-blue-500"></div>
+                    <div className="p-6">
+                        <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-blue-600 mb-4">
+                        Daily Usage Trend (Last 30 Days)
+                        </h2>
+                        <div className="h-60 sm:h-72 md:h-80">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={usageData.summary.usageTrend}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                            <XAxis
+                                dataKey="date"
+                                tick={{ fontSize: 12 }}
+                                tickFormatter={(value) => {
+                                const date = new Date(value);
+                                return `${date.getMonth() + 1}/${date.getDate()}`;
+                                }}
+                            />
+                            <YAxis tick={{ fontSize: 12 }} />
+                            <Tooltip
+                                formatter={(value) => [formatCurrency(value), 'Value']}
+                                labelFormatter={(label) => `Date: ${label}`}
+                            />
+                            <Legend />
+                            <Line
+                                type="monotone"
+                                dataKey="totalValue"
+                                stroke="#8b5cf6"
+                                strokeWidth={2}
+                                name="Usage Value"
+                                dot={{ fill: '#8b5cf6', r: 4 }}
+                            />
+                            </LineChart>
+                        </ResponsiveContainer>
+                        </div>
+                    </div>
+                    </div>
+
+                    {/* Top Usage Items Chart */}
+                    <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
+                    <div className="h-1 bg-gradient-to-r from-blue-400 to-green-500"></div>
+                    <div className="p-6">
+                        <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-green-600 mb-4">
+                        Top 10 Items by Usage Value
+                        </h2>
+                        <div className="h-60 sm:h-72 md:h-80">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart
+                            data={usageData.summary.topUsageItems}
+                            layout="vertical"
+                            margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+                            >
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                            <XAxis type="number" tick={{ fontSize: 12 }} />
+                            <YAxis
+                                dataKey="item_name"
+                                type="category"
+                                width={90}
+                                tick={{ fontSize: 11 }}
+                            />
+                            <Tooltip formatter={(value) => [formatCurrency(value), 'Usage Value']} />
+                            <Bar dataKey="totalValue" fill="#3b82f6" radius={[0, 8, 8, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                        </div>
+                    </div>
+                    </div>
+                </div>
+
+                {/* Recent Usage Records */}
+                <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100">
+                    <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
+                    <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-blue-600">
+                        Recent Usage Records
+                    </h2>
+                    <button
+                        onClick={() => setIsRecordUsageModalOpen(true)}
+                        className="flex items-center px-4 py-2 bg-gradient-to-r from-purple-500 to-blue-600 text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm"
+                    >
+                        <Plus size={20} className="mr-2" />
+                        Record Usage
+                    </button>
+                    </div>
+                    <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gradient-to-r from-purple-50/40 via-gray-50 to-blue-50/30">
+                        <tr>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Date
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Item
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Quantity Used
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Purpose
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Used By
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Department
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                            </th>
+                        </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                        {usageData.summary.recentUsage && usageData.summary.recentUsage.length > 0 ? (
+                            usageData.summary.recentUsage.map((record, index) => (
+                            <tr key={index} className="hover:bg-gray-50 transition-colors duration-200">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {formatDate(record.usage_date)}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {record.inventory_items?.name || 'N/A'}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {record.quantity_used} {record.inventory_items?.unit || 'units'}
+                                </td>
+                                <td className="px-6 py-4 text-sm text-gray-500">
+                                {record.purpose || 'N/A'}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {record.used_by || 'N/A'}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800 capitalize">
+                                    {record.department || 'N/A'}
+                                </span>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                <div className="flex space-x-3">
+                                    <button
+                                    onClick={() => {
+                                        setSelectedUsage(record);
+                                        setIsEditUsageModalOpen(true);
+                                    }}
+                                    className="text-indigo-600 hover:text-indigo-900"
+                                    >
+                                    Edit
+                                    </button>
+                                    <button
+                                    onClick={() => {
+                                        setSelectedUsage(record);
+                                        setIsDeleteUsageModalOpen(true);
+                                    }}
+                                    className="text-red-600 hover:text-red-900"
+                                    >
+                                    Delete
+                                    </button>
+                                </div>
+                                </td>
+                            </tr>
+                            ))
+                        ) : (
+                            <tr>
+                            <td colSpan="7" className="px-6 py-10 text-center text-gray-500">
+                                No usage records found. Click "Record Usage" to add the first record.
+                            </td>
+                            </tr>
+                        )}
+                        </tbody>
+                    </table>
+                    </div>
+                </div>
+                </div>
+            )}
+
             {/* Add Item Modal */}
             {isAddItemModalOpen && (
                 <AddItemModal 
@@ -1905,10 +2421,50 @@ return (
             
             {/* Supplier Modal */}
             {isSupplierModalOpen && (
-            <SupplierModal 
+            <SupplierModal
                 supplier={selectedSupplier}
                 onClose={toggleSupplierModal}
                 onSubmit={handleSupplierSubmit}
+                isLoading={isLoading}
+            />
+            )}
+
+            {/* Record Usage Modal */}
+            {isRecordUsageModalOpen && (
+            <RecordUsageModal
+                onClose={() => setIsRecordUsageModalOpen(false)}
+                onSubmit={handleRecordUsage}
+                isLoading={isLoading}
+                inventoryItems={inventoryData.items}
+                activeDepartment={activeDepartment}
+            />
+            )}
+
+            {/* Edit Usage Modal */}
+            {isEditUsageModalOpen && selectedUsage && (
+            <RecordUsageModal
+                onClose={() => {
+                  setIsEditUsageModalOpen(false);
+                  setSelectedUsage(null);
+                }}
+                onSubmit={handleEditUsage}
+                isLoading={isLoading}
+                inventoryItems={inventoryData.items}
+                activeDepartment={activeDepartment}
+                initialData={selectedUsage}
+                isEdit={true}
+            />
+            )}
+
+            {/* Delete Usage Modal */}
+            {isDeleteUsageModalOpen && selectedUsage && (
+            <DeleteUsageModal
+                usage={selectedUsage}
+                onClose={() => {
+                  setIsDeleteUsageModalOpen(false);
+                  setSelectedUsage(null);
+                }}
+                onConfirm={() => handleDeleteUsage(selectedUsage.id)}
                 isLoading={isLoading}
             />
             )}
@@ -3243,5 +3799,273 @@ const OrderDetailsModal = ({ order, onClose, onUpdateStatus }) => {
     </div>
   );
 };
+
+// Record Usage Modal Component
+const RecordUsageModal = ({ onClose, onSubmit, isLoading, inventoryItems, activeDepartment, initialData = null, isEdit = false }) => {
+  const [formData, setFormData] = useState(initialData ? {
+    item_id: initialData.item_id || initialData.itemId || '',
+    quantity_used: initialData.quantity_used || initialData.quantityUsed || '',
+    usage_date: initialData.usage_date || initialData.usageDate || new Date().toISOString().split('T')[0],
+    used_by: initialData.used_by || initialData.usedBy || '',
+    purpose: initialData.purpose || '',
+    department: initialData.department || activeDepartment === 'all' ? 'feed' : activeDepartment,
+    notes: initialData.notes || ''
+  } : {
+    item_id: '',
+    quantity_used: '',
+    usage_date: new Date().toISOString().split('T')[0],
+    used_by: '',
+    purpose: '',
+    department: activeDepartment === 'all' ? 'feed' : activeDepartment,
+    notes: ''
+  });
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+
+    // Auto-set department based on selected item
+    if (name === 'item_id' && value) {
+      const selectedItem = inventoryItems.find(item => item.id === value);
+      if (selectedItem) {
+        setFormData(prev => ({
+          ...prev,
+          department: selectedItem.department
+        }));
+      }
+    }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSubmit(formData);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl my-8 mx-auto max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center border-b px-6 py-4">
+          <h3 className="text-lg font-medium">{isEdit ? 'Edit Inventory Usage' : 'Record Inventory Usage'}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
+            <X size={24} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Inventory Item *
+              </label>
+              <select
+                name="item_id"
+                value={formData.item_id}
+                onChange={handleChange}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="">Select an item...</option>
+                {inventoryItems.map(item => (
+                  <option key={item.id} value={item.id}>
+                    {item.name} - Stock: {item.current_stock} {item.unit} ({item.department})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Quantity Used *
+              </label>
+              <input
+                type="number"
+                name="quantity_used"
+                value={formData.quantity_used}
+                onChange={handleChange}
+                min="0"
+                step="0.01"
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                placeholder="Enter quantity"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Usage Date *
+              </label>
+              <input
+                type="date"
+                name="usage_date"
+                value={formData.usage_date}
+                onChange={handleChange}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Used By *
+              </label>
+              <input
+                type="text"
+                name="used_by"
+                value={formData.used_by}
+                onChange={handleChange}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                placeholder="Person or system"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Department *
+              </label>
+              <select
+                name="department"
+                value={formData.department}
+                onChange={handleChange}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="feed">Feed</option>
+                <option value="milking">Milking</option>
+                <option value="equipment">Equipment</option>
+                <option value="health">Health</option>
+              </select>
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Purpose *
+              </label>
+              <input
+                type="text"
+                name="purpose"
+                value={formData.purpose}
+                onChange={handleChange}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                placeholder="e.g., Daily feeding, Equipment maintenance"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Notes
+              </label>
+              <textarea
+                name="notes"
+                value={formData.notes}
+                onChange={handleChange}
+                rows="3"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                placeholder="Additional notes (optional)"
+              />
+            </div>
+          </div>
+
+          <div className="mt-6 flex justify-end space-x-3">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isLoading}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-blue-600 rounded-md hover:opacity-90 transition-opacity"
+            >
+              {isLoading ? (isEdit ? 'Updating...' : 'Recording...') : (isEdit ? 'Update Usage' : 'Record Usage')}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// Delete Usage Modal Component
+const DeleteUsageModal = ({ usage, onClose, onConfirm, isLoading }) => {
+  // Find the item name from the usage record
+  const itemName = usage.itemName || usage.item_name || 'Unknown Item';
+  const quantity = usage.quantityUsed || usage.quantity_used || 0;
+  const unit = usage.unit || '';
+  const usageDate = usage.usageDate || usage.usage_date || 'N/A';
+  const purpose = usage.purpose || 'N/A';
+  const usedBy = usage.usedBy || usage.used_by || 'N/A';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md my-8 mx-auto max-h-[80vh] overflow-y-auto">
+        <div className="flex justify-between items-center border-b px-6 py-4">
+          <h3 className="text-lg font-medium">Delete Usage Record</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
+            <X size={24} />
+          </button>
+        </div>
+        <div className="px-6 py-4">
+          <div className="flex items-center justify-center mb-5">
+            <div className="flex-shrink-0 h-12 w-12 bg-red-100 rounded-full flex items-center justify-center">
+              <Trash2 className="h-6 w-6 text-red-600" />
+            </div>
+          </div>
+          <p className="text-center text-gray-700 mb-6">
+            Are you sure you want to delete this usage record?
+            <br />
+            <span className="text-sm text-gray-500">The used quantity will be restored to inventory stock.</span>
+          </p>
+
+          {/* Show usage details */}
+          <div className="bg-gray-50 rounded-md p-4 mb-4">
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div className="text-gray-500">Item:</div>
+              <div className="text-gray-800 font-medium">{itemName}</div>
+
+              <div className="text-gray-500">Quantity Used:</div>
+              <div className="text-gray-800">{quantity} {unit}</div>
+
+              <div className="text-gray-500">Usage Date:</div>
+              <div className="text-gray-800">{usageDate}</div>
+
+              <div className="text-gray-500">Used By:</div>
+              <div className="text-gray-800">{usedBy}</div>
+
+              <div className="text-gray-500">Purpose:</div>
+              <div className="text-gray-800">{purpose}</div>
+            </div>
+          </div>
+        </div>
+        <div className="px-6 py-4 border-t flex justify-end space-x-3">
+          <button
+            type="button"
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+            onClick={onClose}
+            disabled={isLoading}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
+            onClick={onConfirm}
+            disabled={isLoading}
+          >
+            {isLoading ? 'Deleting...' : 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default InventoryManagement;
 
