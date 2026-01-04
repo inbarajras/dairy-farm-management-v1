@@ -114,6 +114,7 @@ const FinancesManagement = () => {
     }
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [error, setError] = useState(null);
   const [isAddExpenseModalOpen, setIsAddExpenseModalOpen] = useState(false);
   const [isAddInvoiceModalOpen, setIsAddInvoiceModalOpen] = useState(false);
@@ -633,6 +634,7 @@ const EmptyEmployeeSection = ({ onRetry }) => {
         console.log('Financial dashboard data received:', data);
         console.log('Payroll employees data:', data.payroll.employees);
         setFinancialData(data);
+        setHasLoadedOnce(true);
         setError(null);
       } catch (err) {
         console.error('Error loading financial data:', err);
@@ -1269,9 +1271,35 @@ const EmptyEmployeeSection = ({ onRetry }) => {
     }
   };
   
-  // Loading state
-  if (isLoading && !financialData) {
+  // Loading state - show full-screen loading on first load
+  if (isLoading && !hasLoadedOnce) {
     return <LoadingSpinner message='Loading financial data...'/>;
+  }
+
+  // Error state - show error screen only if never loaded successfully
+  if (error && !hasLoadedOnce) {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
+        <div className="bg-white rounded-xl shadow-xl p-8 max-w-md mx-auto border border-red-100 relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-500 to-orange-500"></div>
+          <div className="flex items-center justify-center mb-4">
+            <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center">
+              <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+          </div>
+          <h2 className="text-xl font-semibold text-center text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-orange-600 mb-2">Unable to Load Financial Data</h2>
+          <p className="text-gray-600 text-center mb-6">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="w-full px-4 py-2.5 bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-lg hover:from-red-600 hover:to-orange-600 transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 shadow-md"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const handleExpenseSearch = (e) => {
@@ -1504,6 +1532,11 @@ const EmptyEmployeeSection = ({ onRetry }) => {
   
   // Update Expenses Tab JSX to use the new state and handlers
     const renderExpensesTab = () => {
+    // Show full-screen loading on initial data load
+    if (isExpenseLoading && expensesList.length === 0) {
+      return <LoadingSpinner message="Loading expense data..." />;
+    }
+
     return (
       <div>
         {/* Expense Summary */}
@@ -1737,6 +1770,11 @@ const EmptyEmployeeSection = ({ onRetry }) => {
   };
 
   const renderIncomeTab = () => {
+    // Show full-screen loading on initial data load
+    if (isRevenueLoading && revenueData.length === 0) {
+      return <LoadingSpinner message="Loading revenue data..." />;
+    }
+
     return (
       <div>
         {isRevenueLoading ? (
@@ -2042,8 +2080,13 @@ const EmptyEmployeeSection = ({ onRetry }) => {
   };
 
     // Update renderInvoicesTab function with consistent styling
-  
+
     const renderInvoicesTab = () => {
+      // Show full-screen loading on initial data load
+      if (isLoading && invoicesList.length === 0) {
+        return <LoadingSpinner message="Loading invoice data..." />;
+      }
+
       return (
         <div>
           {/* Invoice Summary */}
@@ -2596,7 +2639,13 @@ const EmptyEmployeeSection = ({ onRetry }) => {
           )}
         </div>
         {/* Dashboard Tab */}
-        {activeTab === 'dashboard' && (
+        {activeTab === 'dashboard' && (() => {
+          // Show full-screen loading on initial data load
+          if (isLoading && !hasLoadedOnce) {
+            return <LoadingSpinner message="Loading dashboard data..." />;
+          }
+
+          return (
           <div>
             {/* Financial KPIs */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
@@ -2931,8 +2980,9 @@ const EmptyEmployeeSection = ({ onRetry }) => {
               </div>
             </div>
           </div>
-        )}
-        
+          );
+        })()}
+
         {/* Revenue Tab */}
         {activeTab === 'income' && renderIncomeTab()}
         
@@ -2940,7 +2990,13 @@ const EmptyEmployeeSection = ({ onRetry }) => {
         {activeTab === 'expenses' && renderExpensesTab()}
         
         {/* Payroll Tab */}
-        {activeTab === 'payroll' && (
+        {activeTab === 'payroll' && (() => {
+          // Show full-screen loading on initial data load
+          if (isLoadingEmployees && (!financialData.payroll.employees || financialData.payroll.employees.length === 0)) {
+            return <LoadingSpinner message="Loading payroll data..." />;
+          }
+
+          return (
           <div>
             {/* Payroll Summary */}
             <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 mb-6">
@@ -3028,7 +3084,7 @@ const EmptyEmployeeSection = ({ onRetry }) => {
               </div>
               
               {isLoadingEmployees ? (
-                <div className="py-12">
+                <div className="flex justify-center py-12">
                   <LoadingSpinner message="Loading employee data..." />
                 </div>
               ) : !financialData.payroll.employees || financialData.payroll.employees.length === 0 ? (
@@ -3255,8 +3311,9 @@ const EmptyEmployeeSection = ({ onRetry }) => {
               </div>
             </div>
           </div>
-        )}
-        
+          );
+        })()}
+
         {/* Invoices Tab */}
         {activeTab === 'invoices' && renderInvoicesTab()}
          {/* Reports Tab */}
@@ -3556,7 +3613,9 @@ const ViewPayrollHistoryModal = ({ employee, payrollHistory, isLoading, onClose 
         </div>
         
         {isLoading ? (
-          <LoadingSpinner message='Loading Data...'/>
+          <div className="flex justify-center py-12">
+            <LoadingSpinner message="Loading payroll history..." />
+          </div>
         ) : (
           <div className="px-6 py-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -3572,8 +3631,8 @@ const ViewPayrollHistoryModal = ({ employee, payrollHistory, isLoading, onClose 
                 <div className="p-4">
                   <p className="text-sm font-medium text-gray-500">Pay Rate</p>
                   <p className="text-md font-semibold text-gray-800">
-                    {employee.salary ? 
-                      formatCurrency(employee.salary) + '/year' : 
+                    {employee.salary ?
+                      formatCurrency(employee.salary) + '/year' :
                       formatCurrency(employee.hourlyRate) + '/hour'}
                   </p>
                 </div>
@@ -3929,7 +3988,9 @@ const PayrollDetailsModal = ({ payrollData, isLoading, onClose, onVoid }) => {
         </div>
         
         {isLoading ? (
-          <LoadingSpinner message='Loading Data...'/>
+          <div className="flex justify-center py-12">
+            <LoadingSpinner message="Loading payroll details..." />
+          </div>
         ) : (
           <div className="px-6 py-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -5673,7 +5734,9 @@ const ViewInvoiceModal = ({ invoice, isLoading, onClose, onStatusChange, onDelet
         </div>
         
         {isLoading ? (
-          <LoadingSpinner message='Loading Data...'/>
+          <div className="flex justify-center py-12">
+            <LoadingSpinner message="Loading invoice details..." />
+          </div>
         ) : (
           <div className="px-6 py-4 space-y-6">
             <div className="flex flex-col sm:flex-row justify-between gap-4">
@@ -5684,7 +5747,7 @@ const ViewInvoiceModal = ({ invoice, isLoading, onClose, onStatusChange, onDelet
                 <p className="text-sm text-gray-600">{invoice.customers?.phone}</p>
                 <p className="text-sm text-gray-600 break-words max-w-xs">{invoice.customers?.address}</p>
               </div>
-              
+
               <div className="mt-4 sm:mt-0">
                 <h4 className="text-lg font-medium text-gray-900">Invoice Details</h4>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-2">
