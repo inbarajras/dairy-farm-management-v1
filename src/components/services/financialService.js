@@ -46,21 +46,35 @@ export const getCurrentYear = () => {
 };
 
 // Expense Management
-export const getMonthlyExpenseData = async (limit = 12) => {
+export const getMonthlyExpenseData = async (startDate = null, endDate = null, limit = 12) => {
   try {
-    const currentMonth = new Date().getMonth() + 1;
-    const currentYear = new Date().getFullYear();
-    
-    // Get the start date for looking back 12 months
-    const startDate = new Date(currentYear, currentMonth - 13, 1);
-    const startDateStr = startDate.toISOString().split('T')[0];
-    
+    let startDateStr, endDateStr;
+
+    if (startDate && endDate) {
+      // Use provided date range
+      startDateStr = startDate;
+      endDateStr = endDate;
+      console.log("Fetching monthly expense data for date range:", startDateStr, "to", endDateStr);
+    } else {
+      // Default: Get the start date for looking back 12 months
+      const currentMonth = new Date().getMonth() + 1;
+      const currentYear = new Date().getFullYear();
+      const start = new Date(currentYear, currentMonth - 13, 1);
+      startDateStr = start.toISOString().split('T')[0];
+      endDateStr = new Date().toISOString().split('T')[0];
+    }
+
     // Get all expenses within the date range
-    const { data, error } = await supabase
+    let query = supabase
       .from('expenses')
       .select('date, category, amount')
-      .gte('date', startDateStr)
-      .order('date', { ascending: true });
+      .gte('date', startDateStr);
+
+    if (endDateStr) {
+      query = query.lte('date', endDateStr);
+    }
+
+    const { data, error } = await query.order('date', { ascending: true });
       
     if (error) throw error;
     
@@ -453,30 +467,52 @@ export const updateUpcomingPayroll = async (payrollData) => {
   }
 };
 
-export const getFinancialStats = async (month = getCurrentMonth(), year = getCurrentYear()) => {
+export const getFinancialStats = async (startDate = null, endDate = null) => {
+  let month = getCurrentMonth();
+  let year = getCurrentYear();
+
   try {
-    console.log(`Calculating financial stats for ${month}/${year}`);
-    
-    // Calculate start and end dates for current month
-    const currentMonthStart = new Date(year, month - 1, 1);
-    const currentMonthEnd = new Date(year, month, 0);
-    
-    // Format dates as ISO strings for Supabase queries
-    const currentMonthStartStr = currentMonthStart.toISOString().split('T')[0];
-    const currentMonthEndStr = currentMonthEnd.toISOString().split('T')[0];
-    
-    // Calculate start and end dates for previous month
-    const prevMonth = month === 1 ? 12 : month - 1;
-    const prevYear = month === 1 ? year - 1 : year;
-    const prevMonthStart = new Date(prevYear, prevMonth - 1, 1);
-    const prevMonthEnd = new Date(prevYear, prevMonth, 0);
-    
-    // Format previous month dates as ISO strings
-    const prevMonthStartStr = prevMonthStart.toISOString().split('T')[0];
-    const prevMonthEndStr = prevMonthEnd.toISOString().split('T')[0];
-    
-    console.log(`Current month period: ${currentMonthStartStr} to ${currentMonthEndStr}`);
-    console.log(`Previous month period: ${prevMonthStartStr} to ${prevMonthEndStr}`);
+    let currentMonthStartStr, currentMonthEndStr, prevMonthStartStr, prevMonthEndStr;
+
+    if (startDate && endDate) {
+      // Use provided date range
+      currentMonthStartStr = startDate;
+      currentMonthEndStr = endDate;
+
+      // Calculate previous period (same duration before the start date)
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const duration = end - start;
+      const prevStart = new Date(start.getTime() - duration);
+      const prevEnd = new Date(start.getTime() - 1); // Day before current period
+
+      prevMonthStartStr = prevStart.toISOString().split('T')[0];
+      prevMonthEndStr = prevEnd.toISOString().split('T')[0];
+    } else {
+      // Default to current month logic
+      console.log(`Calculating financial stats for ${month}/${year}`);
+
+      // Calculate start and end dates for current month
+      const currentMonthStart = new Date(year, month - 1, 1);
+      const currentMonthEnd = new Date(year, month, 0);
+
+      // Format dates as ISO strings for Supabase queries
+      currentMonthStartStr = currentMonthStart.toISOString().split('T')[0];
+      currentMonthEndStr = currentMonthEnd.toISOString().split('T')[0];
+
+      // Calculate start and end dates for previous month
+      const prevMonth = month === 1 ? 12 : month - 1;
+      const prevYear = month === 1 ? year - 1 : year;
+      const prevMonthStart = new Date(prevYear, prevMonth - 1, 1);
+      const prevMonthEnd = new Date(prevYear, prevMonth, 0);
+
+      // Format previous month dates as ISO strings
+      prevMonthStartStr = prevMonthStart.toISOString().split('T')[0];
+      prevMonthEndStr = prevMonthEnd.toISOString().split('T')[0];
+    }
+
+    console.log(`Current period: ${currentMonthStartStr} to ${currentMonthEndStr}`);
+    console.log(`Previous period: ${prevMonthStartStr} to ${prevMonthEndStr}`);
     
     // Fetch current month's revenue (sum of paid invoices)
     const { data: currentRevenueData, error: currentRevenueError } = await supabase
@@ -574,29 +610,49 @@ export const getFinancialStats = async (month = getCurrentMonth(), year = getCur
 };
 
 // Get monthly revenue data with zero data handling
-export const getMonthlyRevenueData = async (limit = 12) => {
+export const getMonthlyRevenueData = async (startDate = null, endDate = null, limit = 12) => {
   try {
-    console.log("Fetching monthly revenue data with limit:", limit);
-    // Calculate date range for the last 12 months or specified limit
-    const now = new Date();
-    const startDate = new Date(now.getFullYear(), now.getMonth() - (limit - 1), 1);
-    const formattedStartDate = startDate.toISOString().split('T')[0];
-    
+    let formattedStartDate, formattedEndDate;
+
+    if (startDate && endDate) {
+      // Use provided date range
+      formattedStartDate = startDate;
+      formattedEndDate = endDate;
+      console.log("Fetching monthly revenue data for date range:", formattedStartDate, "to", formattedEndDate);
+    } else {
+      // Default: Calculate date range for the last 12 months or specified limit
+      console.log("Fetching monthly revenue data with limit:", limit);
+      const now = new Date();
+      const start = new Date(now.getFullYear(), now.getMonth() - (limit - 1), 1);
+      formattedStartDate = start.toISOString().split('T')[0];
+      formattedEndDate = now.toISOString().split('T')[0];
+    }
+
     // Fetch revenue data based on invoices
-    const { data: invoiceData, error: invoiceError } = await supabase
+    let invoiceQuery = supabase
       .from('invoices')
       .select('date, amount, status')
-      .gte('date', formattedStartDate)
-      .order('date', { ascending: true });
-    
+      .gte('date', formattedStartDate);
+
+    if (formattedEndDate) {
+      invoiceQuery = invoiceQuery.lte('date', formattedEndDate);
+    }
+
+    const { data: invoiceData, error: invoiceError } = await invoiceQuery.order('date', { ascending: true });
+
     if (invoiceError) throw invoiceError;
-    
+
     // Fetch expenses for the same period for profit calculation
-    const { data: expenseData, error: expenseError } = await supabase
+    let expenseQuery = supabase
       .from('expenses')
       .select('date, amount')
-      .gte('date', formattedStartDate)
-      .order('date', { ascending: true });
+      .gte('date', formattedStartDate);
+
+    if (formattedEndDate) {
+      expenseQuery = expenseQuery.lte('date', formattedEndDate);
+    }
+
+    const { data: expenseData, error: expenseError } = await expenseQuery.order('date', { ascending: true });
     
     if (expenseError) throw expenseError;
     
@@ -655,15 +711,21 @@ export const getMonthlyRevenueData = async (limit = 12) => {
     });
     
     console.log("Monthly revenue data generated:", resultArray);
-    
-    // If we don't have enough data, fill in with default values
+
+    // If using custom date range, return all data within that range without limiting
+    if (startDate && endDate) {
+      console.log("Returning all data for custom date range:", resultArray.length, "months");
+      return resultArray;
+    }
+
+    // For default behavior (no custom date range), fill in with default values if needed
     if (resultArray.length < limit) {
       const defaultData = generateDefaultMonthlyData(limit).filter(defaultItem => {
         // Only include default items for months not already in our result
-        return !resultArray.some(item => 
+        return !resultArray.some(item =>
           item.month === defaultItem.month && item.year === defaultItem.year);
       });
-      
+
       // Combine real data with default data and sort again
       return [...resultArray, ...defaultData].sort((a, b) => {
         if (a.year !== b.year) return a.year - b.year;
@@ -671,7 +733,7 @@ export const getMonthlyRevenueData = async (limit = 12) => {
         return monthToNum(a.month) - monthToNum(b.month);
       }).slice(-limit); // Take only the latest months up to limit
     }
-    
+
     return resultArray.slice(-limit); // Take only the latest months up to limit
   } catch (error) {
     console.error('Error fetching monthly revenue data:', error);
@@ -701,14 +763,16 @@ const generateDefaultMonthlyData = (count = 12) => {
 };
 
 // Get revenue categories with default values
-export const getRevenueCategories = async () => {
+export const getRevenueCategories = async (startDate = null, endDate = null) => {
   try {
+    // Note: revenue_categories table doesn't have date filtering in current schema
+    // This function is kept for compatibility but date filtering may not apply
     const { data, error } = await supabase
       .from('revenue_categories')
       .select('*');
-      
+
     if (error) throw error;
-    
+
     if (!data || data.length === 0) {
       return [
         { name: 'Milk Sales', value: 0, percentage: 0, color: '#2E7D32' },
@@ -717,7 +781,7 @@ export const getRevenueCategories = async () => {
         { name: 'Other', value: 0, percentage: 0, color: '#6D4C41' }
       ];
     }
-    
+
     return data;
   } catch (error) {
     console.error('Error fetching revenue categories:', error);
@@ -825,7 +889,7 @@ const fetchInvoiceSummaryData = async () => {
 };
 
 // Get full financial data for dashboard with robust error handling
-export const getFinancialDashboardData = async () => {
+export const getFinancialDashboardData = async (startDate = null, endDate = null) => {
   try {
     // Execute multiple queries in parallel with error handling for each
     const [
@@ -844,12 +908,12 @@ export const getFinancialDashboardData = async () => {
       payrollDistributionResult,
       payrollTrendsResult
     ] = await Promise.allSettled([
-      getFinancialStats(),
-      getMonthlyRevenueData(),
-      getRevenueCategories(),
+      getFinancialStats(startDate, endDate),
+      getMonthlyRevenueData(startDate, endDate),
+      getRevenueCategories(startDate, endDate),
       getCustomers(),
-      getMonthlyExpenseData(),
-      getExpenseCategories(),
+      getMonthlyExpenseData(startDate, endDate),
+      getExpenseCategories(startDate, endDate),
       getRecentExpenses(),
       getRecentInvoices(),
       getInvoiceAging(),
@@ -1162,17 +1226,22 @@ export const deleteExpense = async (expenseId) => {
     throw error;
   }
 };
-export const getExpenseCategories = async () => {
+export const getExpenseCategories = async (startDate = null, endDate = null) => {
   try {
-    // Get current year
+    // Default to current year if no date range provided
     const currentYear = new Date().getFullYear();
-    const startOfYear = new Date(currentYear, 0, 1).toISOString().split('T')[0];
-    
-    // Get all expenses for the current year
+    const defaultStartDate = new Date(currentYear, 0, 1).toISOString().split('T')[0];
+    const defaultEndDate = new Date().toISOString().split('T')[0];
+
+    const filterStartDate = startDate || defaultStartDate;
+    const filterEndDate = endDate || defaultEndDate;
+
+    // Get all expenses for the date range
     const { data, error } = await supabase
       .from('expenses')
       .select('category, amount')
-      .gte('date', startOfYear);
+      .gte('date', filterStartDate)
+      .lte('date', filterEndDate);
       
     if (error) throw error;
     
@@ -1599,7 +1668,7 @@ export const voidPayrollPayment = async (paymentId) => {
   }
 };
 
-export const getInvoices = async (page = 1, limit = 10, query = '') => {
+export const getInvoices = async (page = 1, limit = 10, query = '', startDate = null, endDate = null) => {
   try {
     // Build the base query with count option
     let queryBuilder = supabase
@@ -1608,19 +1677,27 @@ export const getInvoices = async (page = 1, limit = 10, query = '') => {
         *,
         customers (id, name)
       `, { count: 'exact' });
-    
+
     // Apply search filter if provided
     if (query) {
       queryBuilder = queryBuilder.or(`invoice_number.ilike.%${query}%,customers.name.ilike.%${query}%`);
     }
-    
+
+    // Apply date range filter if provided
+    if (startDate) {
+      queryBuilder = queryBuilder.gte('date', startDate);
+    }
+    if (endDate) {
+      queryBuilder = queryBuilder.lte('date', endDate);
+    }
+
     // Get paginated data with count included
     const { data, error, count } = await queryBuilder
       .order('date', { ascending: false })
       .range((page - 1) * limit, page * limit - 1);
-    
+
     if (error) throw error;
-    
+
     return { data: data || [], count: count || 0 };
   } catch (error) {
     console.error('Error fetching invoices:', error);
@@ -1813,11 +1890,34 @@ export const getCustomers = async () => {
   try {
     const { data, error } = await supabase
       .from('customers')
-      .select('*')
+      .select(`
+        *,
+        invoices (id, date, amount, status)
+      `)
       .order('name');
-    
+
     if (error) throw error;
-    return data;
+
+    // Process customer data to include calculated fields
+    return data.map(customer => {
+      const paidInvoices = (customer.invoices || [])
+        .filter(invoice => invoice.status === 'Paid' || invoice.status === 'Completed');
+
+      const totalPurchases = paidInvoices.reduce((sum, invoice) =>
+        sum + parseFloat(invoice.amount || 0), 0);
+
+      const lastOrder = paidInvoices.length > 0
+        ? new Date(Math.max(...paidInvoices.map(inv => new Date(inv.date).getTime())))
+        : null;
+
+      // Return full customer object with calculated fields
+      return {
+        ...customer,
+        total_purchases: totalPurchases,
+        last_order: lastOrder ? lastOrder.toISOString().split('T')[0] : null,
+        invoices: undefined // Remove invoices array to reduce data size
+      };
+    });
   } catch (error) {
     console.error('Error fetching customers:', error);
     throw error;
@@ -1894,70 +1994,148 @@ export const deleteCustomer = async (customerId) => {
   }
 };
 
-export const getRevenueData = async (dateRange = 'month') => {
+export const getRevenueData = async (dateRange = 'month', startDateParam = null, endDateParam = null) => {
   try {
-    // Calculate date range based on filter
-    let startDate = null;
-    const now = new Date();
-    
-    switch (dateRange) {
-      case 'month':
-        // Current month
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        break;
-      case 'quarter':
-        // Current quarter
-        const currentQuarter = Math.floor(now.getMonth() / 3);
-        startDate = new Date(now.getFullYear(), currentQuarter * 3, 1);
-        break;
-      case 'year':
-        // Current year
-        startDate = new Date(now.getFullYear(), 0, 1);
-        break;
-      default:
-        // Default to last 12 months
-        startDate = new Date(now.getFullYear() - 1, now.getMonth(), 1);
+    let startDateStr, endDateStr;
+
+    if (startDateParam && endDateParam) {
+      // Use provided date range
+      startDateStr = startDateParam;
+      endDateStr = endDateParam;
+    } else {
+      // Calculate date range based on filter
+      const now = new Date();
+      let startDate, endDate = now;
+
+      switch (dateRange) {
+        case 'month':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          break;
+        case 'quarter':
+          const currentQuarter = Math.floor(now.getMonth() / 3);
+          startDate = new Date(now.getFullYear(), currentQuarter * 3, 1);
+          break;
+        case 'year':
+          startDate = new Date(now.getFullYear(), 0, 1);
+          break;
+        default:
+          startDate = new Date(now.getFullYear() - 1, now.getMonth(), 1);
+      }
+
+      startDateStr = startDate.toISOString().split('T')[0];
+      endDateStr = endDate.toISOString().split('T')[0];
     }
-    
-    // Get month and year values for filtering
-    const startYear = startDate.getFullYear();
-    const startMonth = (startDate.getMonth() + 1).toString();
-    
-    // Try to fetch from revenue_data table first
-    const { data, error } = await supabase
-      .from('revenue_data')
-      .select('*')
-      .or(`year.gt.${startYear-1}, and(year.eq.${startYear}, month.gte.${startMonth})`) // Filter for data after startDate
-      .order('year', { ascending: true })
-      .order('month', { ascending: true });
-    
-    if (error) throw error;
-    
-    // If we have data in the table, use it
-    if (data && data.length > 0) {
-      return data.map(item => ({
-        ...item,
-        month: formatMonth(item.month) // Format month name
-      }));
+
+    // Fetch invoices within date range
+    let invoiceQuery = supabase
+      .from('invoices')
+      .select('date, amount, status');
+
+    if (startDateStr) {
+      invoiceQuery = invoiceQuery.gte('date', startDateStr);
     }
-    
-    // If no data found in table, update the tables and then fetch again
-    await updateRevenueData();
-    
-    // Try fetching again
-    const { data: updatedData, error: updateError } = await supabase
-      .from('revenue_data')
-      .select('*')
-      .or(`year.gt.${startYear-1}, and(year.eq.${startYear}, month.gte.${startMonth})`) // Filter for data after startDate
-      .order('year', { ascending: true })
-      .order('month', { ascending: true });
-    
-    if (updateError) throw updateError;
-    
-    return (updatedData || []).map(item => ({
-      ...item,
-      month: formatMonth(item.month) // Format month name
-    }));
+    if (endDateStr) {
+      invoiceQuery = invoiceQuery.lte('date', endDateStr);
+    }
+
+    // Fetch expenses within date range
+    let expenseQuery = supabase
+      .from('expenses')
+      .select('date, amount, status');
+
+    if (startDateStr) {
+      expenseQuery = expenseQuery.gte('date', startDateStr);
+    }
+    if (endDateStr) {
+      expenseQuery = expenseQuery.lte('date', endDateStr);
+    }
+
+    const [invoicesResult, expensesResult] = await Promise.all([
+      invoiceQuery.order('date', { ascending: true }),
+      expenseQuery.order('date', { ascending: true })
+    ]);
+
+    if (invoicesResult.error) throw invoicesResult.error;
+    if (expensesResult.error) throw expensesResult.error;
+
+    const invoices = invoicesResult.data || [];
+    const expenses = expensesResult.data || [];
+
+    console.log('Fetched data for revenue calculations:', {
+      invoices: invoices.length,
+      expenses: expenses.length,
+      dateRange: `${startDateStr} to ${endDateStr}`
+    });
+
+    // Group by month
+    const monthlyData = {};
+
+    // Process invoices (revenue/income)
+    invoices.forEach(invoice => {
+      const date = new Date(invoice.date);
+      const year = date.getFullYear();
+      const monthNum = date.getMonth() + 1;
+      const monthKey = `${year}-${String(monthNum).padStart(2, '0')}`;
+      const monthName = formatMonth(monthNum);
+
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = {
+          month: monthName,
+          year: year,
+          monthNum: monthNum,
+          income: 0,
+          revenue: 0,
+          expenses: 0,
+          profit: 0
+        };
+      }
+
+      if (invoice.status === 'Paid' || invoice.status === 'Completed') {
+        const amount = parseFloat(invoice.amount || 0);
+        monthlyData[monthKey].income += amount;
+        monthlyData[monthKey].revenue += amount;
+      }
+    });
+
+    // Process expenses
+    expenses.forEach(expense => {
+      const date = new Date(expense.date);
+      const year = date.getFullYear();
+      const monthNum = date.getMonth() + 1;
+      const monthKey = `${year}-${String(monthNum).padStart(2, '0')}`;
+      const monthName = formatMonth(monthNum);
+
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = {
+          month: monthName,
+          year: year,
+          monthNum: monthNum,
+          income: 0,
+          revenue: 0,
+          expenses: 0,
+          profit: 0
+        };
+      }
+
+      if (expense.status === 'Paid' || expense.status === 'Approved') {
+        const amount = parseFloat(expense.amount || 0);
+        monthlyData[monthKey].expenses += amount;
+      }
+    });
+
+    // Calculate profit for each month (revenue - expenses)
+    Object.values(monthlyData).forEach(month => {
+      month.profit = month.income - month.expenses;
+    });
+
+    // Convert to array and sort by year and month number
+    const result = Object.values(monthlyData).sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      return a.monthNum - b.monthNum;
+    });
+
+    console.log('Revenue data result:', result);
+    return result;
   } catch (error) {
     console.error('Error fetching revenue data:', error);
     return [];
@@ -1965,36 +2143,79 @@ export const getRevenueData = async (dateRange = 'month') => {
 };
 
 // Get revenue breakdown by category
-export const getRevenueCategoriesData = async () => {
+export const getRevenueCategoriesData = async (startDate = null, endDate = null) => {
   try {
-    // Try to fetch from revenue_categories table
-    const { data, error } = await supabase
-      .from('revenue_categories')
-      .select('*')
-      .order('value', { ascending: false });
-    
-    if (error) throw error;
-    
-    // If we have data in the table, use it
-    if (data && data.length > 0) {
-      return data;
+    // Fetch invoice items with their invoices to filter by date
+    let query = supabase
+      .from('invoice_items')
+      .select(`
+        *,
+        invoices!inner (date, status)
+      `);
+
+    // Filter by date range via invoices
+    if (startDate) {
+      query = query.gte('invoices.date', startDate);
     }
-    
-    // If no data found in table, update the tables and then fetch again
-    await updateRevenueCategories();
-    
-    // Try fetching again
-    const { data: updatedData, error: updateError } = await supabase
-      .from('revenue_categories')
-      .select('*')
-      .order('value', { ascending: false });
-    
-    if (updateError) throw updateError;
-    
-    return updatedData || [];
+    if (endDate) {
+      query = query.lte('invoices.date', endDate);
+    }
+
+    const { data: items, error } = await query;
+
+    if (error) throw error;
+
+    // Group by product/category
+    const categories = {};
+    let totalRevenue = 0;
+
+    items.forEach(item => {
+      // Only count paid/completed invoices
+      if (item.invoices.status === 'Paid' || item.invoices.status === 'Completed') {
+        // Use the amount field directly from invoice_items table
+        const itemTotal = parseFloat(item.amount || 0);
+        const description = item.description || 'Other';
+
+        // Categorize as Milk Sales, Cattle Sales, etc.
+        let category = 'Other';
+        const lowerDesc = description.toLowerCase();
+        if (lowerDesc.includes('milk')) {
+          category = 'Milk Sales';
+        } else if (lowerDesc.includes('cattle') || lowerDesc.includes('cow') || lowerDesc.includes('bull')) {
+          category = 'Cattle Sales';
+        } else if (lowerDesc.includes('manure') || lowerDesc.includes('fertilizer')) {
+          category = 'Manure Sales';
+        }
+
+        if (!categories[category]) {
+          categories[category] = 0;
+        }
+        categories[category] += itemTotal;
+        totalRevenue += itemTotal;
+      }
+    });
+
+    // Convert to array with percentages
+    const categoryColors = {
+      'Milk Sales': '#2E7D32',
+      'Cattle Sales': '#1565C0',
+      'Manure Sales': '#FFA000',
+      'Other': '#6D4C41'
+    };
+
+    const result = Object.entries(categories).map(([name, value]) => ({
+      name,
+      value,
+      percentage: totalRevenue > 0 ? (value / totalRevenue) * 100 : 0,
+      color: categoryColors[name] || '#6D4C41'
+    })).sort((a, b) => b.value - a.value);
+
+    console.log('Revenue categories result:', result, 'Total:', totalRevenue);
+    return result;
+
   } catch (error) {
     console.error('Error fetching revenue categories:', error);
-    
+
     // Return default values
     return [
       { name: 'Milk Sales', value: 0, percentage: 0, color: '#2E7D32' },
@@ -2006,42 +2227,57 @@ export const getRevenueCategoriesData = async () => {
 };
 
 // Get revenue summary statistics
-export const getRevenueSummary = async () => {
+export const getRevenueSummary = async (startDate = null, endDate = null) => {
   try {
-    const currentYear = new Date().getFullYear();
-    const startOfYear = new Date(currentYear, 0, 1).toISOString().split('T')[0];
-    const currentMonth = new Date().getMonth() + 1;
-    
-    // Fetch all paid invoices for the year
-    const { data, error } = await supabase
+    let startDateStr, endDateStr;
+
+    if (startDate && endDate) {
+      startDateStr = startDate;
+      endDateStr = endDate;
+    } else {
+      const currentYear = new Date().getFullYear();
+      startDateStr = new Date(currentYear, 0, 1).toISOString().split('T')[0];
+      endDateStr = new Date().toISOString().split('T')[0];
+    }
+
+    // Fetch all paid invoices for the date range
+    let query = supabase
       .from('invoices')
       .select('date, amount')
-      .eq('status', 'Paid')
-      .gte('date', startOfYear);
-      
+      .eq('status', 'Paid');
+
+    if (startDateStr) {
+      query = query.gte('date', startDateStr);
+    }
+    if (endDateStr) {
+      query = query.lte('date', endDateStr);
+    }
+
+    const { data, error } = await query;
+
     if (error) throw error;
-    
-    // Calculate total YTD revenue
+
+    // Calculate total for period
     let totalYTD = 0;
-    let monthlyRevenue = Array(12).fill(0);
-    
+    const monthlyRevenue = {};
+
     data.forEach(invoice => {
       const invoiceAmount = parseFloat(invoice.amount);
       totalYTD += invoiceAmount;
-      
+
       // Track monthly amounts for average calculation
-      const month = new Date(invoice.date).getMonth();
-      monthlyRevenue[month] += invoiceAmount;
+      const invoiceDate = new Date(invoice.date);
+      const monthKey = `${invoiceDate.getFullYear()}-${invoiceDate.getMonth()}`;
+      monthlyRevenue[monthKey] = (monthlyRevenue[monthKey] || 0) + invoiceAmount;
     });
-    
-    // Calculate average monthly revenue (use only months that have passed)
-    const monthsElapsed = currentMonth;
-    const totalRevenue = monthlyRevenue.slice(0, monthsElapsed).reduce((sum, val) => sum + val, 0);
-    const avgMonthly = monthsElapsed > 0 ? totalRevenue / monthsElapsed : 0;
-    
+
+    // Calculate average monthly revenue
+    const monthsCount = Object.keys(monthlyRevenue).length || 1;
+    const avgMonthly = totalYTD / monthsCount;
+
     // Calculate projected annual revenue
-    const projectedAnnual = monthsElapsed > 0 ? (avgMonthly * 12) : 0;
-    
+    const projectedAnnual = avgMonthly * 12;
+
     return {
       totalYTD,
       avgMonthly,
@@ -2058,42 +2294,50 @@ export const getRevenueSummary = async () => {
 };
 
 // Get customers with revenue data
-export const getCustomersWithRevenue = async (limit = 5) => {
+export const getCustomersWithRevenue = async (limit = 5, startDate = null, endDate = null) => {
   try {
-    // Fetch customers with their invoices
+    // Fetch customers with all their fields and invoices
     const { data, error } = await supabase
       .from('customers')
       .select(`
-        id,
-        name,
-        type,
-        status,
+        *,
         invoices (id, date, amount, status)
       `)
       .order('name')
       .limit(limit);
-      
+
     if (error) throw error;
-    
+
     // Process customer data
     return data.map(customer => {
-      const paidInvoices = (customer.invoices || [])
+      let paidInvoices = (customer.invoices || [])
         .filter(invoice => invoice.status === 'Paid' || invoice.status === 'Completed');
-      
-      const totalPurchases = paidInvoices.reduce((sum, invoice) => 
+
+      // Filter by date range if provided
+      if (startDate || endDate) {
+        paidInvoices = paidInvoices.filter(invoice => {
+          const invoiceDate = new Date(invoice.date);
+          if (startDate && invoiceDate < new Date(startDate)) return false;
+          if (endDate && invoiceDate > new Date(endDate)) return false;
+          return true;
+        });
+      }
+
+      const totalPurchases = paidInvoices.reduce((sum, invoice) =>
         sum + parseFloat(invoice.amount), 0);
-      
-      const lastOrder = paidInvoices.length > 0 
+
+      const lastOrder = paidInvoices.length > 0
         ? new Date(Math.max(...paidInvoices.map(inv => new Date(inv.date).getTime())))
         : null;
-      
+
+      // Return full customer object with calculated fields
       return {
-        id: customer.id,
-        name: customer.name,
-        type: customer.type,
+        ...customer, // Spread all original customer fields
         totalPurchases,
+        total_purchases: totalPurchases, // For ViewCustomerModal compatibility
         lastOrder: lastOrder ? lastOrder.toISOString() : null,
-        status: customer.status || 'Active'
+        last_order: lastOrder ? lastOrder.toISOString() : null, // For ViewCustomerModal compatibility
+        invoices: undefined // Remove invoices array to reduce data size
       };
     }).sort((a, b) => b.totalPurchases - a.totalPurchases); // Sort by highest revenue
   } catch (error) {

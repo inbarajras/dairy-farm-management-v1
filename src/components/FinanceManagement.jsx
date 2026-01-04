@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Download, DollarSign, CreditCard, Briefcase, Calendar, ChevronDown, TrendingUp, TrendingDown, PieChart, IndianRupee, X, AlertCircle, FileText } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, Pie } from 'recharts';
 import { getFinancialDashboardData, addCustomer, addExpense, addInvoice,
@@ -94,6 +94,8 @@ const formatDate = (dateString) => {
 const FinancesManagement = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [dateRange, setDateRange] = useState('month');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
   const [financialData, setFinancialData] = useState({
     invoices: { recent: [] },
     financialStats: {
@@ -131,11 +133,6 @@ const FinancesManagement = () => {
     projectedAnnual: 0
   });
   const [expenseTrends, setExpenseTrends] = useState([]);
-  const [expenseDateRange, setExpenseDateRange] = useState('month');
-  const [customDateRange, setCustomDateRange] = useState({  
-    startDate: '',
-    endDate: ''
-  });
   const [isViewPayrollHistoryModalOpen, setIsViewPayrollHistoryModalOpen] = useState(false);
   const [isEditEmployeePayrollModalOpen, setIsEditEmployeePayrollModalOpen] = useState(false);
   const [isPayrollDetailsModalOpen, setIsPayrollDetailsModalOpen] = useState(false);
@@ -160,7 +157,6 @@ const FinancesManagement = () => {
   const [isEditCustomerModalOpen, setIsEditCustomerModalOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
-  const [revenueDateRange, setRevenueDateRange] = useState('month');
   const [revenueData, setRevenueData] = useState([]);
   const [revenueCategories, setRevenueCategories] = useState([]);
   const [revenueSummary, setRevenueSummary] = useState({
@@ -438,76 +434,41 @@ const EmptyEmployeeSection = ({ onRetry }) => {
     }
   };
 
-  const fetchExpenseSummary = async (dateFilter = expenseDateRange, customDates = customDateRange) => {
+  const fetchExpenseSummary = async (dateFilter = null, customDates = {}) => {
     try {
-      // Calculate date range based on filter
-      let startDate = null;
-      let endDate = null;
-      
-      const now = new Date();
-      
-      switch (dateFilter) {
-        case 'month':
-          // Current month
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          break;
-        case 'quarter':
-          // Current quarter
-          const currentQuarter = Math.floor(now.getMonth() / 3);
-          startDate = new Date(now.getFullYear(), currentQuarter * 3, 1);
-          break;
-        case 'year':
-          // Current year
-          startDate = new Date(now.getFullYear(), 0, 1);
-          break;
-        case 'custom':
-          // Custom date range
-          if (customDates.startDate) 
-            startDate = new Date(customDates.startDate);
-          break;
-        default:
-          // Default to current year
-          startDate = new Date(now.getFullYear(), 0, 1);
-      }
-      
-      // Format date to ISO string for API
-      const formattedStartDate = startDate ? startDate.toISOString().split('T')[0] : null;
-      
+      // Use dates from customDates object (passed from calculateDateRange)
+      const formattedStartDate = customDates.startDate;
+      const formattedEndDate = customDates.endDate;
+
       // Fetch expenses for the period
-      const { data: periodData, error: periodError } = await supabase
+      let query = supabase
         .from('expenses')
-        .select('amount, date')
-        .gte('date', formattedStartDate);
+        .select('amount, date');
+
+      if (formattedStartDate) {
+        query = query.gte('date', formattedStartDate);
+      }
+      if (formattedEndDate) {
+        query = query.lte('date', formattedEndDate);
+      }
+
+      const { data: periodData, error: periodError } = await query;
         
       if (periodError) throw periodError;
       
       // Calculate total for the period
       const totalForPeriod = periodData.reduce((sum, item) => sum + parseFloat(item.amount), 0);
-      
-      // For average and projection, use different logic based on date range
-      let avgMonthly = 0;
-      let projectedAnnual = 0;
-      
-      if (dateFilter === 'month') {
-        // For monthly view, calculate daily average and project to month
-        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-        const daysElapsed = Math.min(now.getDate(), daysInMonth);
-        avgMonthly = totalForPeriod;
-        projectedAnnual = totalForPeriod * 12;
-      } else if (dateFilter === 'quarter') {
-        // For quarterly view
-        const monthsElapsed = now.getMonth() % 3 + 1;
-        avgMonthly = monthsElapsed > 0 ? totalForPeriod / monthsElapsed : 0;
-        projectedAnnual = avgMonthly * 12;
-      } else {
-        // Year or custom
-        // Get current month (1-based)
-        const currentMonth = now.getMonth() + 1;
-        // Calculate average monthly expenses
-        avgMonthly = currentMonth > 0 ? totalForPeriod / currentMonth : 0;
-        // Calculate projected annual expenses
-        projectedAnnual = currentMonth > 0 ? (totalForPeriod / currentMonth) * 12 : 0;
-      }
+
+      // Calculate duration in days for average
+      const now = new Date();
+      const start = formattedStartDate ? new Date(formattedStartDate) : new Date(now.getFullYear(), 0, 1);
+      const end = formattedEndDate ? new Date(formattedEndDate) : now;
+      const daysDifference = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
+      const monthsDifference = Math.max(1, daysDifference / 30);
+
+      // Calculate average monthly and projected annual
+      const avgMonthly = totalForPeriod / monthsDifference;
+      const projectedAnnual = avgMonthly * 12;
       
       setExpenseSummary({
         totalYTD: totalForPeriod,
@@ -524,57 +485,28 @@ const EmptyEmployeeSection = ({ onRetry }) => {
     }
   };
 
-  const fetchExpenseTrends = async (dateFilter = expenseDateRange, customDates = customDateRange) => {
+  const fetchExpenseTrends = async (dateFilter = null, customDates = {}) => {
     try {
-      // Calculate date range based on filter
-      let startDate = null;
-      let endDate = null;
-      
-      const now = new Date();
-      
-      switch (dateFilter) {
-        case 'month':
-          // Current month
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-          break;
-        case 'quarter':
-          // Current quarter
-          const currentQuarter = Math.floor(now.getMonth() / 3);
-          startDate = new Date(now.getFullYear(), currentQuarter * 3, 1);
-          endDate = new Date(now.getFullYear(), (currentQuarter + 1) * 3, 0);
-          break;
-        case 'year':
-          // Current year
-          startDate = new Date(now.getFullYear(), 0, 1);
-          endDate = new Date(now.getFullYear(), 11, 31);
-          break;
-        case 'custom':
-          // Custom date range
-          if (customDates.startDate) 
-            startDate = new Date(customDates.startDate);
-          if (customDates.endDate) 
-            endDate = new Date(customDates.endDate);
-          break;
-        default:
-          // Default to last 12 months if no valid filter
-          startDate = new Date(now.getFullYear(), now.getMonth() - 12, 1);
-          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      }
-      
-      // Format dates to ISO string for API
-      const formattedStartDate = startDate ? startDate.toISOString().split('T')[0] : null;
-      const formattedEndDate = endDate ? endDate.toISOString().split('T')[0] : null;
-      
+      // Use dates from customDates object (passed from calculateDateRange)
+      const formattedStartDate = customDates.startDate;
+      const formattedEndDate = customDates.endDate;
+
       console.log(`Fetching expense trends from ${formattedStartDate} to ${formattedEndDate}`);
-      
+
       // Get all expenses within the date range
-      const { data: expenseData, error } = await supabase
+      let query = supabase
         .from('expenses')
         .select('*')
-        .gte('date', formattedStartDate)
-        .lte('date', formattedEndDate)
         .order('date', { ascending: true });
+
+      if (formattedStartDate) {
+        query = query.gte('date', formattedStartDate);
+      }
+      if (formattedEndDate) {
+        query = query.lte('date', formattedEndDate);
+      }
+
+      const { data: expenseData, error } = await query;
         
       if (error) throw error;
       
@@ -639,15 +571,65 @@ const EmptyEmployeeSection = ({ onRetry }) => {
   };
   
   // Fetch data from Supabase on component mount
+  // Helper function to calculate date range
+  const calculateDateRange = useCallback(() => {
+    const now = new Date();
+    let startDate, endDate;
+
+    switch (dateRange) {
+      case 'week':
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        endDate = now;
+        break;
+      case '14days':
+        startDate = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+        endDate = now;
+        break;
+      case 'month':
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        endDate = now;
+        break;
+      case 'quarter':
+        startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        endDate = now;
+        break;
+      case 'year':
+        startDate = new Date(now.getFullYear(), 0, 1);
+        endDate = now;
+        break;
+      case 'custom':
+        if (customStartDate && customEndDate) {
+          startDate = new Date(customStartDate);
+          endDate = new Date(customEndDate);
+        } else {
+          // Default to last 30 days if custom dates not set
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          endDate = now;
+        }
+        break;
+      default:
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        endDate = now;
+    }
+
+    return {
+      startDate: startDate.toISOString().split('T')[0],
+      endDate: endDate.toISOString().split('T')[0]
+    };
+  }, [dateRange, customStartDate, customEndDate]);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        
+
         // Initialize revenue tables before fetching data
         await initializeRevenueTables();
-        
-        const data = await getFinancialDashboardData();
+
+        // Calculate date range for filtering
+        const { startDate, endDate } = calculateDateRange();
+
+        const data = await getFinancialDashboardData(startDate, endDate);
         console.log('Financial dashboard data received:', data);
         console.log('Payroll employees data:', data.payroll.employees);
         setFinancialData(data);
@@ -659,13 +641,23 @@ const EmptyEmployeeSection = ({ onRetry }) => {
         setIsLoading(false);
       }
     };
-    
+
     fetchData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange, customStartDate, customEndDate]);
   
   // Toggle modals
   const toggleAddExpenseModal = () => setIsAddExpenseModalOpen(!isAddExpenseModalOpen);
-  const toggleAddInvoiceModal = () => setIsAddInvoiceModalOpen(!isAddInvoiceModalOpen);
+  const toggleAddInvoiceModal = (customer = null) => {
+    if (isAddInvoiceModalOpen) {
+      // Clear selected customer when closing modal
+      setSelectedCustomer(null);
+    } else if (customer) {
+      // Set selected customer when opening modal with a customer
+      setSelectedCustomer(customer);
+    }
+    setIsAddInvoiceModalOpen(!isAddInvoiceModalOpen);
+  };
   const toggleAddCustomerModal = () => setIsAddCustomerModalOpen(!isAddCustomerModalOpen);
   const toggleProcessPayrollModal = () => setIsProcessPayrollModalOpen(!isProcessPayrollModalOpen);
   const toggleEditExpenseModal = (expense = null) => {
@@ -715,53 +707,18 @@ const EmptyEmployeeSection = ({ onRetry }) => {
     }
   };
 
-  const fetchExpenses = async (page = 1, query = '', dateFilter = expenseDateRange) => {
+  const fetchExpenses = async (page = 1, query = '', dateFilter = null, startDateParam = null, endDateParam = null) => {
     try {
       setIsExpenseLoading(true);
-      
-      // Calculate date range based on filter
-      let startDate = null;
-      let endDate = null;
-      
-      const now = new Date();
-      
-      switch (dateFilter) {
-        case 'month':
-          // Current month
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-          break;
-        case 'quarter':
-          // Current quarter
-          const currentQuarter = Math.floor(now.getMonth() / 3);
-          startDate = new Date(now.getFullYear(), currentQuarter * 3, 1);
-          endDate = new Date(now.getFullYear(), (currentQuarter + 1) * 3, 0);
-          break;
-        case 'year':
-          // Current year
-          startDate = new Date(now.getFullYear(), 0, 1);
-          endDate = new Date(now.getFullYear(), 11, 31);
-          break;
-        case 'custom':
-          // Custom date range
-          if (customDateRange.startDate) 
-            startDate = new Date(customDateRange.startDate);
-          if (customDateRange.endDate) 
-            endDate = new Date(customDateRange.endDate);
-          break;
-        default:
-          startDate = null;
-          endDate = null;
-      }
-      
-      // Format dates to ISO string for API
-      const formattedStartDate = startDate ? startDate.toISOString().split('T')[0] : null;
-      const formattedEndDate = endDate ? endDate.toISOString().split('T')[0] : null;
-      
+
+      // Use passed-in dates directly (already formatted from calculateDateRange)
+      const formattedStartDate = startDateParam;
+      const formattedEndDate = endDateParam;
+
       // Call the API with date filters
       const { data, count } = await getExpensesByPage(
-        page, 
-        expensesPerPage, 
+        page,
+        expensesPerPage,
         query,
         formattedStartDate,
         formattedEndDate
@@ -778,59 +735,78 @@ const EmptyEmployeeSection = ({ onRetry }) => {
     }
   };
 
-  const fetchInvoicesSummaryData = async () => {
+  const fetchInvoicesSummaryData = async (startDate = null, endDate = null) => {
     try {
       setIsLoading(true);
-      
+
       // Get current date
       const today = new Date();
       const currentMonth = today.getMonth();
       const currentYear = today.getFullYear();
-      
+
       // Calculate start of month for filtering
       const startOfMonth = new Date(currentYear, currentMonth, 1).toISOString().split('T')[0];
-      
-      // Fetch all invoices
-      const { data: allInvoices, error: invoicesError } = await supabase
+
+      // Fetch all invoices with items and optional date filter
+      let query = supabase
         .from('invoices')
-        .select('*, customers(name, type)');
-      
+        .select(`
+          *,
+          customers(name, type),
+          invoice_items(id, description, quantity, unit_price, amount)
+        `);
+
+      if (startDate) {
+        query = query.gte('date', startDate);
+      }
+      if (endDate) {
+        query = query.lte('date', endDate);
+      }
+
+      const { data: allInvoices, error: invoicesError } = await query;
+
       if (invoicesError) throw invoicesError;
-      
+
+      console.log('Invoices fetched for summary:', {
+        total: allInvoices?.length,
+        sample: allInvoices?.[0],
+        hasItems: allInvoices?.[0]?.invoice_items?.length,
+        dateRange: { startDate, endDate }
+      });
+
       // Calculate various metrics
       let outstanding = 0;
       let outstandingCount = 0;
       let overdue = 0;
       let overdueCount = 0;
-      let paidThisMonth = 0;
-      let paidCountThisMonth = 0;
-      let issuedThisMonth = 0;
-      let issuedCountThisMonth = 0;
-      
+      let paidInRange = 0;
+      let paidCountInRange = 0;
+      let issuedInRange = 0;
+      let issuedCountInRange = 0;
+
       // For revenue breakdown by product/service
       let revenueByProduct = {};
-      
+
       // For invoice status chart
       let paidAmount = 0;
       let pendingAmount = 0;
       let overdueAmount = 0;
       let cancelledAmount = 0;
-      
+
       allInvoices.forEach(invoice => {
         const invoiceDate = new Date(invoice.date);
         const dueDate = new Date(invoice.due_date);
         const amount = parseFloat(invoice.amount);
-        
-        // Check if invoice is from current month
-        const isCurrentMonth = invoiceDate.getMonth() === currentMonth && 
-                               invoiceDate.getFullYear() === currentYear;
-        
+
+        // Check if invoice is within the selected date range (all invoices already filtered by query)
+        const isInDateRange = true; // Since the query already filters by date range
+
         // Calculate metrics based on status and date
         if (invoice.status === 'Pending') {
           outstanding += amount;
           outstandingCount++;
           pendingAmount += amount;
-          
+
           if (dueDate.getTime() < today.getTime()) {
             overdue += amount;
             overdueCount++;
@@ -839,9 +815,9 @@ const EmptyEmployeeSection = ({ onRetry }) => {
           }
         } else if (invoice.status === 'Paid') {
           paidAmount += amount;
-          if (isCurrentMonth) {
-            paidThisMonth += amount;
-            paidCountThisMonth++;
+          if (isInDateRange) {
+            paidInRange += amount;
+            paidCountInRange++;
           }
         } else if (invoice.status === 'Overdue') {
           overdue += amount;
@@ -850,21 +826,40 @@ const EmptyEmployeeSection = ({ onRetry }) => {
         } else if (invoice.status === 'Cancelled') {
           cancelledAmount += amount;
         }
-        
-        // Check if invoice was issued this month
-        if (isCurrentMonth) {
-          issuedThisMonth += amount;
-          issuedCountThisMonth++;
+
+        // Count all invoices issued in the date range (already filtered by query)
+        if (isInDateRange) {
+          issuedInRange += amount;
+          issuedCountInRange++;
         }
         
-        // Process invoice items for revenue breakdown
-        if (invoice.items && Array.isArray(invoice.items)) {
-          invoice.items.forEach(item => {
-            const category = item.category || 'Other';
+        // Process invoice items for revenue breakdown (only for Paid invoices)
+        if ((invoice.status === 'Paid' || invoice.status === 'Completed') &&
+            invoice.invoice_items && Array.isArray(invoice.invoice_items)) {
+          invoice.invoice_items.forEach(item => {
+            // Categorize by description
+            const description = item.description || 'Other';
+            let category = 'Other';
+
+            // Categorize products based on description
+            const lowerDesc = description.toLowerCase();
+            if (lowerDesc.includes('milk')) {
+              category = 'Milk Sales';
+            } else if (lowerDesc.includes('cattle') || lowerDesc.includes('cow')) {
+              category = 'Cattle Sales';
+            } else if (lowerDesc.includes('manure')) {
+              category = 'Manure Sales';
+            } else {
+              category = description;
+            }
+
             if (!revenueByProduct[category]) {
               revenueByProduct[category] = 0;
             }
-            revenueByProduct[category] += parseFloat(item.amount || 0);
+
+            // Use the amount field directly from the invoice_items table
+            const itemTotal = parseFloat(item.amount || 0);
+            revenueByProduct[category] += itemTotal;
           });
         }
       });
@@ -873,18 +868,24 @@ const EmptyEmployeeSection = ({ onRetry }) => {
       const revenueCategories = Object.entries(revenueByProduct).map(([name, value], index) => {
         // Use defined color scheme
         const color = CHART_COLORS.primary[index % CHART_COLORS.primary.length];
-        
+
         return { name, value, color };
       });
-      
+
       // Calculate percentages for chart
       const totalRevenue = revenueCategories.reduce((sum, item) => sum + item.value, 0);
       revenueCategories.forEach(item => {
         item.percentage = totalRevenue > 0 ? (item.value / totalRevenue) * 100 : 0;
       });
-      
+
       // Sort by value in descending order
       revenueCategories.sort((a, b) => b.value - a.value);
+
+      console.log('Revenue breakdown calculated:', {
+        categories: revenueCategories,
+        totalRevenue,
+        revenueByProduct
+      });
       
       // Create invoice status data for pie chart
       const invoiceStatusData = [
@@ -899,10 +900,10 @@ const EmptyEmployeeSection = ({ onRetry }) => {
         outstandingCount,
         overdue,
         overdueCount,
-        paidThisMonth,
-        paidCountThisMonth,
-        issuedThisMonth,
-        issuedCountThisMonth,
+        paidThisMonth: paidInRange,
+        paidCountThisMonth: paidCountInRange,
+        issuedThisMonth: issuedInRange,
+        issuedCountThisMonth: issuedCountInRange,
         revenueCategories,
         invoiceStatusData
       };
@@ -931,52 +932,65 @@ const EmptyEmployeeSection = ({ onRetry }) => {
 
   useEffect(() => {
     if (activeTab === 'expenses') {
-      fetchExpenses(expensePage, expenseSearchQuery, expenseDateRange);
-      fetchExpenseSummary(expenseDateRange, customDateRange);
-      fetchExpenseTrends(expenseDateRange, customDateRange);
+      // Use global date range instead of tab-specific date range
+      const { startDate, endDate } = calculateDateRange();
+      fetchExpenses(expensePage, expenseSearchQuery, dateRange, startDate, endDate);
+      fetchExpenseSummary(dateRange, { startDate, endDate });
+      fetchExpenseTrends(dateRange, { startDate, endDate });
     }
-  }, [activeTab, expensePage, expenseSearchQuery, expenseDateRange, customDateRange.startDate, customDateRange.endDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, expensePage, expenseSearchQuery, dateRange, customStartDate, customEndDate]);
 
   useEffect(() => {
     if (activeTab === 'invoices') {
       const loadInvoiceData = async () => {
-        await fetchInvoices(invoicesPage, invoiceSearchQuery);
+        // Use global date range for invoices
+        const { startDate, endDate } = calculateDateRange();
+        await fetchInvoices(invoicesPage, invoiceSearchQuery, startDate, endDate);
         await fetchAgingSummary();
         await fetchCustomers();
-        
-        // Fetch summary data for KPI cards
-        const summaryData = await fetchInvoicesSummaryData();
+
+        // Fetch summary data for KPI cards with date range
+        const summaryData = await fetchInvoicesSummaryData(startDate, endDate);
         setInvoicesSummary(summaryData);
       };
-      
+
       loadInvoiceData();
     }
-  }, [activeTab, invoicesPage, invoiceSearchQuery]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, invoicesPage, invoiceSearchQuery, dateRange, customStartDate, customEndDate]);
 
   useEffect(() => {
     if (activeTab === 'income') {
-      fetchRevenueData(revenueDateRange);
+      // Use global date range for income
+      fetchRevenueData(dateRange, customStartDate, customEndDate);
     }
-  }, [activeTab, revenueDateRange]);
+  }, [activeTab, dateRange, customStartDate, customEndDate]);
 
-  const fetchRevenueData = async (dateRangeFilter, customDate = null) => {
+  const fetchRevenueData = async (dateRangeFilter, customStartDateParam = null, customEndDateParam = null) => {
     try {
       setIsRevenueLoading(true);
-      
+
       // Initialize or update the revenue tables first
       await initializeRevenueTables();
-      
-      // Use the provided date or current date
-      const effectiveDate = customDate || new Date();
-      
+
+      const { startDate, endDate } = calculateDateRange();
+
       // Fetch all necessary data in parallel
       const [revenueResult, categoriesResult, summaryResult, customersResult] = await Promise.all([
-        getRevenueData(dateRangeFilter, effectiveDate),
-        getRevenueCategoriesData(effectiveDate),
-        getRevenueSummary(effectiveDate),
-        getCustomersWithRevenue(10, effectiveDate)
+        getRevenueData(dateRangeFilter, startDate, endDate),
+        getRevenueCategoriesData(startDate, endDate),
+        getRevenueSummary(startDate, endDate),
+        getCustomersWithRevenue(10, startDate, endDate)
       ]);
-      
+
+      console.log('Income tab data fetched:', {
+        revenueData: revenueResult,
+        categories: categoriesResult,
+        summary: summaryResult,
+        customers: customersResult
+      });
+
       setRevenueData(revenueResult);
       setRevenueCategories(categoriesResult);
       setRevenueSummary(summaryResult);
@@ -989,12 +1003,6 @@ const EmptyEmployeeSection = ({ onRetry }) => {
     }
   };
   
-  // Handle revenue date range change
-  const handleRevenueDateRangeChange = (e) => {
-    const value = e.target.value;
-    setRevenueDateRange(value);
-    fetchRevenueData(value);
-  };
 
   const revenueByCustomerType = useMemo(() => {
     // Group customers by type and calculate total revenue for each type
@@ -1165,9 +1173,10 @@ const EmptyEmployeeSection = ({ onRetry }) => {
       
       // If on expenses tab, refresh the expenses list
       if (activeTab === 'expenses') {
-        fetchExpenses(expensePage, expenseSearchQuery);
+        const { startDate, endDate } = calculateDateRange();
+        fetchExpenses(expensePage, expenseSearchQuery, dateRange, startDate, endDate);
       }
-      
+
       // Close the modal
       toggleAddExpenseModal();
     } catch (err) {
@@ -1178,35 +1187,8 @@ const EmptyEmployeeSection = ({ onRetry }) => {
     }
   };
 
-  const handleDateRangeChange = (e) => {
-    const value = e.target.value;
-    setExpenseDateRange(value);
-    
-    // Reset custom date range if not on custom
-    if (value !== 'custom') {
-      setCustomDateRange({ startDate: '', endDate: '' });
-      // Fetch expenses with the new date range
-      fetchExpenses(1, expenseSearchQuery, value);
-      fetchExpenseSummary(value, { startDate: '', endDate: '' });
-      fetchExpenseTrends(value, { startDate: '', endDate: '' });
-    }
-  };
   
   // 4. Add handler for custom date range inputs
-  const handleCustomDateChange = (field, value) => {
-    setCustomDateRange(prev => {
-      const updated = { ...prev, [field]: value };
-      
-      // If both dates are set, fetch data
-      if (updated.startDate && updated.endDate) {
-        fetchExpenses(1, expenseSearchQuery, 'custom', updated);
-        fetchExpenseSummary('custom', updated);
-        fetchExpenseTrends('custom', updated);
-      }
-      
-      return updated;
-    });
-  };
   
   // Handle expense update
   const handleExpenseUpdate = async (expenseId, expenseData) => {
@@ -1233,9 +1215,10 @@ const EmptyEmployeeSection = ({ onRetry }) => {
       
       // If on expenses tab, refresh the expenses list
       if (activeTab === 'expenses') {
-        fetchExpenses(expensePage, expenseSearchQuery);
+        const { startDate, endDate } = calculateDateRange();
+        fetchExpenses(expensePage, expenseSearchQuery, dateRange, startDate, endDate);
       }
-      
+
       // Close the edit modal
       toggleEditExpenseModal();
     } catch (err) {
@@ -1275,7 +1258,8 @@ const EmptyEmployeeSection = ({ onRetry }) => {
       
       // If on expenses tab, refresh the expenses list
       if (activeTab === 'expenses') {
-        fetchExpenses(expensePage, expenseSearchQuery);
+        const { startDate, endDate } = calculateDateRange();
+        fetchExpenses(expensePage, expenseSearchQuery, dateRange, startDate, endDate);
       }
     } catch (err) {
       console.error('Error deleting expense:', err);
@@ -1327,7 +1311,8 @@ const EmptyEmployeeSection = ({ onRetry }) => {
       
       // If on expenses tab, refresh the expenses list
       if (activeTab === 'expenses') {
-        fetchExpenses(expensePage, expenseSearchQuery);
+        const { startDate, endDate } = calculateDateRange();
+        fetchExpenses(expensePage, expenseSearchQuery, dateRange, startDate, endDate);
       }
     } catch (err) {
       console.error('Error updating expense status:', err);
@@ -1337,11 +1322,11 @@ const EmptyEmployeeSection = ({ onRetry }) => {
     }
   };
 
-  const fetchInvoices = async (page = 1, query = '') => {
+  const fetchInvoices = async (page = 1, query = '', startDate = null, endDate = null) => {
     try {
       setIsInvoiceLoading(true);
-      const { data, count } = await getInvoices(page, invoicesPerPage, query);
-      
+      const { data, count } = await getInvoices(page, invoicesPerPage, query, startDate, endDate);
+
       // Initialize with empty array if data is null or undefined
       setInvoicesList(data || []);
       setTotalInvoices(count || 0);
@@ -1368,21 +1353,6 @@ const EmptyEmployeeSection = ({ onRetry }) => {
     }
   };
 
-  const getDateRangeLabel = (range) => {
-    const now = new Date();
-    
-    switch(range) {
-      case 'month':
-        return now.toLocaleString('default', { month: 'long', year: 'numeric' });
-      case 'quarter':
-        const currentQuarter = Math.floor(now.getMonth() / 3) + 1;
-        return `Q${currentQuarter} ${now.getFullYear()}`;
-      case 'year':
-        return now.getFullYear().toString();
-      default:
-        return 'All Time';
-    }
-  };
   
   const handleInvoiceSearch = (e) => {
     const query = e.target.value;
@@ -1807,19 +1777,20 @@ const EmptyEmployeeSection = ({ onRetry }) => {
               <div>
                 <h3 className="text-sm font-medium text-gray-700 mb-3">Revenue Breakdown</h3>
                 <div className="space-y-3">
-                  {invoicesSummary.revenueCategories && invoicesSummary.revenueCategories.length > 0 ? (
-                    invoicesSummary.revenueCategories.map((category, index) => (
+                  {revenueCategories && revenueCategories.length > 0 ? (
+                    revenueCategories.map((category, index) => (
                       <div key={index} className="flex flex-col">
                         <div className="flex justify-between">
                           <span className="text-sm font-medium text-gray-700">{category.name}</span>
                           <span className="text-sm font-medium text-gray-900">{formatCurrency(category.value)}</span>
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2.5 mt-1">
-                          <div 
+                          <div
                             className="h-2.5 rounded-full bg-gradient-to-r from-blue-500 to-green-500"
                             style={{ width: `${category.percentage}%`, backgroundColor: category.color }}
                           ></div>
                         </div>
+                        <div className="text-xs text-gray-500 mt-1">{category.percentage.toFixed(1)}%</div>
                       </div>
                     ))
                   ) : (
@@ -1937,8 +1908,8 @@ const EmptyEmployeeSection = ({ onRetry }) => {
                               >
                                 Edit
                               </button>
-                              <button 
-                                onClick={() => toggleAddInvoiceModal()} 
+                              <button
+                                onClick={() => toggleAddInvoiceModal(customer)}
                                 className="text-indigo-600 hover:text-indigo-900"
                               >
                                 Invoice
@@ -2081,15 +2052,14 @@ const EmptyEmployeeSection = ({ onRetry }) => {
             <div className="px-6 py-6">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Invoice Summary</h2>
-                <button 
-                  onClick={toggleAddInvoiceModal}
-                  className="flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm"
-                >
-                  <Plus size={20} className="mr-2" />
-                  Create Invoice
-                </button>
               </div>
-              
+
+              {isLoading ? (
+                <div className="flex justify-center py-12">
+                  <LoadingSpinner message="Loading invoice summary..." />
+                </div>
+              ) : (
+                <>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
                 <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
                   <div className="h-2 bg-gradient-to-r from-blue-500 to-blue-600"></div>
@@ -2116,18 +2086,18 @@ const EmptyEmployeeSection = ({ onRetry }) => {
                 <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
                   <div className="h-2 bg-gradient-to-r from-green-500 to-green-600"></div>
                   <div className="p-5">
-                    <p className="text-sm font-medium text-gray-500">Paid This Month</p>
+                    <p className="text-sm font-medium text-gray-500">Paid in Period</p>
                     <p className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-green-500 mt-1">
                       {formatCurrency(invoicesSummary.paidThisMonth)}
                     </p>
                     <p className="text-xs text-gray-500 mt-1">{invoicesSummary.paidCountThisMonth} paid invoices</p>
                   </div>
                 </div>
-                
+
                 <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
                   <div className="h-2 bg-gradient-to-r from-pink-500 to-pink-400"></div>
                   <div className="p-5">
-                    <p className="text-sm font-medium text-gray-500">Invoiced This Month</p>
+                    <p className="text-sm font-medium text-gray-500">Invoiced in Period</p>
                     <p className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-pink-600 to-pink-500 mt-1">
                       {formatCurrency(invoicesSummary.issuedThisMonth)}
                     </p>
@@ -2164,9 +2134,10 @@ const EmptyEmployeeSection = ({ onRetry }) => {
                   ) : (
                     <div className="text-sm text-gray-500">No aging data available</div>
                   )}
+                  </div>
                 </div>
               </div>
-              
+
               {/* <div>
                 <h3 className="text-sm font-medium text-gray-700 mb-3">Invoice Status</h3>
                 <div className="h-64">
@@ -2186,7 +2157,7 @@ const EmptyEmployeeSection = ({ onRetry }) => {
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
-                      <Tooltip 
+                      <Tooltip
                         formatter={(value) => [formatCurrency(value), '']}
                         contentStyle={{ background: '#fff', border: '1px solid #f1f1f1', borderRadius: '4px' }}
                       />
@@ -2194,10 +2165,11 @@ const EmptyEmployeeSection = ({ onRetry }) => {
                   </ResponsiveContainer>
                 </div>
               </div> */}
+              </>
+              )}
             </div>
           </div>
-        </div>
-  
+
         {/* Customer Management */}
         <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 mb-6">
           <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
@@ -2212,6 +2184,11 @@ const EmptyEmployeeSection = ({ onRetry }) => {
             </button>
           </div>
           <div className="p-6">
+            {isLoadingCustomers ? (
+              <div className="flex justify-center py-12">
+                <LoadingSpinner message="Loading customers..." />
+              </div>
+            ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30">
@@ -2277,12 +2254,8 @@ const EmptyEmployeeSection = ({ onRetry }) => {
                           >
                             Edit
                           </button>
-                          <button 
-                            onClick={() => {
-                              // Pre-select this customer when opening the invoice modal
-                              setSelectedCustomer(customer);
-                              toggleAddInvoiceModal();
-                            }}
+                          <button
+                            onClick={() => toggleAddInvoiceModal(customer)}
                             className="text-indigo-600 hover:text-indigo-900 mr-3"
                           >
                             Invoice
@@ -2306,6 +2279,7 @@ const EmptyEmployeeSection = ({ onRetry }) => {
                 </tbody>
               </table>
             </div>
+            )}
           </div>
         </div>
         
@@ -2584,47 +2558,43 @@ const EmptyEmployeeSection = ({ onRetry }) => {
           </nav>
         </div>
         
-        {/* Date Range Filter */}
-        {(activeTab === 'expenses' || activeTab === 'income') && (
-          <div className="mb-6 flex flex-wrap items-center gap-3">
-            <span className="text-sm text-gray-600">Date Range:</span>
-            <select
-              value={activeTab === 'income' ? revenueDateRange : expenseDateRange}
-              onChange={activeTab === 'income' ? handleRevenueDateRangeChange : handleDateRangeChange}
-              className="appearance-none bg-white border border-gray-200 rounded-lg pl-3 pr-10 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-300 shadow-sm hover:shadow-md transition-all duration-200 min-w-[120px]"
-            >
-              <option value="month">This Month</option>
-              <option value="quarter">This Quarter</option>
-              <option value="year">This Year</option>
-              {activeTab === 'income' && <option value="all">All Time</option>}
-              {activeTab === 'expenses' && <option value="custom">Custom Range</option>}
-            </select>
-            
-            {activeTab === 'expenses' && expenseDateRange === 'custom' && (
-              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
-                <input
-                  type="date"
-                  value={customDateRange.startDate}
-                  onChange={(e) => handleCustomDateChange('startDate', e.target.value)}
-                  className="border border-gray-300 rounded-md py-1 px-3 text-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
-                />
-                <span>to</span>
-                <input
-                  type="date"
-                  value={customDateRange.endDate}
-                  onChange={(e) => handleCustomDateChange('endDate', e.target.value)}
-                  className="border border-gray-300 rounded-md py-1 px-3 text-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
-                />
-                <button 
-                  onClick={() => fetchExpenses(1, expenseSearchQuery, 'custom')}
-                  className="px-3 py-1 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
-                >
-                  Apply
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Unified Date Range Filter */}
+        <div className="mb-6 flex flex-wrap items-center gap-3">
+          <span className="text-sm font-semibold text-gray-700">Date Range:</span>
+          <select
+            value={dateRange}
+            onChange={(e) => setDateRange(e.target.value)}
+            className="appearance-none bg-white border border-gray-200 rounded-lg pl-3 pr-10 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-300 shadow-sm hover:shadow-md transition-all duration-200 min-w-[140px]"
+          >
+            <option value="week">Last 7 days</option>
+            <option value="14days">Last 14 days</option>
+            <option value="month">Last 30 days</option>
+            <option value="quarter">Last 90 days</option>
+            <option value="year">This Year</option>
+            <option value="custom">Custom Range</option>
+          </select>
+
+          {dateRange === 'custom' && (
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                max={new Date().toISOString().split('T')[0]}
+                className="appearance-none bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-300 shadow-sm"
+              />
+              <span className="text-sm text-gray-500">to</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                max={new Date().toISOString().split('T')[0]}
+                min={customStartDate}
+                className="appearance-none bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-300 shadow-sm"
+              />
+            </div>
+          )}
+        </div>
         {/* Dashboard Tab */}
         {activeTab === 'dashboard' && (
           <div>
@@ -2761,30 +2731,31 @@ const EmptyEmployeeSection = ({ onRetry }) => {
             
             {/* Financial Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
-              <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+            <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
+              <div className="h-2 bg-gradient-to-r from-green-500 to-blue-600"></div>
               <div className="p-6">
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Income vs Expenses</h2>
-                  <select className="border rounded-lg px-3 py-1.5 text-sm bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500">
-                    <option>Monthly</option>
-                    <option>Quarterly</option>
-                    <option>Yearly</option>
-                  </select>
                 </div>
                 <div className="h-80 overflow-x-auto">
                   <div className="min-w-[400px] h-full">
                     <ResponsiveContainer width="100%" height="100%">
                     <BarChart
-                      data={financialData?.revenue?.monthly}
+                      data={financialData?.revenue?.monthly || []}
                       margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                     >
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="month" />
-                      <YAxis />
-                      <Tooltip 
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                      <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip
                         formatter={(value) => [formatCurrency(value), '']}
-                        contentStyle={{ background: '#fff', border: '1px solid #f1f1f1', borderRadius: '4px' }}
+                        contentStyle={{
+                          background: '#fff',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                          padding: '8px 12px'
+                        }}
                       />
                       <Legend />
                       <Bar dataKey="income" name="Income" fill={CHART_COLORS.status.paid} radius={[4, 4, 0, 0]} />
@@ -2797,11 +2768,14 @@ const EmptyEmployeeSection = ({ onRetry }) => {
             </div>
             </div>
             
-            <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
-              <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+            <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
+              <div className="h-2 bg-gradient-to-r from-green-500 to-blue-600"></div>
               <div className="p-6">
                 <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Expense Breakdown</h2>
+                  <div className="flex items-center gap-2">
+                    <PieChart size={20} className="text-green-600" />
+                    <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Expense Breakdown</h2>
+                  </div>
                   <div className="flex items-center space-x-2">
                     <span className="text-sm text-gray-500">
                       {new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
@@ -2813,35 +2787,49 @@ const EmptyEmployeeSection = ({ onRetry }) => {
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
-                          data={financialData?.expenses?.categories}
+                          data={financialData?.expenses?.categories || []}
                           cx="50%"
                           cy="50%"
                           labelLine={false}
-                          outerRadius={80}
+                          innerRadius={60}
+                          outerRadius={100}
                           fill={CHART_COLORS.primary[1]}
                           dataKey="value"
                           label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                          animationBegin={0}
+                          animationDuration={800}
                         >
-                          {financialData?.expenses?.categories?.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          {(financialData?.expenses?.categories || []).map((entry, index) => (
+                            <Cell
+                              key={`cell-${index}`}
+                              fill={entry.color || CHART_COLORS.primary[index % CHART_COLORS.primary.length]}
+                              className="hover:opacity-80 transition-opacity duration-200 cursor-pointer"
+                            />
                           ))}
                         </Pie>
-                        <Tooltip 
+                        <Tooltip
                           formatter={(value) => [formatCurrency(value), '']}
-                          contentStyle={{ background: '#fff', border: '1px solid #f1f1f1', borderRadius: '4px' }}
+                          contentStyle={{
+                            background: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '8px',
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                            padding: '8px 12px'
+                          }}
+                          labelStyle={{ fontWeight: 'bold', marginBottom: '4px' }}
                         />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
-                  <div className="w-full md:w-1/2">
-                    <ul className="space-y-2">
-                      {financialData?.expenses?.categories?.map((category, index) => (
-                        <li key={index} className="flex items-center justify-between">
+                  <div className="w-full md:w-1/2 mt-4 md:mt-0">
+                    <ul className="space-y-3">
+                      {(financialData?.expenses?.categories || []).map((category, index) => (
+                        <li key={index} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg transition-colors duration-200">
                           <div className="flex items-center">
-                            <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: category.color }}></div>
-                            <span className="text-sm text-gray-700">{category.name}</span>
+                            <div className="w-4 h-4 rounded-full mr-3 shadow-sm" style={{ backgroundColor: category.color || CHART_COLORS.primary[index % CHART_COLORS.primary.length] }}></div>
+                            <span className="text-sm font-medium text-gray-700">{category.name}</span>
                           </div>
-                          <div className="text-sm font-medium text-gray-900">{formatCurrency(category.value)}</div>
+                          <div className="text-sm font-semibold text-gray-900">{formatCurrency(category.value)}</div>
                         </li>
                       ))}
                     </ul>
@@ -2853,13 +2841,13 @@ const EmptyEmployeeSection = ({ onRetry }) => {
             
             {/* Recent Transactions */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
-                <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
+                <div className="h-2 bg-gradient-to-r from-red-500 to-red-600"></div>
                 <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                  <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Recent Expenses</h2>
+                  <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-red-600 to-red-500">Recent Expenses</h2>
                   <button
                     onClick={() => setActiveTab('expenses')}
-                    className="text-sm text-green-600 hover:text-green-500 font-medium"
+                    className="text-sm text-green-600 hover:text-green-700 font-medium transition-colors duration-200"
                   >
                     View All
                   </button>
@@ -2892,13 +2880,13 @@ const EmptyEmployeeSection = ({ onRetry }) => {
                 </div>
               </div>
               
-              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
-                <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100">
+                <div className="h-2 bg-gradient-to-r from-blue-500 to-blue-600"></div>
                 <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                  <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Recent Invoices</h2>
+                  <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-blue-500">Recent Invoices</h2>
                   <button
                     onClick={() => setActiveTab('invoices')}
-                    className="text-sm text-green-600 hover:text-green-500 font-medium"
+                    className="text-sm text-green-600 hover:text-green-700 font-medium transition-colors duration-200"
                   >
                     View All
                   </button>
@@ -5332,6 +5320,16 @@ const AddInvoiceModal = ({ onClose, onSubmit, customers = [], toggleAddCustomerM
       dueDate: defaultDueDate.toISOString().split('T')[0]
     }));
   }, []);
+
+  // Pre-fill customer if selectedCustomer is provided
+  useEffect(() => {
+    if (selectedCustomer && selectedCustomer.id) {
+      setFormData(prevData => ({
+        ...prevData,
+        customer: selectedCustomer.id
+      }));
+    }
+  }, [selectedCustomer]);
 
   // Add item to invoice
   const addItem = () => {
