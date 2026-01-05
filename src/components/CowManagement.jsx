@@ -61,7 +61,13 @@ const CowManagement = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [view, setView] = useState('grid'); // 'grid' or 'table'
-  
+  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'milking', 'calves'
+
+  // Date range states
+  const [dateRange, setDateRange] = useState('week'); // 'week', 'month', 'quarter', 'year', 'custom'
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+
   // QR Code states
   const [showQRCode, setShowQRCode] = useState(false);
   const [selectedCowForQR, setSelectedCowForQR] = useState(null);
@@ -260,6 +266,18 @@ const CowManagement = () => {
       // Only process if cow is a valid object
       if (!cow || typeof cow !== 'object') return false;
 
+      // Tab-specific filtering
+      if (activeTab === 'milking') {
+        // Show only milking cows (Active or Dry status, excluding calves/heifers)
+        if (!['Active', 'Dry'].includes(cow.status)) return false;
+      } else if (activeTab === 'calves') {
+        // Show only calves and heifers
+        if (!['Calf', 'Heifer'].includes(cow.status)) return false;
+      } else if (activeTab === 'dashboard') {
+        // Dashboard doesn't use this filtered list
+        return true;
+      }
+
       // Search filter with safety checks
       const matchesSearch =
         searchQuery === '' ||
@@ -299,7 +317,7 @@ const CowManagement = () => {
 
       return matchesSearch && matchesStatus && matchesHealthStatus && matchesBreed && matchesMilkingStatus;
     });
-  }, [cows, searchQuery, filters]);
+  }, [cows, searchQuery, filters, activeTab]);
 
   // Pagination
   const indexOfLastCow = currentPage * itemsPerPage;
@@ -307,11 +325,82 @@ const CowManagement = () => {
   const currentCows = filteredCows.slice(indexOfFirstCow, indexOfLastCow);
   const totalPages = Math.ceil(filteredCows.length / itemsPerPage);
 
+  // Calculate date range based on selected filter
+  const calculateDateRange = () => {
+    const today = new Date();
+    let startDate, endDate;
+
+    switch (dateRange) {
+      case 'week':
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - 7);
+        endDate = today;
+        break;
+      case 'month':
+        startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+        endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        break;
+      case 'quarter':
+        const currentQuarter = Math.floor(today.getMonth() / 3);
+        startDate = new Date(today.getFullYear(), currentQuarter * 3, 1);
+        endDate = new Date(today.getFullYear(), (currentQuarter + 1) * 3, 0);
+        break;
+      case 'year':
+        startDate = new Date(today.getFullYear(), 0, 1);
+        endDate = new Date(today.getFullYear(), 11, 31);
+        break;
+      case 'custom':
+        startDate = customStartDate ? new Date(customStartDate) : new Date(today.getFullYear(), 0, 1);
+        endDate = customEndDate ? new Date(customEndDate) : today;
+        break;
+      default:
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - 7);
+        endDate = today;
+    }
+
+    return { startDate, endDate };
+  };
+
   // Get unique breeds for filter (memoized for performance)
   const uniqueBreeds = useMemo(() =>
     Array.from(new Set(cows.map(cow => cow.breed))),
     [cows]
   );
+
+  // Get top milking cows for dashboard
+  const topMilkingCows = useMemo(() => {
+    const milkingCows = ensureValidCows(cows).filter(cow =>
+      ['Active', 'Dry'].includes(cow.status) &&
+      cow.milkProduction &&
+      cow.milkProduction.length > 0
+    );
+
+    const { startDate, endDate } = calculateDateRange();
+
+    return milkingCows.map(cow => {
+      // Calculate total milk production within date range
+      const productionInRange = cow.milkProduction.filter(record => {
+        const recordDate = new Date(record.date);
+        return recordDate >= startDate && recordDate <= endDate;
+      });
+
+      const totalMilk = productionInRange.reduce((sum, record) =>
+        sum + (parseFloat(record.quantity) || 0), 0
+      );
+
+      // Calculate days in range for average
+      const daysInRange = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+      const avgDailyMilk = daysInRange > 0 ? totalMilk / daysInRange : 0;
+
+      return {
+        ...cow,
+        totalMilkInRange: totalMilk,
+        avgDailyMilk: avgDailyMilk,
+        recordCount: productionInRange.length
+      };
+    }).sort((a, b) => b.totalMilkInRange - a.totalMilkInRange).slice(0, 10);
+  }, [cows, dateRange, customStartDate, customEndDate]);
 
   // Open cow profile
   const openCowProfile = (cow) => {
@@ -763,6 +852,95 @@ const CowManagement = () => {
             </div>
           </div>
 
+          {/* Tab Navigation */}
+          <div className="mb-6 overflow-x-auto">
+            <nav className="flex space-x-4 border-b border-gray-200 min-w-[600px]">
+              <button
+                onClick={() => setActiveTab('dashboard')}
+                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap transition-all duration-300 ${
+                  activeTab === 'dashboard'
+                    ? 'border-green-600 text-green-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Dashboard
+              </button>
+              <button
+                onClick={() => setActiveTab('milking')}
+                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap transition-all duration-300 ${
+                  activeTab === 'milking'
+                    ? 'border-green-600 text-green-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Milking Cows
+              </button>
+              <button
+                onClick={() => setActiveTab('calves')}
+                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap transition-all duration-300 ${
+                  activeTab === 'calves'
+                    ? 'border-green-600 text-green-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Calves
+              </button>
+            </nav>
+          </div>
+
+          {/* Date Range Selector - Show on dashboard tab */}
+          {activeTab === 'dashboard' && (
+            <div className="bg-white rounded-lg shadow-sm p-4 mb-6 border border-gray-200">
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center">
+                  <Calendar size={20} className="text-gray-500 mr-2" />
+                  <span className="text-sm font-medium text-gray-700">Date Range:</span>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {['week', 'month', 'quarter', 'year', 'custom'].map((range) => (
+                    <button
+                      key={range}
+                      onClick={() => setDateRange(range)}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ${
+                        dateRange === range
+                          ? 'bg-gradient-to-r from-green-600 to-blue-600 text-white shadow-sm'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {range.charAt(0).toUpperCase() + range.slice(1)}
+                    </button>
+                  ))}
+                </div>
+
+                {dateRange === 'custom' && (
+                  <div className="flex items-center gap-3 ml-auto">
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Start Date</label>
+                      <input
+                        type="date"
+                        value={customStartDate}
+                        onChange={(e) => setCustomStartDate(e.target.value)}
+                        className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">End Date</label>
+                      <input
+                        type="date"
+                        value={customEndDate}
+                        onChange={(e) => setCustomEndDate(e.target.value)}
+                        className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Search and Filters - Only show on milking and calves tabs */}
+          {(activeTab === 'milking' || activeTab === 'calves') && (
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
             <div className="md:col-span-2">
               <div className="relative">
@@ -837,7 +1015,158 @@ const CowManagement = () => {
               </div>
             </div>
           </div>
+          )}
 
+          {/* Dashboard Tab */}
+          {activeTab === 'dashboard' && (
+            <div>
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-white rounded-xl shadow-md p-5 border border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Total Cows</p>
+                      <p className="text-2xl font-bold text-gray-800">{cows.length}</p>
+                    </div>
+                    <div className="p-3 bg-blue-100 rounded-lg">
+                      <Users size={24} className="text-blue-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-md p-5 border border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Milking Cows</p>
+                      <p className="text-2xl font-bold text-green-600">
+                        {cows.filter(c => ['Active', 'Dry'].includes(c.status)).length}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-green-100 rounded-lg">
+                      <Droplet size={24} className="text-green-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-md p-5 border border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Calves</p>
+                      <p className="text-2xl font-bold text-purple-600">
+                        {cows.filter(c => ['Calf', 'Heifer'].includes(c.status)).length}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-purple-100 rounded-lg">
+                      <Award size={24} className="text-purple-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-md p-5 border border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Avg Daily Milk</p>
+                      <p className="text-2xl font-bold text-amber-600">
+                        {topMilkingCows.length > 0
+                          ? `${(topMilkingCows.reduce((sum, c) => sum + c.avgDailyMilk, 0) / topMilkingCows.length).toFixed(1)}L`
+                          : '0L'
+                        }
+                      </p>
+                    </div>
+                    <div className="p-3 bg-amber-100 rounded-lg">
+                      <Droplet size={24} className="text-amber-600" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Top Milking Cows */}
+              <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100">
+                <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-blue-50">
+                  <h2 className="text-lg font-semibold text-gray-800">
+                    Top 10 Milking Cows
+                    {dateRange === 'week' && ' (Last 7 Days)'}
+                    {dateRange === 'month' && ' (This Month)'}
+                    {dateRange === 'quarter' && ' (This Quarter)'}
+                    {dateRange === 'year' && ' (This Year)'}
+                    {dateRange === 'custom' && ' (Custom Range)'}
+                  </h2>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cow</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tag Number</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Breed</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total (Period)</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Daily</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {topMilkingCows.length > 0 ? (
+                        topMilkingCows.map((cow, index) => (
+                          <tr key={cow.id} className="hover:bg-gray-50 transition-colors duration-200">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className={`flex items-center justify-center w-8 h-8 rounded-full ${
+                                index === 0 ? 'bg-yellow-100 text-yellow-600' :
+                                index === 1 ? 'bg-gray-100 text-gray-600' :
+                                index === 2 ? 'bg-orange-100 text-orange-600' :
+                                'bg-blue-50 text-blue-600'
+                              } font-bold`}>
+                                {index + 1}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900">{cow.name}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-500">{cow.tagNumber}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-500">{cow.breed}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-semibold text-green-600">{cow.totalMilkInRange.toFixed(1)} L</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">{cow.avgDailyMilk.toFixed(1)} L</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColors[cow.status]}`}>
+                                {cow.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                              <button
+                                onClick={() => openCowProfile(cow)}
+                                className="text-green-600 hover:text-green-900"
+                              >
+                                View Details
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="8" className="px-6 py-8 text-center text-gray-500">
+                            No milking data available for the selected date range
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Milking Cows Tab and Calves Tab */}
+          {(activeTab === 'milking' || activeTab === 'calves') && (
+          <>
           <div className="flex justify-between items-center mb-4">
             <div className="text-sm text-gray-600">
               Showing {indexOfFirstCow + 1}-{Math.min(indexOfLastCow, filteredCows.length)} of {filteredCows.length} cows
@@ -1030,6 +1359,8 @@ const CowManagement = () => {
                 <ChevronRight size={16} />
               </button>
             </div>
+          )}
+          </>
           )}
         </div>
       )}

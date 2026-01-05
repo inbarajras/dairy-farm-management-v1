@@ -601,7 +601,7 @@ const MilkProduction = () => {
             </div>
           )}
           
-          <div className="flex items-center bg-white rounded-lg shadow-sm border border-gray-200 px-2 hover:shadow-md transition-shadow duration-200">
+          {/* <div className="flex items-center bg-white rounded-lg shadow-sm border border-gray-200 px-2 hover:shadow-md transition-shadow duration-200">
             <button 
               onClick={() => navigateDate('prev')}
               className="p-1.5 text-gray-500 hover:text-gray-700"
@@ -625,9 +625,9 @@ const MilkProduction = () => {
             >
               <ChevronRight size={18} className="text-gray-500" />
             </button>
-          </div>
+          </div> */}
           
-          <button 
+          {/* <button 
             className="p-2 text-sm font-medium text-gray-700 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200 flex items-center"
             onClick={() => {
               setCurrentDate(new Date());
@@ -637,7 +637,7 @@ const MilkProduction = () => {
           >
             <RefreshCw size={14} className="mr-2 text-green-600" />
             Today
-          </button>
+          </button> */}
         </div>
           
           {/* Dashboard Tab */}
