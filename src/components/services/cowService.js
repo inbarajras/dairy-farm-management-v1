@@ -350,7 +350,9 @@ export const recordMilkProduction = async (cowId, recordData) => {
           amount: recordData.amount,
           shift: recordData.shift || SHIFT_TYPES.MORNING,
           quality: recordData.quality || DEFAULT_QUALITY,
-          notes: recordData.notes || ''
+          notes: recordData.notes || '',
+          fat: recordData.fat || null,
+          snf: recordData.snf || null
         })
         .select('*');
       
@@ -381,16 +383,17 @@ export const fetchCowMilkProduction = async (cowId) => {
         .from('milk_production')
         .select('*')
         .eq('cow_id', cowId)
-        .order('date', { ascending: false });
-      
+        .order('created_at', { ascending: false });
+
       if (error) throw error;
-      
+
       return data.map(record => ({
         date: record.date,
         amount: parseFloat(record.amount),
         shift: record.shift || SHIFT_TYPES.MORNING,
         quality: record.quality || DEFAULT_QUALITY,
-        notes: record.notes || ''
+        notes: record.notes || '',
+        created_at: record.created_at
       }));
     } catch (error) {
       console.error('Error fetching cow milk production:', error);

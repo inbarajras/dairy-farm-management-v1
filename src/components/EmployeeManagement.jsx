@@ -28,7 +28,7 @@ import { getShiftTemplates, addShiftTemplate, updateShiftTemplate, deleteShiftTe
 import generatePayslipPDF from '../utils/pdfGenerator';
 import emp from '../assets/images/emp.jpg';
 import LoadingSpinner from './LoadingSpinner';
-import { toast } from './utils/CustomToast';
+import { toast } from './utils/ToastContainer';
 
 // Status badge colors - unchanged
 const statusColors = {

@@ -14,7 +14,7 @@ import {
 } from './services/healthService';
 import { supabase } from '../lib/supabase';
 import LoadingSpinner from './LoadingSpinner';
-import {toast} from './utils/CustomToast';
+import {toast} from './utils/ToastContainer';
 
 // Status badge colors - no change
 const statusColors = {

@@ -20,7 +20,7 @@ import {
   getReportById, downloadReport
 } from './services/reportService';
 import LoadingSpinner from './LoadingSpinner';
-import {toast} from './utils/CustomToast';
+import {toast} from './utils/ToastContainer';
 import { useRole } from '../contexts/RoleContext';
 import UserRoleBadge from './UserRoleBadge';
 
@@ -2636,30 +2636,31 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
   
   // Add Collection Modal Component
   const AddCollectionModal = ({ onClose, onAdd }) => {
-    const [formData, setFormData] = useState({
+    const [entries, setEntries] = useState([{
+      id: Date.now(),
       date: new Date().toISOString().split('T')[0],
       shift: 'Morning',
       totalQuantity: '',
       cowId: '',
       quality: 'Good',
       notes: '',
-      sendWhatsAppNotification: false,
       fat: '',
       snf: ''
-    });
+    }]);
+    const [sendWhatsAppNotification, setSendWhatsAppNotification] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [cows, setCows] = useState([]);
     const [isLoadingCows, setIsLoadingCows] = useState(true);
-    
+
     // Load cows for dropdown
     useEffect(() => {
       const loadCows = async () => {
         try {
           const { data: cowsData, error } = await supabase
             .from('cows')
-            .select('id, name, tag_number')
+            .select('id, name, tag_number, status')
             .order('name');
-          
+
           if (error) throw error;
           setCows(cowsData);
         } catch (error) {
@@ -2669,65 +2670,93 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
           setIsLoadingCows(false);
         }
       };
-      
+
       loadCows();
     }, []);
-    
-    // Handle form field changes
-    const handleChange = (e) => {
-      const { name, value } = e.target;
-      setFormData({
-        ...formData,
-        [name]: value
-      });
+
+    // Handle form field changes for a specific entry
+    const handleEntryChange = (entryId, field, value) => {
+      setEntries(entries.map(entry =>
+        entry.id === entryId ? { ...entry, [field]: value } : entry
+      ));
     };
-    
+
+    // Add a new entry row
+    const addEntry = () => {
+      setEntries([...entries, {
+        id: Date.now(),
+        date: new Date().toISOString().split('T')[0],
+        shift: 'Morning',
+        totalQuantity: '',
+        cowId: '',
+        quality: 'Good',
+        notes: '',
+        fat: '',
+        snf: ''
+      }]);
+    };
+
+    // Remove an entry row
+    const removeEntry = (entryId) => {
+      if (entries.length > 1) {
+        setEntries(entries.filter(entry => entry.id !== entryId));
+      }
+    };
+
     // Handle checkbox change
     const handleCheckboxChange = (e) => {
-      setFormData({
-        ...formData,
-        sendWhatsAppNotification: e.target.checked
-      });
+      setSendWhatsAppNotification(e.target.checked);
     };
     
     // Handle form submission
     const handleSubmit = async (e) => {
       e.preventDefault();
       setIsSubmitting(true);
-      
+
       try {
-        // Validate required fields
-        if (!formData.cowId || !formData.date || !formData.totalQuantity) {
-          toast.error("Please fill in all required fields");
+        // Validate all entries
+        const validEntries = entries.filter(entry =>
+          entry.cowId && entry.date && entry.totalQuantity && parseFloat(entry.totalQuantity) > 0
+        );
+
+        if (validEntries.length === 0) {
+          toast.error('Please fill in all required fields for at least one entry');
+          setIsSubmitting(false);
           return;
         }
-        
-        // Prepare data for API
-        const collectionData = {
-          cowId: formData.cowId,
-          date: formData.date,
-          shift: formData.shift,
-          totalQuantity: parseFloat(formData.totalQuantity),
-          quality: formData.quality,
-          notes: formData.notes,
-          fat: formData.fat ? parseFloat(formData.fat) : null,
-          snf: formData.snf ? parseFloat(formData.snf) : null
-        };  
-        
-        // Call the onAdd function that will use the milk service
-        const result = await onAdd(collectionData);
-        
-        // Only proceed if the operation was successful
-        if (result && result.success) {
-        // Handle WhatsApp notification if enabled
-        if (formData.sendWhatsAppNotification) {
-          console.log('Would send WhatsApp notification here');
-          // In a real app, you'd implement a notification service
+
+        // Submit all valid entries
+        let successCount = 0;
+        for (const entry of validEntries) {
+          const collectionData = {
+            cowId: entry.cowId,
+            date: entry.date,
+            shift: entry.shift,
+            totalQuantity: parseFloat(entry.totalQuantity),
+            quality: entry.quality,
+            notes: entry.notes,
+            fat: entry.fat ? parseFloat(entry.fat) : null,
+            snf: entry.snf ? parseFloat(entry.snf) : null
+          };
+
+          // Call the onAdd function that will use the milk service
+          const result = await onAdd(collectionData);
+
+          // Only proceed if the operation was successful
+          if (result && result.success) {
+            successCount++;
+            // Handle WhatsApp notification if enabled
+            if (sendWhatsAppNotification) {
+              console.log('Would send WhatsApp notification here for entry:', collectionData);
+              // In a real app, you'd implement a notification service
+            }
+          }
         }
-        
-        onClose();
+
+        if (successCount > 0) {
+          toast.success(`Successfully recorded ${successCount} milk collection${successCount > 1 ? 's' : ''}`);
+          onClose();
         }
-        // If result.success is false, the error toast will already be shown by handleAddCollection
       } catch (error) {
         console.error('Error submitting form:', error);
         toast.error('An unexpected error occurred. Please try again.');
@@ -2738,11 +2767,11 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
     
     return (
       <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
-        <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full my-6 mx-auto max-h-[90vh] overflow-y-auto border border-gray-100">
+        <div className="bg-white rounded-xl shadow-xl max-w-6xl w-full my-6 mx-auto max-h-[90vh] overflow-y-auto border border-gray-100">
           <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 sticky top-0 z-10"></div>
           <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-1 bg-white z-10">
-            <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Record Milk Collection</h3>
-            <button 
+            <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Record Milk Collections</h3>
+            <button
               onClick={onClose}
               className="text-gray-400 hover:text-gray-500 transition-colors duration-200 flex-shrink-0"
               disabled={isSubmitting}
@@ -2752,196 +2781,201 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
           </div>
           
           <form onSubmit={handleSubmit}>
-            <div className="px-6 py-4 space-y-6">
-              {/* Cow Selection */}
-              <div>
-                <label htmlFor="cowId" className="block text-sm font-medium text-gray-700 mb-1">
-                  Cow *
-                </label>
-                {isLoadingCows ? (
-                  <div className="py-2">Loading cows...</div>
-                ) : (
-                  <select
-                    id="cowId"
-                    name="cowId"
-                    value={formData.cowId}
-                    onChange={handleChange}
-                    required
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                  >
-                    <option value="">Select a cow</option>
-                    {cows.map(cow => (
-                      <option key={cow.id} value={cow.id}>
-                        {cow.name} ({cow.tag_number})
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-              
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
-                    Collection Date *
-                  </label>
-                  <input
-                    type="date"
-                    id="date"
-                    name="date"
-                    value={formData.date}
-                    onChange={handleChange}
-                    required
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                  />
-                </div>
-                
-                <div>
-                  <label htmlFor="shift" className="block text-sm font-medium text-gray-700 mb-1">
-                    Shift *
-                  </label>
-                  <select
-                    id="shift"
-                    name="shift"
-                    value={formData.shift}
-                    onChange={handleChange}
-                    required
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                  >
-                    <option value="Morning">Morning</option>
-                    <option value="Evening">Evening</option>
-                  </select>
-                </div>
-              </div>
-              
-              <div>
-                <label htmlFor="totalQuantity" className="block text-sm font-medium text-gray-700 mb-1">
-                  Total Quantity (L) *
-                </label>
-                <input
-                  type="number"
-                  id="totalQuantity"
-                  name="totalQuantity"
-                  value={formData.totalQuantity}
-                  onChange={handleChange}
-                  required
-                  min="0"
-                  step="0.1"
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                />
-              </div>
-              
-              <div>
-                <label htmlFor="quality" className="block text-sm font-medium text-gray-700 mb-1">
-                  Quality
-                </label>
-                <select
-                  id="quality"
-                  name="quality"
-                  value={formData.quality}
-                  onChange={handleChange}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                >
-                  <option value="Excellent">Excellent</option>
-                  <option value="Good">Good</option>
-                  <option value="Average">Average</option>
-                  <option value="Poor">Poor</option>
-                </select>
-              </div>
-              
-              {/* Quality Parameters - Same as in Edit form */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-3">Quality Parameters</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                  <div>
-                    <label htmlFor="fat" className="block text-sm font-medium text-gray-700 mb-1">
-                      Fat (%)
-                    </label>
-                    <input
-                      type="number"
-                      id="fat"
-                      name="fat"
-                      value={formData.fat}
-                      onChange={handleChange}
-                      min="0"
-                      step="0.1"
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                    />
+            <div className="px-6 py-4 space-y-4">
+              {isLoadingCows ? (
+                <div className="py-4 text-center text-gray-500">Loading cows...</div>
+              ) : (
+                <>
+                  {/* Header Row */}
+                  <div className="grid grid-cols-12 gap-2 text-xs font-medium text-gray-700 px-2">
+                    <div className="col-span-2">Cow *</div>
+                    <div className="col-span-2">Date *</div>
+                    <div className="col-span-1">Shift *</div>
+                    <div className="col-span-1">Qty (L) *</div>
+                    <div className="col-span-1">Quality</div>
+                    <div className="col-span-1">Fat %</div>
+                    <div className="col-span-1">SNF %</div>
+                    <div className="col-span-2">Notes</div>
+                    <div className="col-span-1">Action</div>
                   </div>
 
-                  <div>
-                    <label htmlFor="snf" className="block text-sm font-medium text-gray-700 mb-1">
-                      SNF (%)
-                    </label>
-                    <input
-                      type="number"
-                      id="snf"
-                      name="snf"
-                      value={formData.snf}
-                      onChange={handleChange}
-                      min="0"
-                      step="0.1"
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                    />
-                  </div>
-                </div>
-              </div>
+                  {/* Entry Rows */}
+                  {entries.map((entry) => (
+                    <div key={entry.id} className="grid grid-cols-12 gap-2 items-start p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <div className="col-span-2">
+                        <select
+                          value={entry.cowId}
+                          onChange={(e) => handleEntryChange(entry.id, 'cowId', e.target.value)}
+                          required
+                          className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                        >
+                          <option value="">Select cow</option>
+                          {cows.filter(cow => ['Active', 'Dry'].includes(cow.status)).map(cow => (
+                            <option key={cow.id} value={cow.id}>
+                              {cow.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-              <div>
-                <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
-                  Notes
-                </label>
-                <textarea
-                  id="notes"
-                  name="notes"
-                  rows={3}
-                  value={formData.notes}
-                  onChange={handleChange}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                  placeholder="Any additional notes about this collection..."
-                ></textarea>
-              </div>
+                      <div className="col-span-2">
+                        <input
+                          type="date"
+                          value={entry.date}
+                          onChange={(e) => handleEntryChange(entry.id, 'date', e.target.value)}
+                          required
+                          className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                        />
+                      </div>
 
-              <div className="flex items-center mt-4 p-3 bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30 rounded-lg">
-                <div className="flex items-center h-5">
-                  <input
-                    id="sendWhatsAppNotification"
-                    name="sendWhatsAppNotification"
-                    type="checkbox"
-                    checked={formData.sendWhatsAppNotification}
-                    onChange={handleCheckboxChange}
-                    className="h-5 w-5 text-green-600 focus:ring-green-500 border-gray-300 rounded"
-                  />
-                </div>
-                <div className="ml-3 text-sm">
-                  <label htmlFor="sendWhatsAppNotification" className="font-medium text-gray-700">Send WhatsApp notification to cow owner</label>
-                </div>
-              </div>
+                      <div className="col-span-1">
+                        <select
+                          value={entry.shift}
+                          onChange={(e) => handleEntryChange(entry.id, 'shift', e.target.value)}
+                          required
+                          className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                        >
+                          <option value="Morning">Morning</option>
+                          <option value="Evening">Evening</option>
+                        </select>
+                      </div>
+
+                      <div className="col-span-1">
+                        <input
+                          type="number"
+                          value={entry.totalQuantity}
+                          onChange={(e) => handleEntryChange(entry.id, 'totalQuantity', e.target.value)}
+                          required
+                          min="0"
+                          step="0.1"
+                          className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                          placeholder="0.0"
+                        />
+                      </div>
+
+                      <div className="col-span-1">
+                        <select
+                          value={entry.quality}
+                          onChange={(e) => handleEntryChange(entry.id, 'quality', e.target.value)}
+                          className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                        >
+                          <option value="Excellent">Exc</option>
+                          <option value="Good">Good</option>
+                          <option value="Average">Avg</option>
+                          <option value="Poor">Poor</option>
+                        </select>
+                      </div>
+
+                      <div className="col-span-1">
+                        <input
+                          type="number"
+                          value={entry.fat}
+                          onChange={(e) => handleEntryChange(entry.id, 'fat', e.target.value)}
+                          min="0"
+                          step="0.1"
+                          className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                          placeholder="0.0"
+                        />
+                      </div>
+
+                      <div className="col-span-1">
+                        <input
+                          type="number"
+                          value={entry.snf}
+                          onChange={(e) => handleEntryChange(entry.id, 'snf', e.target.value)}
+                          min="0"
+                          step="0.1"
+                          className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                          placeholder="0.0"
+                        />
+                      </div>
+
+                      <div className="col-span-2">
+                        <textarea
+                          rows={2}
+                          value={entry.notes}
+                          onChange={(e) => handleEntryChange(entry.id, 'notes', e.target.value)}
+                          className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                          placeholder="Notes..."
+                        ></textarea>
+                      </div>
+
+                      <div className="col-span-1 flex items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={() => removeEntry(entry.id)}
+                          disabled={entries.length === 1}
+                          className={`p-2 rounded-md transition-all duration-200 ${
+                            entries.length === 1
+                              ? 'text-gray-300 cursor-not-allowed'
+                              : 'text-red-600 hover:bg-red-50 hover:text-red-700'
+                          }`}
+                          title="Remove entry"
+                        >
+                          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Add Entry Button */}
+                  <button
+                    type="button"
+                    onClick={addEntry}
+                    className="w-full py-2 px-4 border-2 border-dashed border-green-300 rounded-md text-sm font-medium text-green-600 bg-green-50 hover:bg-green-100 hover:border-green-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300 flex items-center justify-center gap-2"
+                  >
+                    <Plus size={18} />
+                    Add Another Entry
+                  </button>
+                </>
+              )}
             </div>
-            
-            <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3 bg-gray-50 sticky bottom-0">
-              <button
-                type="button"
-                onClick={onClose}
-                className="py-2 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300"
-                disabled={isSubmitting}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300"
-              >
-                {isSubmitting ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Saving...
-                  </>
-                ) : 'Save'}
-              </button>
+
+            <div className="flex items-center px-6 py-4 bg-gray-50">
+              <input
+                id="sendWhatsAppNotification"
+                name="sendWhatsAppNotification"
+                type="checkbox"
+                checked={sendWhatsAppNotification}
+                onChange={handleCheckboxChange}
+                className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+              />
+              <label htmlFor="sendWhatsAppNotification" className="ml-2 block text-sm text-gray-700">
+                Send WhatsApp notification to cow owners
+              </label>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap justify-between items-center gap-3 bg-gray-50 sticky bottom-0">
+              <div className="text-sm text-gray-600">
+                Total entries: <span className="font-semibold text-green-600">{entries.filter(e => e.cowId && e.totalQuantity && parseFloat(e.totalQuantity) > 0).length}</span>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="py-2 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300"
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Saving...
+                    </>
+                  ) : 'Save All Entries'}
+                </button>
+              </div>
             </div>
           </form>
         </div>

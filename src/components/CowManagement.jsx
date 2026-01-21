@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Calendar, Clock, Mail, Phone, MapPin, Users, Award, FileText, Briefcase, User,Download,DollarSign,Droplet,Thermometer, QrCode, Camera } from 'lucide-react';
+import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Calendar, Clock, Mail, Phone, MapPin, Users, Award, FileText, Briefcase, User,Download,DollarSign,Droplet,Thermometer, QrCode, Camera, Heart, Activity, AlertTriangle } from 'lucide-react';
 import { fetchCows, addCow, updateCow, deleteCow, recordHealthEvent, recordMilkProduction, recordBreedingEvent,
   fetchRecentActivity,fetchBreedingEvents,fetchHealthHistory,fetchReproductiveStatus,
   fetchGrowthMilestones, recordGrowthMilestone
@@ -14,7 +14,7 @@ import cowSample from '../assets/images/cow.jpg';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area } from 'recharts';
 import { supabase } from '../lib/supabase';
 import LoadingSpinner from './LoadingSpinner';
-import {toast} from './utils/CustomToast';
+import {toast} from './utils/ToastContainer';
 import { useRole } from '../contexts/RoleContext';
 import UserRoleBadge from './UserRoleBadge';
 import {
@@ -47,6 +47,8 @@ const CowManagement = () => {
   const [isRecordHealthEventModalOpen, setIsRecordHealthEventModalOpen] = useState(false);
   const [isRecordMilkModalOpen, setIsRecordMilkModalOpen] = useState(false);
   const [isRecordBreedingEventModalOpen, setIsRecordBreedingEventModalOpen] = useState(false);
+  const [isViewBreedingEventModalOpen, setIsViewBreedingEventModalOpen] = useState(false);
+  const [selectedBreedingEvent, setSelectedBreedingEvent] = useState(null);
   const [isRecordGrowthMilestoneModalOpen, setIsRecordGrowthMilestoneModalOpen] = useState(false);
   const [cowToEdit, setCowToEdit] = useState(null);
   const [cowToDelete, setCowToDelete] = useState(null);
@@ -56,12 +58,16 @@ const CowManagement = () => {
     status: 'All',
     healthStatus: 'All',
     breed: 'All',
-    milkingStatus: 'All'
+    milkingStatus: 'All',
+    reproductiveStatus: 'All'
   });
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [view, setView] = useState('grid'); // 'grid' or 'table'
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'milking', 'calves'
+  const [breedingData, setBreedingData] = useState({}); // Store breeding events for each cow
+  const [reproductiveStatuses, setReproductiveStatuses] = useState({}); // Store reproductive status for each cow
+  const [initialCowProfileTab, setInitialCowProfileTab] = useState('overview'); // Initial tab for cow profile
 
   // Date range states
   const [dateRange, setDateRange] = useState('week'); // 'week', 'month', 'quarter', 'year', 'custom'
@@ -111,6 +117,45 @@ const CowManagement = () => {
       toast.error('Failed to refresh cow data.');
     }
   }, [selectedCow]);
+
+  // Load breeding data when breeding tab is active
+  useEffect(() => {
+    const loadBreedingData = async () => {
+      if (activeTab === 'breeding' && cows.length > 0) {
+        try {
+          const breedingDataMap = {};
+          const reproductiveStatusMap = {};
+
+          // Fetch breeding events and reproductive status for each cow
+          await Promise.all(
+            cows
+              .filter(cow => cow.status !== 'Calf' && cow.status !== 'Sold' && cow.status !== 'Deceased')
+              .map(async (cow) => {
+                try {
+                  const [events, status] = await Promise.all([
+                    fetchBreedingEvents(cow.id),
+                    fetchReproductiveStatus(cow.id)
+                  ]);
+                  breedingDataMap[cow.id] = events || [];
+                  reproductiveStatusMap[cow.id] = status || null;
+                } catch (error) {
+                  console.error(`Error fetching breeding data for cow ${cow.id}:`, error);
+                  breedingDataMap[cow.id] = [];
+                  reproductiveStatusMap[cow.id] = null;
+                }
+              })
+          );
+
+          setBreedingData(breedingDataMap);
+          setReproductiveStatuses(reproductiveStatusMap);
+        } catch (error) {
+          console.error('Error loading breeding data:', error);
+        }
+      }
+    };
+
+    loadBreedingData();
+  }, [activeTab, cows]);
 
   // Add periodic refresh to catch updates from other components
   useEffect(() => {
@@ -316,6 +361,14 @@ const CowManagement = () => {
       }
 
       return matchesSearch && matchesStatus && matchesHealthStatus && matchesBreed && matchesMilkingStatus;
+    }).sort((a, b) => {
+      // Sort by purchase date (newest first) for milking and calves tabs
+      if (activeTab === 'milking' || activeTab === 'calves') {
+        const dateA = a.purchaseDate ? new Date(a.purchaseDate) : new Date(0);
+        const dateB = b.purchaseDate ? new Date(b.purchaseDate) : new Date(0);
+        return dateB - dateA; // Descending order (newest first)
+      }
+      return 0; // No sorting for other tabs
     });
   }, [cows, searchQuery, filters, activeTab]);
 
@@ -326,41 +379,58 @@ const CowManagement = () => {
   const totalPages = Math.ceil(filteredCows.length / itemsPerPage);
 
   // Calculate date range based on selected filter
-  const calculateDateRange = () => {
+  const calculateDateRange = useCallback(() => {
     const today = new Date();
-    let startDate, endDate;
+    today.setHours(23, 59, 59, 999); // Set to end of today
+    let startDate = new Date(today);
+    let endDate = new Date(today);
 
     switch (dateRange) {
       case 'week':
         startDate = new Date(today);
         startDate.setDate(today.getDate() - 7);
-        endDate = today;
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case '14days':
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - 14);
+        startDate.setHours(0, 0, 0, 0);
         break;
       case 'month':
-        startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-        endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - 30);
+        startDate.setHours(0, 0, 0, 0);
         break;
       case 'quarter':
-        const currentQuarter = Math.floor(today.getMonth() / 3);
-        startDate = new Date(today.getFullYear(), currentQuarter * 3, 1);
-        endDate = new Date(today.getFullYear(), (currentQuarter + 1) * 3, 0);
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - 90);
+        startDate.setHours(0, 0, 0, 0);
         break;
       case 'year':
         startDate = new Date(today.getFullYear(), 0, 1);
-        endDate = new Date(today.getFullYear(), 11, 31);
+        startDate.setHours(0, 0, 0, 0);
         break;
       case 'custom':
-        startDate = customStartDate ? new Date(customStartDate) : new Date(today.getFullYear(), 0, 1);
-        endDate = customEndDate ? new Date(customEndDate) : today;
+        if (customStartDate) {
+          startDate = new Date(customStartDate);
+          startDate.setHours(0, 0, 0, 0);
+        } else {
+          startDate = new Date(today.getFullYear(), 0, 1);
+          startDate.setHours(0, 0, 0, 0);
+        }
+        if (customEndDate) {
+          endDate = new Date(customEndDate);
+          endDate.setHours(23, 59, 59, 999);
+        }
         break;
       default:
         startDate = new Date(today);
         startDate.setDate(today.getDate() - 7);
-        endDate = today;
+        startDate.setHours(0, 0, 0, 0);
     }
 
     return { startDate, endDate };
-  };
+  }, [dateRange, customStartDate, customEndDate]);
 
   // Get unique breeds for filter (memoized for performance)
   const uniqueBreeds = useMemo(() =>
@@ -369,29 +439,71 @@ const CowManagement = () => {
   );
 
   // Get top milking cows for dashboard
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const topMilkingCows = useMemo(() => {
+    console.log('=== TOP MILKING COWS CALCULATION START ===');
+    console.log('Total cows:', cows.length);
+    console.log('Date range:', dateRange);
+    console.log('Custom start:', customStartDate);
+    console.log('Custom end:', customEndDate);
+
     const milkingCows = ensureValidCows(cows).filter(cow =>
       ['Active', 'Dry'].includes(cow.status) &&
       cow.milkProduction &&
       cow.milkProduction.length > 0
     );
 
-    const { startDate, endDate } = calculateDateRange();
+    console.log('Milking cows with production:', milkingCows.length);
 
-    return milkingCows.map(cow => {
-      // Calculate total milk production within date range
+    // Log sample cow data to inspect structure
+    if (milkingCows.length > 0) {
+      console.log('Sample cow data:', {
+        name: milkingCows[0].name,
+        productionRecords: milkingCows[0].milkProduction.length,
+        sampleRecord: milkingCows[0].milkProduction[0]
+      });
+    }
+
+    const { startDate, endDate } = calculateDateRange();
+    console.log('Date range calculated:', {
+      start: startDate.toISOString(),
+      end: endDate.toISOString()
+    });
+
+    const cowsWithMilk = milkingCows.map(cow => {
+      // Calculate total milk production - FIRST CHECK ALL RECORDS WITHOUT DATE FILTER
+      console.log(`\n${cow.name}:`, {
+        totalRecords: cow.milkProduction.length,
+        sampleRecords: cow.milkProduction.slice(0, 2)
+      });
+
+      // Calculate total from ALL records first to verify data
+      const totalAllRecords = cow.milkProduction.reduce((sum, record) => {
+        const amount = parseFloat(record.amount);
+        console.log(`  Record: date=${record.date}, amount=${record.amount}, parsed=${amount}`);
+        return sum + (amount || 0);
+      }, 0);
+
+      console.log(`  Total from ALL records: ${totalAllRecords}L`);
+
+      // Now filter by date range
       const productionInRange = cow.milkProduction.filter(record => {
+        if (!record.date) return false;
         const recordDate = new Date(record.date);
         return recordDate >= startDate && recordDate <= endDate;
       });
 
       const totalMilk = productionInRange.reduce((sum, record) =>
-        sum + (parseFloat(record.quantity) || 0), 0
+        sum + (parseFloat(record.amount) || 0), 0
       );
+
+      console.log(`  In range: ${productionInRange.length} records, Total: ${totalMilk}L`);
 
       // Calculate days in range for average
       const daysInRange = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
-      const avgDailyMilk = daysInRange > 0 ? totalMilk / daysInRange : 0;
+      const avgDailyMilk = productionInRange.length > 0 && daysInRange > 0
+        ? totalMilk / daysInRange
+        : 0;
 
       return {
         ...cow,
@@ -399,12 +511,22 @@ const CowManagement = () => {
         avgDailyMilk: avgDailyMilk,
         recordCount: productionInRange.length
       };
-    }).sort((a, b) => b.totalMilkInRange - a.totalMilkInRange).slice(0, 10);
-  }, [cows, dateRange, customStartDate, customEndDate]);
+    });
+
+    const sorted = cowsWithMilk
+      .sort((a, b) => b.totalMilkInRange - a.totalMilkInRange)
+      .slice(0, 10);
+
+    console.log('Top 10 cows:', sorted.map(c => `${c.name}: ${c.totalMilkInRange}L`));
+    console.log('=== TOP MILKING COWS CALCULATION END ===');
+
+    return sorted;
+  }, [cows, calculateDateRange]);
 
   // Open cow profile
-  const openCowProfile = (cow) => {
+  const openCowProfile = (cow, tab = 'overview') => {
     setSelectedCow(cow);
+    setInitialCowProfileTab(tab);
   };
 
   // Close cow profile
@@ -444,6 +566,18 @@ const CowManagement = () => {
   // Toggle record breeding event modal
   const toggleRecordBreedingEventModal = () => {
     setIsRecordBreedingEventModalOpen(!isRecordBreedingEventModalOpen);
+  };
+
+  // View breeding event details
+  const viewBreedingEvent = (event) => {
+    setSelectedBreedingEvent(event);
+    setIsViewBreedingEventModalOpen(true);
+  };
+
+  // Close view breeding event modal
+  const closeViewBreedingEventModal = () => {
+    setIsViewBreedingEventModalOpen(false);
+    setSelectedBreedingEvent(null);
   };
   
   // Toggle record growth milestone modal
@@ -555,9 +689,8 @@ const CowManagement = () => {
   const handleRecordMilkProduction = async (cowId, recordData) => {
     try {
       setLoading(true);
-      console.log('Recording milk production:', recordData);
       const result = await recordMilkProduction(cowId, recordData);
-      
+
       if (!result.success) {
         toast.error(result.message);
         return;
@@ -814,15 +947,17 @@ const CowManagement = () => {
     <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30 overflow-y-auto">
       
       {selectedCow ? (
-      <CowProfile 
-          cow={selectedCow} 
-          onClose={closeCowProfile} 
+      <CowProfile
+          cow={selectedCow}
+          onClose={closeCowProfile}
           onEdit={() => toggleEditModal(selectedCow)}
-          onRecordHealthEvent={toggleRecordHealthEventModal} 
+          onRecordHealthEvent={toggleRecordHealthEventModal}
           toggleRecordMilkModal={toggleRecordMilkModal}
           toggleRecordBreedingEventModal={toggleRecordBreedingEventModal}
           toggleRecordGrowthMilestoneModal={toggleRecordGrowthMilestoneModal}
           hasPermission={hasPermission}
+          viewBreedingEvent={viewBreedingEvent}
+          initialTab={initialCowProfileTab}
         />
       ) : (
         <div className="px-4 py-6 sm:px-6 max-w-[1500px] mx-auto">
@@ -876,6 +1011,16 @@ const CowManagement = () => {
                 Milking Cows
               </button>
               <button
+                onClick={() => setActiveTab('breeding')}
+                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap transition-all duration-300 ${
+                  activeTab === 'breeding'
+                    ? 'border-purple-600 text-purple-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Breeding & Pregnancy
+              </button>
+              <button
                 onClick={() => setActiveTab('calves')}
                 className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap transition-all duration-300 ${
                   activeTab === 'calves'
@@ -890,52 +1035,41 @@ const CowManagement = () => {
 
           {/* Date Range Selector - Show on dashboard tab */}
           {activeTab === 'dashboard' && (
-            <div className="bg-white rounded-lg shadow-sm p-4 mb-6 border border-gray-200">
-              <div className="flex flex-wrap items-center gap-4">
-                <div className="flex items-center">
-                  <Calendar size={20} className="text-gray-500 mr-2" />
-                  <span className="text-sm font-medium text-gray-700">Date Range:</span>
-                </div>
+            <div className="mb-6 flex flex-wrap items-center gap-3">
+              <span className="text-sm font-semibold text-gray-700">Date Range:</span>
+              <select
+                value={dateRange}
+                onChange={(e) => setDateRange(e.target.value)}
+                className="appearance-none bg-white border border-gray-200 rounded-lg pl-3 pr-10 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-300 shadow-sm hover:shadow-md transition-all duration-200 min-w-[140px]"
+              >
+                <option value="week">Last 7 days</option>
+                <option value="14days">Last 14 days</option>
+                <option value="month">Last 30 days</option>
+                <option value="quarter">Last 90 days</option>
+                <option value="year">This Year</option>
+                <option value="custom">Custom Range</option>
+              </select>
 
-                <div className="flex flex-wrap gap-2">
-                  {['week', 'month', 'quarter', 'year', 'custom'].map((range) => (
-                    <button
-                      key={range}
-                      onClick={() => setDateRange(range)}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ${
-                        dateRange === range
-                          ? 'bg-gradient-to-r from-green-600 to-blue-600 text-white shadow-sm'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {range.charAt(0).toUpperCase() + range.slice(1)}
-                    </button>
-                  ))}
+              {dateRange === 'custom' && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    max={new Date().toISOString().split('T')[0]}
+                    className="appearance-none bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-300 shadow-sm"
+                  />
+                  <span className="text-sm text-gray-500">to</span>
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    max={new Date().toISOString().split('T')[0]}
+                    min={customStartDate}
+                    className="appearance-none bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-300 shadow-sm"
+                  />
                 </div>
-
-                {dateRange === 'custom' && (
-                  <div className="flex items-center gap-3 ml-auto">
-                    <div>
-                      <label className="text-xs text-gray-500 mb-1 block">Start Date</label>
-                      <input
-                        type="date"
-                        value={customStartDate}
-                        onChange={(e) => setCustomStartDate(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500 mb-1 block">End Date</label>
-                      <input
-                        type="date"
-                        value={customEndDate}
-                        onChange={(e) => setCustomEndDate(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
           )}
 
@@ -1086,8 +1220,9 @@ const CowManagement = () => {
                   <h2 className="text-lg font-semibold text-gray-800">
                     Top 10 Milking Cows
                     {dateRange === 'week' && ' (Last 7 Days)'}
-                    {dateRange === 'month' && ' (This Month)'}
-                    {dateRange === 'quarter' && ' (This Quarter)'}
+                    {dateRange === '14days' && ' (Last 14 Days)'}
+                    {dateRange === 'month' && ' (Last 30 Days)'}
+                    {dateRange === 'quarter' && ' (Last 90 Days)'}
                     {dateRange === 'year' && ' (This Year)'}
                     {dateRange === 'custom' && ' (Custom Range)'}
                   </h2>
@@ -1362,6 +1497,290 @@ const CowManagement = () => {
           )}
           </>
           )}
+
+          {/* Breeding & Pregnancy Tab */}
+          {activeTab === 'breeding' && (() => {
+            const today = new Date();
+
+            // Calculate breeding statistics from real data
+            const inseminatedCows = cows.filter(cow => {
+              const events = breedingData[cow.id] || [];
+              const lastInsemination = events.find(e =>
+                (e.event_type === 'Insemination' || e.event_type === 'Artificial Insemination' || e.event_type === 'Natural Breeding') &&
+                (new Date() - new Date(e.date)) / (1000 * 60 * 60 * 24) <= 90
+              );
+              const reproStatus = reproductiveStatuses[cow.id];
+              return lastInsemination && reproStatus?.status !== 'Pregnant';
+            });
+
+            const pregnantCows = cows.filter(cow => {
+              const reproStatus = reproductiveStatuses[cow.id];
+              return reproStatus?.status === 'Pregnant' || reproStatus?.status === 'Confirmed';
+            });
+
+            const dueForCheck = cows.filter(cow => {
+              const events = breedingData[cow.id] || [];
+              const lastInsemination = events.find(e =>
+                e.event_type === 'Insemination' || e.event_type === 'Artificial Insemination' || e.event_type === 'Natural Breeding'
+              );
+              if (!lastInsemination) return false;
+              const daysSince = (new Date() - new Date(lastInsemination.date)) / (1000 * 60 * 60 * 24);
+              const reproStatus = reproductiveStatuses[cow.id];
+              return daysSince >= 30 && daysSince <= 45 && reproStatus?.status !== 'Pregnant';
+            });
+
+            const expectedCalvings = cows.filter(cow => {
+              const reproStatus = reproductiveStatuses[cow.id];
+              if (reproStatus?.status !== 'Pregnant' && reproStatus?.status !== 'Confirmed') return false;
+
+              const events = breedingData[cow.id] || [];
+              const confirmEvent = events.find(e =>
+                e.event_type === 'Pregnancy Check' && (e.result === 'Confirmed' || e.result === 'Positive')
+              );
+              const inseminationEvent = events.find(e =>
+                e.event_type === 'Insemination' || e.event_type === 'Artificial Insemination'
+              );
+
+              const eventDate = confirmEvent?.date || inseminationEvent?.date;
+              if (!eventDate) return false;
+
+              const daysPregnant = (today - new Date(eventDate)) / (1000 * 60 * 60 * 24);
+              const daysUntilCalving = 283 - daysPregnant;
+              return daysUntilCalving > 0 && daysUntilCalving <= 60;
+            });
+
+            return (
+            <div>
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-white rounded-xl shadow-md p-5 border border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Inseminated Cows</p>
+                      <p className="text-2xl font-bold text-purple-600">
+                        {inseminatedCows.length}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-purple-100 rounded-lg">
+                      <Heart size={24} className="text-purple-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-md p-5 border border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Pregnant Cows</p>
+                      <p className="text-2xl font-bold text-green-600">
+                        {pregnantCows.length}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-green-100 rounded-lg">
+                      <Activity size={24} className="text-green-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-md p-5 border border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Due for Pregnancy Check</p>
+                      <p className="text-2xl font-bold text-orange-600">
+                        {dueForCheck.length}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-orange-100 rounded-lg">
+                      <AlertTriangle size={24} className="text-orange-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-md p-5 border border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Expected Calvings</p>
+                      <p className="text-2xl font-bold text-blue-600">
+                        {expectedCalvings.length}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-blue-100 rounded-lg">
+                      <Calendar size={24} className="text-blue-600" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Filters */}
+              <div className="mb-6 flex flex-wrap items-center gap-3">
+                <span className="text-sm font-semibold text-gray-700">Filter by:</span>
+                <select
+                  value={filters.reproductiveStatus}
+                  onChange={(e) => setFilters({...filters, reproductiveStatus: e.target.value})}
+                  className="appearance-none bg-white border border-gray-200 rounded-lg pl-3 pr-10 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200 min-w-[180px]"
+                >
+                  <option value="All">All Reproductive Status</option>
+                  <option value="Open">Open</option>
+                  <option value="Pregnant">Pregnant</option>
+                  <option value="Confirmed">Confirmed</option>
+                  <option value="Bred">Bred</option>
+                  <option value="Inseminated">Inseminated</option>
+                  <option value="Heat">Heat/Estrus</option>
+                </select>
+              </div>
+
+              {/* Breeding Status Table */}
+              <div className="bg-white shadow-lg rounded-lg overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-blue-50">
+                  <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-purple-700 to-blue-700">
+                    Breeding Status Overview
+                  </h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gradient-to-r from-purple-50 to-blue-50">
+                      <tr>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Tag / Name
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Breed
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Reproductive Status
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Last Breeding Event
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Days Since Event
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {cows
+                        .filter(cow => {
+                          // Filter out Calves, Sold, and Deceased
+                          if (cow.status === 'Calf' || cow.status === 'Sold' || cow.status === 'Deceased') {
+                            return false;
+                          }
+
+                          // Filter by reproductive status
+                          if (filters.reproductiveStatus !== 'All') {
+                            const reproStatus = reproductiveStatuses[cow.id];
+                            const statusText = reproStatus?.status || 'Open';
+
+                            // Handle Heat/Estrus
+                            if (filters.reproductiveStatus === 'Heat') {
+                              return statusText === 'Heat' || statusText === 'Estrus';
+                            }
+
+                            return statusText === filters.reproductiveStatus;
+                          }
+
+                          return true;
+                        })
+                        .map(cow => {
+                          const events = breedingData[cow.id] || [];
+                          const reproStatus = reproductiveStatuses[cow.id];
+
+                          // Get last breeding event
+                          const lastEvent = events.length > 0 ? events[0] : null;
+                          const daysSinceEvent = lastEvent
+                            ? Math.floor((today - new Date(lastEvent.date)) / (1000 * 60 * 60 * 24))
+                            : null;
+
+                          // Determine reproductive status
+                          let statusText = reproStatus?.status || 'Open';
+                          let statusColor = 'bg-purple-100 text-purple-800';
+
+                          if (statusText === 'Pregnant' || statusText === 'Confirmed') {
+                            statusColor = 'bg-green-100 text-green-800';
+                          } else if (statusText === 'Bred' || statusText === 'Inseminated') {
+                            statusColor = 'bg-blue-100 text-blue-800';
+                          } else if (statusText === 'Heat' || statusText === 'Estrus') {
+                            statusColor = 'bg-orange-100 text-orange-800';
+                          }
+
+                          return (
+                          <tr
+                            key={cow.id}
+                            className="hover:bg-purple-50 cursor-pointer transition-colors duration-200"
+                            onClick={() => openCowProfile(cow, 'breeding')}
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex flex-col">
+                                <span className="text-sm font-medium text-gray-900">{cow.tagNumber}</span>
+                                <span className="text-sm text-gray-500">{cow.name}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {cow.breed}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                cow.status === 'Active' ? 'bg-green-100 text-green-800' :
+                                cow.status === 'Dry' ? 'bg-blue-100 text-blue-800' :
+                                cow.status === 'Heifer' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {cow.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor}`}>
+                                {statusText}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {lastEvent ? (
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{lastEvent.event_type}</span>
+                                  <span className="text-xs text-gray-400">{new Date(lastEvent.date).toLocaleDateString()}</span>
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">No events</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {daysSinceEvent !== null ? (
+                                <span className={`font-medium ${
+                                  daysSinceEvent > 45 ? 'text-red-600' :
+                                  daysSinceEvent > 30 ? 'text-orange-600' :
+                                  'text-gray-900'
+                                }`}>
+                                  {daysSinceEvent} days
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openCowProfile(cow, 'breeding');
+                                }}
+                                className="text-purple-600 hover:text-purple-900 mr-3"
+                              >
+                                View Details
+                              </button>
+                            </td>
+                          </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            );
+          })()}
         </div>
       )}
 
@@ -1406,10 +1825,18 @@ const CowManagement = () => {
       )}
 
       {isRecordBreedingEventModalOpen && (
-        <RecordBreedingEventModal 
-          cow={selectedCow} 
-          onClose={toggleRecordBreedingEventModal} 
+        <RecordBreedingEventModal
+          cow={selectedCow}
+          onClose={toggleRecordBreedingEventModal}
           onSubmit={(id,record) => handleRecordBreedingEvent(id, record)}
+        />
+      )}
+
+      {isViewBreedingEventModalOpen && selectedBreedingEvent && (
+        <ViewBreedingEventModal
+          event={selectedBreedingEvent}
+          cow={selectedCow}
+          onClose={closeViewBreedingEventModal}
         />
       )}
       
@@ -1622,8 +2049,8 @@ const CowCard = ({ cow, onClick, onEdit, onDelete, checkCowMilkingStatus, hasPer
 };
 
 // Employee Profile Component
-const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMilkModal, toggleRecordBreedingEventModal, toggleRecordGrowthMilestoneModal, hasPermission }) => {
-  const [activeTab, setActiveTab] = useState('overview');
+const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMilkModal, toggleRecordBreedingEventModal, toggleRecordGrowthMilestoneModal, hasPermission, viewBreedingEvent, initialTab = 'overview' }) => {
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [healthHistory, setHealthHistory] = useState([]);
   const [breedingEvents, setBreedingEvents] = useState([]);
   const [reproductiveStatus, setReproductiveStatus] = useState(null);
@@ -2912,6 +3339,9 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                         <thead className="bg-gradient-to-r from-green-50 to-blue-50">
                           <tr>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Actions
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Date
                             </th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -2923,30 +3353,53 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Result
                             </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Performed By
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Notes
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                           {breedingEvents.map((event) => (
                             <tr key={event.id} className="hover:bg-gray-50 transition-colors duration-200">
+                              <td className="px-6 py-4 whitespace-nowrap text-left text-sm font-medium">
+                                <button
+                                  onClick={() => viewBreedingEvent(event)}
+                                  className="text-purple-600 hover:text-purple-900"
+                                  title="View Details"
+                                >
+                                  View
+                                </button>
+                              </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                 {formatDate(event.date)}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {event.eventType}
+                                {event.event_type || event.eventType}
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {event.details}
+                              <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">
+                                {event.details || '-'}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                 <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                  event.result === 'Confirmed' || event.result === 'Positive' || event.result === 'Healthy' || event.result === 'Completed' || event.result === 'Successful' ? 
-                                    'bg-green-100 text-green-800' : 
-                                  event.result === 'Failed' || event.result === 'Negative' || event.result === 'Stillborn' || event.result === 'Unsuccessful' ? 
+                                  event.result === 'Confirmed' || event.result === 'Positive' || event.result === 'Healthy' || event.result === 'Completed' || event.result === 'Successful' ?
+                                    'bg-green-100 text-green-800' :
+                                  event.result === 'Failed' || event.result === 'Negative' || event.result === 'Stillborn' || event.result === 'Unsuccessful' ?
                                     'bg-red-100 text-red-800' :
+                                  event.result === 'Pending' ?
+                                    'bg-yellow-100 text-yellow-800' :
                                     'bg-gray-100 text-gray-800'
                                 }`}>
-                                  {event.result}
+                                  {event.result || 'Pending'}
                                 </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {event.performed_by || '-'}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate" title={event.notes}>
+                                {event.notes || '-'}
                               </td>
                             </tr>
                           ))}
@@ -5024,41 +5477,59 @@ const RecordHealthEventModal = ({ cow, onClose, onSubmit }) => {
 
 // Record Milk Production Modal Component
 const RecordMilkProductionModal = ({ cow, onClose, onSubmit }) => {
-  const [formData, setFormData] = useState({
+  const [entries, setEntries] = useState([{
+    id: Date.now(),
     date: new Date().toISOString().split('T')[0],
     shift: 'Morning',
     amount: '',
     quality: 'Good',
-    notes: '',
-    sendWhatsAppNotification: false
-  });
-  
-  // Handle form field changes
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value
-    });
+    fat: '',
+    snf: '',
+    notes: ''
+  }]);
+  const [sendWhatsAppNotification, setSendWhatsAppNotification] = useState(false);
+
+  // Handle form field changes for a specific entry
+  const handleEntryChange = (entryId, field, value) => {
+    setEntries(entries.map(entry =>
+      entry.id === entryId ? { ...entry, [field]: value } : entry
+    ));
+  };
+
+  // Add a new entry row
+  const addEntry = () => {
+    setEntries([...entries, {
+      id: Date.now(),
+      date: new Date().toISOString().split('T')[0],
+      shift: 'Morning',
+      amount: '',
+      quality: 'Good',
+      fat: '',
+      snf: '',
+      notes: ''
+    }]);
+  };
+
+  // Remove an entry row
+  const removeEntry = (entryId) => {
+    if (entries.length > 1) {
+      setEntries(entries.filter(entry => entry.id !== entryId));
+    }
   };
 
   const handleCheckboxChange = (e) => {
-    const { name, checked } = e.target;
-    setFormData({
-      ...formData,
-      [name]: checked
-    });
+    setSendWhatsAppNotification(e.target.checked);
   };
 
   // WhatsApp notification service
-  const sendWhatsAppNotification = async (recordData, cowData) => {
+  const sendWhatsAppNotificationService = async (recordData, cowData) => {
     try {
       console.log('Sending WhatsApp notification for milk record:', recordData);
-      
+
       // In a real implementation, make an API call to your WhatsApp service (like Twilio)
       // Example:
       const message = `Hello ${cowData.owner}, your cow ${cowData.name} (${cowData.tagNumber}) has produced ${recordData.amount}L of milk on ${recordData.date}.`;
-      
+
       // Mock API call for demonstration
       /*
       const response = await fetch('https://api.yourmessagingservice.com/messages', {
@@ -5073,14 +5544,14 @@ const RecordMilkProductionModal = ({ cow, onClose, onSubmit }) => {
           body: message
         })
       });
-      
+
       const result = await response.json();
       */
-      
+
       // For demo, log the notification details
       console.log('WhatsApp message:', message);
       console.log('WhatsApp notification would be sent to:', cowData.owner);
-      
+
       // Return success
       return { success: true, message: 'Notification sent successfully' };
     } catch (error) {
@@ -5088,45 +5559,47 @@ const RecordMilkProductionModal = ({ cow, onClose, onSubmit }) => {
       return { success: false, message: error.message };
     }
   };
-  
-  // Handle form submission
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    
-    // Create a new milk production record
-    const newRecord = {
-      date: formData.date,
-      shift: formData.shift,
-      amount: parseFloat(formData.amount),
-      quality: formData.quality,
-      notes: formData.notes
-    };
-    
-    onSubmit(cow.id,newRecord);
 
-    if (formData.sendWhatsAppNotification) {
-      const notificationResult = sendWhatsAppNotification(formData, cow);
-      
-      if (notificationResult.success) {
-        console.log('Notification sent successfully');
-      } else {
-        console.error('Failed to send notification:', notificationResult.message);
-      }
+  // Handle form submission
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    // Validate all entries
+    const validEntries = entries.filter(entry => entry.amount && parseFloat(entry.amount) > 0);
+
+    if (validEntries.length === 0) {
+      toast.error('Please enter at least one valid milk production amount');
+      return;
     }
 
-    toast.success(formData.sendWhatsAppNotification 
-      ? 'Milk record added and notification sent!'
-      : 'Milk record added successfully!');
+    // Submit all valid entries
+    for (const entry of validEntries) {
+      const newRecord = {
+        date: entry.date,
+        shift: entry.shift,
+        amount: parseFloat(entry.amount),
+        quality: entry.quality,
+        fat: entry.fat ? parseFloat(entry.fat) : null,
+        snf: entry.snf ? parseFloat(entry.snf) : null,
+        notes: entry.notes
+      };
+
+      await onSubmit(cow.id, newRecord);
+
+      if (sendWhatsAppNotification) {
+        await sendWhatsAppNotificationService(newRecord, cow);
+      }
+    }
 
     onClose();
   };
   
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-auto my-8">
-        <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-green-50 flex justify-between items-center">
-          <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-green-700 break-words">Record Milk Production</h3>
-          <button 
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-auto max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-green-50 flex justify-between items-center flex-shrink-0">
+          <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-green-700 break-words">Record Milk Production - {cow.name}</h3>
+          <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-500 transition-colors duration-200 flex-shrink-0"
           >
@@ -5135,100 +5608,147 @@ const RecordMilkProductionModal = ({ cow, onClose, onSubmit }) => {
             </svg>
           </button>
         </div>
-        
-        <form onSubmit={handleSubmit} className="overflow-auto max-h-[70vh]">
-          <div className="px-6 py-4 space-y-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
-                  Collection Date *
-                </label>
-                <input
-                  type="date"
-                  id="date"
-                  name="date"
-                  value={formData.date}
-                  onChange={handleChange}
-                  required
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-all duration-300"
-                />
+
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="px-6 py-4 overflow-y-scroll max-h-[50vh]">
+            <div className="space-y-4">
+              {/* Header Row */}
+              <div className="grid grid-cols-12 gap-2 text-xs font-medium text-gray-700 px-2 sticky top-0 bg-white z-10 pb-2">
+                <div className="col-span-2">Date *</div>
+                <div className="col-span-1">Shift *</div>
+                <div className="col-span-1">Qty (L) *</div>
+                <div className="col-span-1">Quality</div>
+                <div className="col-span-1">Fat %</div>
+                <div className="col-span-1">SNF %</div>
+                <div className="col-span-4">Notes</div>
+                <div className="col-span-1">Action</div>
               </div>
-              
-              <div>
-                <label htmlFor="shift" className="block text-sm font-medium text-gray-700 mb-1">
-                  Shift *
-                </label>
-                <select
-                  id="shift"
-                  name="shift"
-                  value={formData.shift}
-                  onChange={handleChange}
-                  required
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-all duration-300"
-                >
-                  <option value="Morning">Morning</option>
-                  <option value="Evening">Evening</option>
-                </select>
+
+              {/* Entry Rows */}
+              {entries.map((entry, index) => (
+              <div key={entry.id} className="grid grid-cols-12 gap-2 items-start p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="col-span-2">
+                  <input
+                    type="date"
+                    value={entry.date}
+                    onChange={(e) => handleEntryChange(entry.id, 'date', e.target.value)}
+                    required
+                    className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+
+                <div className="col-span-1">
+                  <select
+                    value={entry.shift}
+                    onChange={(e) => handleEntryChange(entry.id, 'shift', e.target.value)}
+                    required
+                    className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  >
+                    <option value="Morning">Morning</option>
+                    <option value="Evening">Evening</option>
+                  </select>
+                </div>
+
+                <div className="col-span-1">
+                  <input
+                    type="number"
+                    value={entry.amount}
+                    onChange={(e) => handleEntryChange(entry.id, 'amount', e.target.value)}
+                    required
+                    min="0"
+                    step="0.1"
+                    className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="0.0"
+                  />
+                </div>
+
+                <div className="col-span-1">
+                  <select
+                    value={entry.quality}
+                    onChange={(e) => handleEntryChange(entry.id, 'quality', e.target.value)}
+                    className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  >
+                    <option value="Excellent">Exc</option>
+                    <option value="Good">Good</option>
+                    <option value="Average">Avg</option>
+                    <option value="Poor">Poor</option>
+                  </select>
+                </div>
+
+                <div className="col-span-1">
+                  <input
+                    type="number"
+                    value={entry.fat}
+                    onChange={(e) => handleEntryChange(entry.id, 'fat', e.target.value)}
+                    min="0"
+                    step="0.1"
+                    className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="0.0"
+                  />
+                </div>
+
+                <div className="col-span-1">
+                  <input
+                    type="number"
+                    value={entry.snf}
+                    onChange={(e) => handleEntryChange(entry.id, 'snf', e.target.value)}
+                    min="0"
+                    step="0.1"
+                    className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="0.0"
+                  />
+                </div>
+
+                <div className="col-span-4">
+                  <textarea
+                    rows={2}
+                    value={entry.notes}
+                    onChange={(e) => handleEntryChange(entry.id, 'notes', e.target.value)}
+                    className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="Notes..."
+                  ></textarea>
+                </div>
+
+                <div className="col-span-1 flex items-center justify-center">
+                  <button
+                    type="button"
+                    onClick={() => removeEntry(entry.id)}
+                    disabled={entries.length === 1}
+                    className={`p-2 rounded-md transition-all duration-200 ${
+                      entries.length === 1
+                        ? 'text-gray-300 cursor-not-allowed'
+                        : 'text-red-600 hover:bg-red-50 hover:text-red-700'
+                    }`}
+                    title="Remove entry"
+                  >
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
               </div>
-            </div>
-            
-            <div>
-              <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">
-                Amount (L) *
-              </label>
-              <input
-                type="number"
-                id="amount"
-                name="amount"
-                value={formData.amount}
-                onChange={handleChange}
-                required
-                min="0"
-                step="0.1"
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-all duration-300"
-                placeholder="Enter amount in liters"
-              />
-            </div>
-            
-            <div>
-              <label htmlFor="quality" className="block text-sm font-medium text-gray-700 mb-1">
-                Quality
-              </label>
-              <select
-                id="quality"
-                name="quality"
-                value={formData.quality}
-                onChange={handleChange}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-all duration-300"
+              ))}
+
+              {/* Add Entry Button */}
+              <button
+                type="button"
+                onClick={addEntry}
+                className="w-full py-2 px-4 border-2 border-dashed border-blue-300 rounded-md text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300 flex items-center justify-center gap-2"
               >
-                <option value="Excellent">Excellent</option>
-                <option value="Good">Good</option>
-                <option value="Average">Average</option>
-                <option value="Poor">Poor</option>
-              </select>
-            </div>
-            
-            <div>
-              <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
-                Notes
-              </label>
-              <textarea
-                id="notes"
-                name="notes"
-                rows={3}
-                value={formData.notes}
-                onChange={handleChange}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-all duration-300"
-                placeholder="Any additional notes about this collection..."
-              ></textarea>
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add Another Entry
+              </button>
             </div>
           </div>
-          <div className="flex items-center px-6 py-4">
+
+          <div className="flex items-center px-6 py-4 bg-gray-50 flex-shrink-0">
             <input
               id="sendWhatsAppNotification"
               name="sendWhatsAppNotification"
               type="checkbox"
-              checked={formData.sendWhatsAppNotification}
+              checked={sendWhatsAppNotification}
               onChange={handleCheckboxChange}
               className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
             />
@@ -5236,21 +5756,26 @@ const RecordMilkProductionModal = ({ cow, onClose, onSubmit }) => {
               Send WhatsApp notification to cow owner
             </label>
           </div>
-          
-          <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300 transform hover:scale-105"
-            >
-              Save
-            </button>
+
+          <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap justify-between items-center gap-3 flex-shrink-0">
+            <div className="text-sm text-gray-600">
+              Total entries: <span className="font-semibold text-blue-600">{entries.filter(e => e.amount && parseFloat(e.amount) > 0).length}</span>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300 transform hover:scale-105"
+              >
+                Save All Entries
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -5541,6 +6066,361 @@ const QuickRecordModal = ({ cow, onClose, onRecord }) => {
             className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
           >
             Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// View Breeding Event Modal Component
+const ViewBreedingEventModal = ({ event, cow, onClose }) => {
+  // Calculate follow-up actions based on event type
+  const getFollowUpActions = () => {
+    const eventDate = new Date(event.date);
+    const today = new Date();
+    const daysSinceEvent = Math.floor((today - eventDate) / (1000 * 60 * 60 * 24));
+
+    const actions = [];
+
+    const eventType = event.event_type || event.eventType;
+
+    switch (eventType) {
+      case 'Insemination':
+      case 'Artificial Insemination':
+        if (daysSinceEvent >= 21 && daysSinceEvent <= 30) {
+          actions.push({
+            action: 'Check for heat signs',
+            dueDate: new Date(eventDate.getTime() + 21 * 24 * 60 * 60 * 1000),
+            priority: 'High',
+            status: daysSinceEvent > 24 ? 'Overdue' : 'Due Soon',
+            description: 'Monitor for heat/estrus signs to confirm pregnancy or re-insemination'
+          });
+        }
+        if (daysSinceEvent >= 30 && daysSinceEvent <= 45) {
+          actions.push({
+            action: 'Pregnancy Check',
+            dueDate: new Date(eventDate.getTime() + 35 * 24 * 60 * 60 * 1000),
+            priority: 'High',
+            status: daysSinceEvent > 40 ? 'Overdue' : 'Due Soon',
+            description: 'Schedule ultrasound or palpation to confirm pregnancy'
+          });
+        }
+        if (event.result !== 'Confirmed' && daysSinceEvent >= 45) {
+          actions.push({
+            action: 'Re-insemination or breeding decision',
+            dueDate: new Date(eventDate.getTime() + 45 * 24 * 60 * 60 * 1000),
+            priority: 'Medium',
+            status: 'Action Needed',
+            description: 'If not pregnant, plan for next breeding cycle'
+          });
+        }
+        if (event.result === 'Confirmed' && daysSinceEvent >= 200) {
+          const expectedCalvingDate = new Date(eventDate.getTime() + 283 * 24 * 60 * 60 * 1000);
+          actions.push({
+            action: 'Prepare for Calving',
+            dueDate: new Date(eventDate.getTime() + 260 * 24 * 60 * 60 * 1000),
+            priority: 'High',
+            status: daysSinceEvent >= 260 ? 'Due Soon' : 'Upcoming',
+            description: `Expected calving date: ${expectedCalvingDate.toLocaleDateString()}. Prepare calving area and supplies`
+          });
+        }
+        break;
+
+      case 'Natural Breeding':
+        if (daysSinceEvent >= 18 && daysSinceEvent <= 25) {
+          actions.push({
+            action: 'Monitor for heat return',
+            dueDate: new Date(eventDate.getTime() + 21 * 24 * 60 * 60 * 1000),
+            priority: 'Medium',
+            status: 'Due Soon',
+            description: 'Watch for signs of heat to determine if breeding was successful'
+          });
+        }
+        if (daysSinceEvent >= 30) {
+          actions.push({
+            action: 'Pregnancy Check',
+            dueDate: new Date(eventDate.getTime() + 35 * 24 * 60 * 60 * 1000),
+            priority: 'High',
+            status: daysSinceEvent > 40 ? 'Overdue' : 'Due Soon',
+            description: 'Confirm pregnancy through veterinary examination'
+          });
+        }
+        break;
+
+      case 'Pregnancy Check':
+        if (event.result === 'Confirmed' || event.result === 'Positive') {
+          const expectedCalvingDate = new Date(eventDate.getTime() + (283 - daysSinceEvent) * 24 * 60 * 60 * 1000);
+          const daysToCalving = Math.floor((expectedCalvingDate - today) / (1000 * 60 * 60 * 24));
+
+          if (daysToCalving <= 60 && daysToCalving > 30) {
+            actions.push({
+              action: 'Dry off cow',
+              dueDate: new Date(expectedCalvingDate.getTime() - 60 * 24 * 60 * 60 * 1000),
+              priority: 'High',
+              status: 'Upcoming',
+              description: 'Stop milking 60 days before expected calving'
+            });
+          }
+
+          if (daysToCalving <= 30) {
+            actions.push({
+              action: 'Monitor closely and prepare for calving',
+              dueDate: expectedCalvingDate,
+              priority: 'Critical',
+              status: daysToCalving <= 7 ? 'Imminent' : 'Due Soon',
+              description: `Expected calving in ${daysToCalving} days. Prepare maternity area`
+            });
+          }
+        } else if (event.result === 'Failed' || event.result === 'Negative') {
+          actions.push({
+            action: 'Plan re-breeding',
+            dueDate: new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000),
+            priority: 'High',
+            status: 'Action Needed',
+            description: 'Monitor for next heat cycle and plan breeding'
+          });
+        }
+        break;
+
+      case 'Calving':
+        if (daysSinceEvent <= 3) {
+          actions.push({
+            action: 'Monitor mother and calf',
+            dueDate: new Date(eventDate.getTime() + 3 * 24 * 60 * 60 * 1000),
+            priority: 'Critical',
+            status: 'Active',
+            description: 'Watch for complications, ensure calf is nursing'
+          });
+        }
+        if (daysSinceEvent >= 3 && daysSinceEvent <= 7) {
+          actions.push({
+            action: 'Post-calving check-up',
+            dueDate: new Date(eventDate.getTime() + 7 * 24 * 60 * 60 * 1000),
+            priority: 'High',
+            status: 'Due Soon',
+            description: 'Veterinary examination for mother, check calf health'
+          });
+        }
+        if (daysSinceEvent >= 40 && daysSinceEvent <= 60) {
+          actions.push({
+            action: 'Breeding eligibility check',
+            dueDate: new Date(eventDate.getTime() + 60 * 24 * 60 * 60 * 1000),
+            priority: 'Medium',
+            status: 'Upcoming',
+            description: 'Assess if cow is ready for next breeding cycle'
+          });
+        }
+        break;
+
+      case 'Heat Detection':
+        if (daysSinceEvent <= 1) {
+          actions.push({
+            action: 'Breeding decision',
+            dueDate: new Date(eventDate.getTime() + 1 * 24 * 60 * 60 * 1000),
+            priority: 'Critical',
+            status: 'Urgent',
+            description: 'Optimal breeding window is 12-18 hours from heat detection'
+          });
+        }
+        break;
+
+      case 'Abortion':
+      case 'Stillborn':
+        if (daysSinceEvent <= 7) {
+          actions.push({
+            action: 'Veterinary examination',
+            dueDate: new Date(eventDate.getTime() + 2 * 24 * 60 * 60 * 1000),
+            priority: 'Critical',
+            status: daysSinceEvent > 2 ? 'Overdue' : 'Urgent',
+            description: 'Determine cause and check for infection or complications'
+          });
+        }
+        if (daysSinceEvent >= 30) {
+          actions.push({
+            action: 'Health assessment for re-breeding',
+            dueDate: new Date(eventDate.getTime() + 40 * 24 * 60 * 60 * 1000),
+            priority: 'Medium',
+            status: 'Action Needed',
+            description: 'Veterinary clearance before attempting next breeding'
+          });
+        }
+        break;
+
+      default:
+        actions.push({
+          action: 'Follow-up monitoring',
+          dueDate: new Date(eventDate.getTime() + 30 * 24 * 60 * 60 * 1000),
+          priority: 'Low',
+          status: 'Optional',
+          description: 'General monitoring and assessment'
+        });
+    }
+
+    return actions;
+  };
+
+  const followUpActions = getFollowUpActions();
+
+  const getPriorityColor = (priority) => {
+    switch (priority) {
+      case 'Critical': return 'text-red-600 bg-red-50 border-red-200';
+      case 'High': return 'text-orange-600 bg-orange-50 border-orange-200';
+      case 'Medium': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+      case 'Low': return 'text-blue-600 bg-blue-50 border-blue-200';
+      default: return 'text-gray-600 bg-gray-50 border-gray-200';
+    }
+  };
+
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'Overdue':
+        return 'bg-red-100 text-red-800';
+      case 'Due Soon':
+      case 'Urgent':
+        return 'bg-orange-100 text-orange-800';
+      case 'Active':
+      case 'Imminent':
+        return 'bg-purple-100 text-purple-800';
+      case 'Upcoming':
+        return 'bg-blue-100 text-blue-800';
+      case 'Action Needed':
+        return 'bg-yellow-100 text-yellow-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-blue-50 sticky top-0 z-10">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-purple-700 to-blue-700">
+                Breeding Event Details
+              </h3>
+              {cow && (
+                <p className="text-sm text-gray-600 mt-1">
+                  Cow: {cow.name} (Tag: {cow.tagNumber})
+                </p>
+              )}
+            </div>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Event Information */}
+        <div className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h4 className="text-sm font-medium text-gray-500 mb-3">Event Information</h4>
+              <div className="space-y-3">
+                <div>
+                  <span className="text-xs text-gray-500">Event Type</span>
+                  <p className="text-sm font-semibold text-gray-900">{event.event_type || event.eventType}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">Date</span>
+                  <p className="text-sm font-semibold text-gray-900">{formatDate(event.date)}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">Result/Status</span>
+                  <p className="mt-1">
+                    <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                      event.result === 'Confirmed' || event.result === 'Positive' || event.result === 'Healthy' || event.result === 'Completed' || event.result === 'Successful' ?
+                        'bg-green-100 text-green-800' :
+                      event.result === 'Failed' || event.result === 'Negative' || event.result === 'Stillborn' || event.result === 'Unsuccessful' ?
+                        'bg-red-100 text-red-800' :
+                      event.result === 'Pending' ?
+                        'bg-yellow-100 text-yellow-800' :
+                        'bg-gray-100 text-gray-800'
+                    }`}>
+                      {event.result || 'Pending'}
+                    </span>
+                  </p>
+                </div>
+                {(event.performed_by || event.performedBy) && (
+                  <div>
+                    <span className="text-xs text-gray-500">Performed By</span>
+                    <p className="text-sm font-semibold text-gray-900">{event.performed_by || event.performedBy}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h4 className="text-sm font-medium text-gray-500 mb-3">Details</h4>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                {event.details || 'No additional details provided'}
+              </p>
+              {event.notes && (
+                <div className="mt-3">
+                  <span className="text-xs text-gray-500">Notes</span>
+                  <p className="text-sm text-gray-700 mt-1">{event.notes}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Follow-up Actions */}
+          {followUpActions.length > 0 && (
+            <div className="mt-6">
+              <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <Calendar className="h-5 w-5 mr-2 text-purple-600" />
+                Recommended Follow-up Actions
+              </h4>
+              <div className="space-y-3">
+                {followUpActions.map((action, index) => (
+                  <div
+                    key={index}
+                    className={`border rounded-lg p-4 ${getPriorityColor(action.priority)}`}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h5 className="font-semibold text-gray-900">{action.action}</h5>
+                          <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(action.status)}`}>
+                            {action.status}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-700 mb-2">{action.description}</p>
+                        <div className="flex items-center text-xs text-gray-600">
+                          <Calendar className="h-3 w-3 mr-1" />
+                          <span>Due: {action.dueDate.toLocaleDateString()}</span>
+                          <span className="mx-2">•</span>
+                          <span className="font-medium">Priority: {action.priority}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {followUpActions.length === 0 && (
+            <div className="mt-6 p-4 bg-gray-50 rounded-lg text-center">
+              <p className="text-sm text-gray-600">No pending follow-up actions at this time</p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-colors"
+          >
+            Close
           </button>
         </div>
       </div>
