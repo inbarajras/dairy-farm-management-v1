@@ -499,10 +499,20 @@ const CowManagement = () => {
 
       console.log(`  In range: ${productionInRange.length} records, Total: ${totalMilk}L`);
 
-      // Calculate days in range for average
-      const daysInRange = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
-      const avgDailyMilk = productionInRange.length > 0 && daysInRange > 0
-        ? totalMilk / daysInRange
+      // Group by date to get daily totals
+      const dailyTotals = productionInRange.reduce((acc, record) => {
+        const date = record.date;
+        if (!acc[date]) {
+          acc[date] = 0;
+        }
+        acc[date] += parseFloat(record.amount) || 0;
+        return acc;
+      }, {});
+
+      // Calculate average based on actual days with production
+      const daysWithProduction = Object.keys(dailyTotals).length;
+      const avgDailyMilk = daysWithProduction > 0
+        ? totalMilk / daysWithProduction
         : 0;
 
       return {
@@ -1160,7 +1170,7 @@ const CowManagement = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-gray-500">Total Cows</p>
-                      <p className="text-2xl font-bold text-gray-800">{cows.length}</p>
+                      <p className="text-2xl font-bold text-gray-800">{cows.filter(c => c.status !== 'Sold').length}</p>
                     </div>
                     <div className="p-3 bg-blue-100 rounded-lg">
                       <Users size={24} className="text-blue-600" />

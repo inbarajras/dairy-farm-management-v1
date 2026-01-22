@@ -1160,19 +1160,13 @@ const EmptyEmployeeSection = ({ onRetry }) => {
   const handleExpenseSubmit = async (expenseData) => {
     try {
       setIsLoading(true);
-      
+
       // Add the expense to the database
       const newExpense = await addExpense(expenseData);
-      
-      // Update the financial data state
-      setFinancialData(prevData => ({
-        ...prevData,
-        expenses: {
-          ...prevData.expenses,
-          recent: [newExpense, ...prevData.expenses.recent.slice(0, 4)]
-        }
-      }));
-      
+
+      // Refresh dashboard data to reflect new expense
+      await fetchRevenueData(dateRange, customStartDate, customEndDate);
+
       // If on expenses tab, refresh the expenses list
       if (activeTab === 'expenses') {
         const { startDate, endDate } = calculateDateRange();
@@ -1181,9 +1175,11 @@ const EmptyEmployeeSection = ({ onRetry }) => {
 
       // Close the modal
       toggleAddExpenseModal();
+      toast.success('Expense recorded successfully');
     } catch (err) {
       console.error('Error submitting expense:', err);
       setError('Failed to add expense. Please try again.');
+      toast.error('Failed to add expense. Please try again.');
     } finally {
       setIsLoading(false);
     }
