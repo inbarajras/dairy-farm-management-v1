@@ -11,6 +11,7 @@ import { initializeRevenueTables } from './services/revenueUpdateService';
 import { generateFinancialReport } from './services/reportService';
 import { supabase } from '../lib/supabase';
 import LoadingSpinner from './LoadingSpinner';
+import toast from 'react-hot-toast';
 
 // Color scheme constants for charts and UI elements
 const CHART_COLORS = {
@@ -114,6 +115,8 @@ const FinancesManagement = () => {
     }
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false); // For add/edit operations
+  const [isRefreshing, setIsRefreshing] = useState(false); // For date range changes
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [error, setError] = useState(null);
   const [isAddExpenseModalOpen, setIsAddExpenseModalOpen] = useState(false);
@@ -622,7 +625,12 @@ const EmptyEmployeeSection = ({ onRetry }) => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setIsLoading(true);
+        // Use isRefreshing for subsequent loads, isLoading for initial load
+        if (hasLoadedOnce) {
+          setIsRefreshing(true);
+        } else {
+          setIsLoading(true);
+        }
 
         // Initialize revenue tables before fetching data
         await initializeRevenueTables();
@@ -641,6 +649,7 @@ const EmptyEmployeeSection = ({ onRetry }) => {
         setError('Failed to load financial data. Please try again.');
       } finally {
         setIsLoading(false);
+        setIsRefreshing(false);
       }
     };
 
@@ -1159,7 +1168,7 @@ const EmptyEmployeeSection = ({ onRetry }) => {
   // Handle expense submission from modal
   const handleExpenseSubmit = async (expenseData) => {
     try {
-      setIsLoading(true);
+      setIsSubmitting(true);
 
       // Add the expense to the database
       const newExpense = await addExpense(expenseData);
@@ -1181,7 +1190,7 @@ const EmptyEmployeeSection = ({ onRetry }) => {
       setError('Failed to add expense. Please try again.');
       toast.error('Failed to add expense. Please try again.');
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -1411,28 +1420,30 @@ const EmptyEmployeeSection = ({ onRetry }) => {
   // Handle invoice status change
   const handleInvoiceStatusChange = async (invoiceId, newStatus) => {
     try {
-      setIsLoading(true);
+      setIsSubmitting(true);
       await updateInvoiceStatus(invoiceId, newStatus);
-      
+
       // Refresh invoices list
       await fetchInvoices(invoicesPage, invoiceSearchQuery);
-      
+
       // If we're viewing the invoice, refresh the selected invoice data
       if (selectedInvoice && selectedInvoice.id === invoiceId) {
         const updatedInvoice = await getInvoiceById(invoiceId);
         setSelectedInvoice(updatedInvoice);
       }
-      
+
       // Update the financial dashboard data
       const data = await getFinancialDashboardData();
       setFinancialData(data);
-      
+
+      toast.success(`Invoice status updated to ${newStatus}`);
       return true;
     } catch (err) {
       console.error('Error updating invoice status:', err);
+      toast.error('Failed to update invoice status');
       return false;
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
   
@@ -2511,6 +2522,11 @@ const EmptyEmployeeSection = ({ onRetry }) => {
   
   return (
     <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30 overflow-y-auto">
+      {/* Loading Overlay for add/edit operations */}
+      {isSubmitting && <LoadingSpinner message="Saving..." />}
+      {/* Loading Overlay for date range changes */}
+      {isRefreshing && <LoadingSpinner message="Updating data..." />}
+
       <div className="px-4 sm:px-6 py-4 sm:py-6 max-w-[1500px] mx-auto">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
           <h1 className="text-xl sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Financial Management</h1>

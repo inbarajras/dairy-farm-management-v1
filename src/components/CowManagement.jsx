@@ -39,6 +39,7 @@ const CowManagement = () => {
   const { userRole, hasPermission = () => false } = useRole() || {};
   const [cows, setCows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false); // For add/edit operations
   const [error, setError] = useState(null);
   const [selectedCow, setSelectedCow] = useState(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -598,7 +599,7 @@ const CowManagement = () => {
   // Add new cow
   const handleAddCow = async (newCowData) => {
     try {
-      setLoading(true);
+      setIsSubmitting(true);
       const newCow = await addCow(newCowData);
       setCows([...cows, newCow]);
       toast.success('New cow added successfully!');
@@ -606,7 +607,7 @@ const CowManagement = () => {
       console.error("Error adding cow:", err);
       toast.error('Failed to add cow. Please try again.');
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -630,7 +631,7 @@ const CowManagement = () => {
       console.error("Error updating cow:", err);
       toast.error('Failed to update cow. Please try again.');
     } finally{
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -955,7 +956,9 @@ const CowManagement = () => {
 
   return (
     <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30 overflow-y-auto">
-      
+      {/* Loading Overlay for add/edit operations */}
+      {isSubmitting && <LoadingSpinner message="Saving..." />}
+
       {selectedCow ? (
       <CowProfile
           cow={selectedCow}

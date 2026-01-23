@@ -78,8 +78,9 @@ const EmployeeManagement = () => {
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
   const [employeeForAttendance, setEmployeeForAttendance] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false); // For add/edit operations
   const [error, setError] = useState(null);
-  
+
   // For attendance tab
   const [attendanceData, setAttendanceData] = useState({
     summary: [],
@@ -357,7 +358,7 @@ const EmployeeManagement = () => {
       console.error('Error adding employee:', err);
       setError('Failed to add employee. Please try again.');
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
   
@@ -447,6 +448,9 @@ const EmployeeManagement = () => {
   
   return (
     <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30 overflow-y-auto">
+      {/* Loading Overlay for add/edit operations */}
+      {isSubmitting && <LoadingSpinner message="Saving..." />}
+
       {selectedEmployee ? (
         <EmployeeProfile 
           employee={selectedEmployee} 

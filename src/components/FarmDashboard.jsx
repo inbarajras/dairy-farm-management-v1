@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Bell, 
   Menu, 
@@ -17,10 +17,8 @@ import {
   Calendar,
   Clock,
   Filter,
-  RefreshCw,Cloud, CloudRain, Sun, Wind, CloudSnow, CloudLightning, CloudDrizzle, CloudFog,
-  Plus,
-  ChevronsLeft,
-  ChevronsRight
+  Cloud, CloudRain, Sun, Wind, CloudSnow, CloudLightning, CloudDrizzle, CloudFog,
+  Plus
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useRole } from '../contexts/RoleContext';
@@ -92,7 +90,7 @@ const DEFAULT_VALUES = {
   chart: {
     defaultValue: 0,
     noDataMessage: 'No data available',
-    defaultDecimalPlaces: 1,
+    defaultDecimalPlaces: 2,
     colors: {
       gridStroke: '#f1f1f1',
       axisStroke: '#9CA3AF',
@@ -330,15 +328,14 @@ const FarmDashboard = () => {
   const [currentWeather, setCurrentWeather] = useState({ temp: 24, condition: 'Sunny' });
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [dateRange, setDateRange] = useState('Last 7 days');
+  const [dateRange, setDateRange] = useState('week');
   const [isActivitiesModalOpen, setIsActivitiesModalOpen] = useState(false);
   const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
   const [activityFilter, setActivityFilter] = useState('all');
-  const [milkDataPeriod, setMilkDataPeriod] = useState('7days');
   const [dashboardData, setDashboardData] = useState({
     kpiData: {
       totalCows: 0,
+      cowSubdivision: { milking: 0, sold: 0, calves: 0 },
       milkProduction: 0,
       healthAlerts: 0,
       activeTasks: 0,
@@ -351,15 +348,12 @@ const FarmDashboard = () => {
       activeTasks: 0,
       revenue: 0
     },
-    milkProductionData: {
-      '7days': [],
-      'month': [],
-      '3months': []
-    },
+    milkProductionData: [],
     cowHealthData: [],
     recentActivities: []
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false); // For date range changes
   const [error, setError] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [showUserProfile, setShowUserProfile] = useState(false);
@@ -368,23 +362,22 @@ const FarmDashboard = () => {
   const profileMenuRef = useRef(null);
   
   // Fetch dashboard data when component mounts
+  // Initial load
   useEffect(() => {
     fetchDashboardData();
     loadCurrentUser();
   }, []);
 
-  // Refetch dashboard data when date range or current date changes
+  // Refetch dashboard data when date range changes
   useEffect(() => {
-    if (!isLoading) { // Prevent duplicate calls during initial load
-      fetchDashboardData();
+    // Skip the initial render (handled by the first useEffect)
+    const isInitialRender = dashboardData.kpiData.totalCows === 0 &&
+                            dashboardData.milkProductionData.length === 0;
+
+    if (!isInitialRender) {
+      fetchDashboardData(true); // Show refresh loader
     }
-  }, [dateRange, currentDate]);
-  
-  // Refetch data when date range changes from dropdown
-  useEffect(() => {
-    if (!isLoading) { // Prevent duplicate calls during initial load
-      fetchDashboardData();
-    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange]);
 
   // Load current user from Supabase
@@ -420,25 +413,31 @@ const FarmDashboard = () => {
     // Always start with fresh Date objects to avoid mutation issues
     const endDate = new Date();
     let startDate = new Date();
-    
-    if (dateRange === 'Today') {
-      // For today, start and end are the same date
-      startDate.setHours(0, 0, 0, 0);
-      endDate.setHours(23, 59, 59, 999);
-    } else if (dateRange === 'Last 7 days') {
+
+    if (dateRange === 'week') {
       // Go back 6 days from today to include today as the 7th day
       startDate = new Date(endDate); // Create a new date object
       startDate.setDate(endDate.getDate() - 6);
       startDate.setHours(0, 0, 0, 0);
       endDate.setHours(23, 59, 59, 999);
-    } else if (dateRange === 'This month') {
-      // First day of the current month to current date
-      startDate.setDate(1);
+    } else if (dateRange === '14days') {
+      // Go back 13 days to include today as the 14th day
+      startDate.setDate(startDate.getDate() - 13);
       startDate.setHours(0, 0, 0, 0);
       endDate.setHours(23, 59, 59, 999);
-    } else if (dateRange === 'Last 30 days') {
+    } else if (dateRange === 'month') {
       // Go back 29 days to include today as the 30th day
       startDate.setDate(startDate.getDate() - 29);
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
+    } else if (dateRange === 'quarter') {
+      // Go back 89 days to include today as the 90th day
+      startDate.setDate(startDate.getDate() - 89);
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
+    } else if (dateRange === 'year') {
+      // Go back one year from today
+      startDate.setFullYear(startDate.getFullYear() - 1);
       startDate.setHours(0, 0, 0, 0);
       endDate.setHours(23, 59, 59, 999);
     } else {
@@ -447,47 +446,49 @@ const FarmDashboard = () => {
       startDate.setHours(0, 0, 0, 0);
       endDate.setHours(23, 59, 59, 999);
     }
-    
+
     return { startDate, endDate };
   };
-  
+
   // Fetch dashboard data based on date range
-  const fetchDashboardData = async () => {
-    setIsLoading(true);
+  const fetchDashboardData = useCallback(async (showRefreshLoader = false) => {
+    // Use isRefreshing for date range changes, isLoading for initial load
+    if (showRefreshLoader || dashboardData.milkProductionData.length > 0) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
     setError(null);
-    
+
     try {
       // Get cows data
       const cowsData = await fetchCows();
-      
+
       // Calculate date range based on current selection
       const { startDate, endDate } = calculateDateRange();
-      
+
       // Get milk collections for the calculated date range
       const milkData = await fetchMilkCollections(startDate.toISOString(), endDate.toISOString());
-      
-      // Get monthly milk totals
-      const monthlyMilkData = await fetchMonthlyTotals();
-      
+
       // Get health alerts (filter by date range)
       const healthEvents = await fetchHealthEvents();
       const filteredHealthEvents = healthEvents.filter(event => {
         const eventDate = new Date(event.eventDate);
         return eventDate >= startDate && eventDate <= endDate;
       });
-      const activeHealthAlerts = filteredHealthEvents.filter(event => 
+      const activeHealthAlerts = filteredHealthEvents.filter(event =>
         event.status === 'In progress' || event.status === 'Monitoring'
       ).length;
-      
+
       // Get financial data
       const financialData = await getFinancialDashboardData();
-      
+
       // Process milk data into the format needed for charts
-      const processedMilkData = processMilkData(milkData, monthlyMilkData);
-      
+      const processedMilkData = processMilkData(milkData, startDate, endDate, dateRange);
+
       // Process health data
       const healthData = processHealthData(cowsData);
-      
+
       // Calculate total milk production for KPI (within date range)
       const totalMilk = milkData.reduce((sum, record) => {
         const recordDate = new Date(record.date);
@@ -497,27 +498,34 @@ const FarmDashboard = () => {
         }
         return sum;
       }, 0);
-      
+
       // Calculate active tasks within date range
-      const activeTasks = filteredHealthEvents.filter(event => 
+      const activeTasks = filteredHealthEvents.filter(event =>
         event.followUp && new Date(event.followUp) >= new Date()
       ).length;
-      
+
       // Process recent activities (use filtered events)
       const recentActivities = processRecentActivities(filteredHealthEvents, milkData, cowsData);
-      
+
       // Calculate current KPI data first
+      // Calculate cow subdivisions (excluding sold cows from total)
+      const milkingCows = cowsData.filter(c => c.status === 'Active' || c.status === 'Dry').length;
+      const soldCows = cowsData.filter(c => c.status === 'Sold').length;
+      const calves = cowsData.filter(c => c.status === 'Calf').length;
+      const totalCowsExcludingSold = cowsData.filter(c => c.status !== 'Sold').length;
+
       const currentKpiData = {
-        totalCows: cowsData.length,
-        milkProduction: totalMilk,
+        totalCows: totalCowsExcludingSold,
+        cowSubdivision: { milking: milkingCows, sold: soldCows, calves: calves },
+        milkProduction: Math.round(totalMilk * 100) / 100, // Round to 2 decimals
         healthAlerts: activeHealthAlerts,
         activeTasks: activeTasks,
         revenue: financialData?.financialStats?.revenue?.current || 0
       };
-      
+
       // Calculate previous period data for trend comparison
       const previousKpiData = await calculatePreviousPeriodData(currentKpiData);
-      
+
       // Set dashboard data
       setDashboardData({
         kpiData: currentKpiData,
@@ -526,14 +534,17 @@ const FarmDashboard = () => {
         cowHealthData: healthData,
         recentActivities: recentActivities
       });
-      
+
       setIsLoading(false);
+      setIsRefreshing(false);
     } catch (err) {
       console.error("Error fetching dashboard data:", err);
       setError("Failed to load dashboard data. Please try again.");
       setIsLoading(false);
+      setIsRefreshing(false);
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange]);
   
   // Calculate previous period data for trend comparison
   const calculatePreviousPeriodData = async (currentData) => {
@@ -591,71 +602,52 @@ const FarmDashboard = () => {
   };
   
   // Process milk data for charts
-  const processMilkData = (milkData, monthlyData) => {
-    // Process 7 days data
+  const processMilkData = (milkData, startDate, endDate, currentDateRange) => {
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const dailyMap = {};
     const dateMap = {}; // Store actual dates to match records precisely
-    
+
+    // Calculate number of days in the range
+    const daysDiff = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+
     // Initialize all days with 0
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date();
+    for (let i = daysDiff - 1; i >= 0; i--) {
+      const date = new Date(endDate);
       date.setDate(date.getDate() - i);
-      const dayName = days[date.getDay()];
-      
+
       // Store unique date key in YYYY-MM-DD format for exact matching
       const dateKey = date.toISOString().split('T')[0];
-      
+
+      // Format label based on date range
+      let label;
+      if (currentDateRange === 'quarter' || currentDateRange === 'year' || daysDiff > 15) {
+        // For longer ranges, show date in MM/DD format
+        label = `${date.getMonth() + 1}/${date.getDate()}`;
+      } else {
+        // For shorter ranges, show day name
+        label = days[date.getDay()];
+      }
+
       // Set initial values for both maps
-      dailyMap[dayName] = 0;
-      dateMap[dateKey] = { day: dayName, production: 0 };
+      dateMap[dateKey] = { label: label, production: 0 };
     }
-    
+
     // Sum milk quantities by day using exact date matching
     milkData.forEach(record => {
       // Get date in YYYY-MM-DD format for exact matching
       const dateKey = new Date(record.date).toISOString().split('T')[0];
-      
-      // Only add to the map if it's within our 7-day range
+
+      // Only add to the map if it's within our date range
       if (dateMap[dateKey]) {
         dateMap[dateKey].production += parseFloat(record.totalQuantity || 0);
-        // Also update the day name map to keep both in sync
-        const dayName = dateMap[dateKey].day;
-        dailyMap[dayName] = dateMap[dateKey].production;
       }
     });
-    
-    const sevenDaysData = Object.keys(dailyMap).map(day => ({
-      day,
-      production: dailyMap[day]
+
+    // Convert to array format for chart
+    return Object.keys(dateMap).sort().map(dateKey => ({
+      day: dateMap[dateKey].label,
+      production: Math.round(dateMap[dateKey].production * 100) / 100 // Round to 2 decimals
     }));
-    
-    // Process monthly data
-    const monthlyProductionData = monthlyData.slice(0, 12).map(item => ({
-      day: item.month.toString(),
-      production: item.quantity
-    }));
-    
-    // Process quarterly data (group by quarter)
-    const quarterlyData = [];
-    if (monthlyData.length >= 3) {
-      for (let i = 0; i < 4; i++) {
-        if (i * 3 < monthlyData.length) {
-          const quarterMonths = monthlyData.slice(i * 3, (i + 1) * 3);
-          const sum = quarterMonths.reduce((total, m) => total + m.quantity, 0);
-          quarterlyData.push({
-            month: `Q${i+1}`,
-            production: sum
-          });
-        }
-      }
-    }
-    
-    return {
-      '7days': sevenDaysData,
-      'month': monthlyProductionData,
-      '3months': quarterlyData
-    };
   };
   
   // Process health data for pie chart
@@ -754,55 +746,6 @@ const FarmDashboard = () => {
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
   };
-  
-  // Date navigation (unchanged)
-  const navigateDate = (direction) => {
-    const newDate = new Date(currentDate);
-    
-    if (dateRange === 'Today') {
-      newDate.setDate(newDate.getDate() + direction);
-    } else if (dateRange === 'Last 7 days') {
-      newDate.setDate(newDate.getDate() + (direction * 7));
-    } else if (dateRange === 'This month') {
-      newDate.setMonth(newDate.getMonth() + direction);
-    } else if (dateRange === 'Last 30 days') {
-      newDate.setDate(newDate.getDate() + (direction * 30));
-    }
-    
-    setCurrentDate(newDate);
-    
-    // Refetch data with new date range
-    fetchDashboardData();
-  };
-  
-  // Reset to today (unchanged)
-  const resetToToday = () => {
-    setCurrentDate(new Date());
-    fetchDashboardData();
-  };
-  
-  // Format date range display (unchanged)
-  const formatDateRangeDisplay = () => {
-    const options = DEFAULT_VALUES.dates.defaultDateFormat;
-    
-    if (dateRange === 'Today') {
-      return currentDate.toLocaleDateString(DEFAULT_VALUES.dates.locale, options);
-    } else if (dateRange === 'Last 7 days') {
-      const endDate = new Date(currentDate);
-      const startDate = new Date(currentDate);
-      startDate.setDate(startDate.getDate() - 6);
-      return `${startDate.toLocaleDateString(DEFAULT_VALUES.dates.locale, { month: 'short', day: 'numeric' })} - ${endDate.toLocaleDateString(DEFAULT_VALUES.dates.locale, options)}`;
-    } else if (dateRange === 'This month') {
-      return currentDate.toLocaleDateString(DEFAULT_VALUES.dates.locale, { month: 'long', year: 'numeric' });
-    } else if (dateRange === 'Last 30 days') {
-      const endDate = new Date(currentDate);
-      const startDate = new Date(currentDate);
-      startDate.setDate(startDate.getDate() - 29);
-      return `${startDate.toLocaleDateString(DEFAULT_VALUES.dates.locale, { month: 'short', day: 'numeric' })} - ${endDate.toLocaleDateString(DEFAULT_VALUES.dates.locale, options)}`;
-    }
-    
-    return currentDate.toLocaleDateString(DEFAULT_VALUES.dates.locale, options);
-  };
 
   // Filter activities for the modal (unchanged)
   const getFilteredActivities = () => {
@@ -888,6 +831,9 @@ const FarmDashboard = () => {
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-blue-50/60 via-white to-green-50/70 overflow-hidden">
+      {/* Loading Overlay for date range changes */}
+      {isRefreshing && <LoadingSpinner message="Updating data..." />}
+
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
       {/* Top Navigation */}
@@ -965,40 +911,17 @@ const FarmDashboard = () => {
           <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <h2 className="text-xl sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Farm Overview</h2>
             <div className="flex flex-wrap items-center gap-2">
-              <StyledDropdown 
-                value={dateRange} 
+              <StyledDropdown
+                value={dateRange}
                 onChange={(e) => setDateRange(e.target.value)}
                 options={[
-                  { value: 'Today', label: 'Today' },
-                  { value: 'Last 7 days', label: 'Last 7 days' },
-                  { value: 'This month', label: 'This month' },
-                  { value: 'Last 30 days', label: 'Last 30 days' },
+                  { value: 'week', label: 'Last 7 days' },
+                  { value: '14days', label: 'Last 14 days' },
+                  { value: 'month', label: 'Last 30 days' },
+                  { value: 'quarter', label: 'Last 90 days' },
+                  { value: 'year', label: 'This Year' },
                 ]}
               />
-              
-              <div className="flex items-center bg-white rounded-lg shadow-sm border border-gray-200 px-2 hover:shadow-md transition-shadow duration-200">
-                <button 
-                  className="p-1.5 text-gray-500 hover:text-gray-700"
-                  onClick={() => navigateDate(-1)}
-                >
-                  <ChevronsLeft className="rotate-90" size={16} />
-                </button>
-                <span className="mx-2 text-sm font-medium text-gray-700 truncate max-w-[100px] sm:max-w-none">{formatDateRangeDisplay()}</span>
-                <button 
-                  className="p-1.5 text-gray-500 hover:text-gray-700"
-                  onClick={() => navigateDate(1)}
-                >
-                  <ChevronsRight className="-rotate-90" size={16} />
-                </button>
-              </div>
-              
-              <button 
-                className="p-2 text-sm font-medium text-gray-700 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200 flex items-center"
-                onClick={resetToToday}
-              >
-                <RefreshCw size={14} className="mr-2 text-green-600" />
-                {DEFAULT_VALUES.ui.labels.today}
-              </button>
             </div>
           </div>
           
@@ -1008,8 +931,11 @@ const FarmDashboard = () => {
               title="Total Cows"
               value={dashboardData.kpiData.totalCows}
               icon={<Clipboard className="text-green-600" />}
-              trend={calculateKpiTrend(dashboardData.kpiData.totalCows, dashboardData.previousKpiData.totalCows, 'totalCows')}
-              positive={isTrendPositive('totalCows', dashboardData.kpiData.totalCows, dashboardData.previousKpiData.totalCows)}
+              subdivision={[
+                { label: 'Milking', value: dashboardData.kpiData.cowSubdivision.milking },
+                { label: 'Calves', value: dashboardData.kpiData.cowSubdivision.calves },
+                { label: 'Sold', value: dashboardData.kpiData.cowSubdivision.sold }
+              ]}
             />
             <KpiCard
               title="Milk Production"
@@ -1045,24 +971,13 @@ const FarmDashboard = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
             {/* Milk Production Chart */}
             <div className="col-span-2">
-              <ChartCard 
+              <ChartCard
                 title="Milk Production"
-                periodSelector={
-                  <select 
-                    className="border rounded-lg px-3 py-1.5 text-sm bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-green-500"
-                    value={milkDataPeriod}
-                    onChange={(e) => setMilkDataPeriod(e.target.value)}
-                  >
-                    <option value="7days">Last 7 days</option>
-                    <option value="month">This month</option>
-                    <option value="3months">Last 3 months</option>
-                  </select>
-                }
               >
                 <div className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
                   <LineChart
-                    data={dashboardData.milkProductionData[milkDataPeriod]}
+                    data={dashboardData.milkProductionData}
                     margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                   >
                     <defs>
@@ -1076,29 +991,29 @@ const FarmDashboard = () => {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke={DEFAULT_VALUES.chart.colors.gridStroke} />
-                    <XAxis dataKey={milkDataPeriod === '3months' ? 'month' : 'day'} stroke={DEFAULT_VALUES.chart.colors.axisStroke} />
+                    <XAxis dataKey="day" stroke={DEFAULT_VALUES.chart.colors.axisStroke} />
                     <YAxis stroke={DEFAULT_VALUES.chart.colors.axisStroke} />
-                    <Tooltip 
-                      contentStyle={{ 
-                        background: 'rgba(255, 255, 255, 0.95)', 
-                        border: '1px solid #f1f1f1', 
+                    <Tooltip
+                      contentStyle={{
+                        background: 'rgba(255, 255, 255, 0.95)',
+                        border: '1px solid #f1f1f1',
                         borderRadius: '8px',
                         boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                       }}
-                      formatter={(value) => [`${value}${milkDataPeriod === '3months' ? `${DEFAULT_VALUES.kpi.volumeUnit} (monthly)` : `${DEFAULT_VALUES.kpi.volumeUnit} (daily)`}`, DEFAULT_VALUES.ui.labels.production]}
+                      formatter={(value) => [`${value}${DEFAULT_VALUES.kpi.volumeUnit}`, DEFAULT_VALUES.ui.labels.production]}
                     />
                     <Legend />
-                    
+
                     {/* Custom area with conditional coloring */}
-                    {dashboardData.milkProductionData[milkDataPeriod].map((entry, index) => {
+                    {dashboardData.milkProductionData.map((entry, index) => {
                       if (index === 0) return null; // Skip first point for comparing
-                      
-                      const prevValue = dashboardData.milkProductionData[milkDataPeriod][index - 1].production;
+
+                      const prevValue = dashboardData.milkProductionData[index - 1].production;
                       const currentValue = entry.production;
                       const isIncreasing = currentValue >= prevValue;
-                      
+
                       return (
-                        <Area 
+                        <Area
                           key={`area-${index}`}
                           type="monotone"
                           dataKey="production"
@@ -1109,44 +1024,44 @@ const FarmDashboard = () => {
                           activeDot={{ r: 6, strokeWidth: 0 }}
                           // Only show this segment between the current points
                           baseValue={0}
-                          data={[dashboardData.milkProductionData[milkDataPeriod][index - 1], entry]}
+                          data={[dashboardData.milkProductionData[index - 1], entry]}
                         />
                       );
                     })}
-                    
+
                     {/* Use a line for points and connections */}
                     <Line
                       type="monotone"
                       dataKey="production"
-                      stroke={isTrendingUp(dashboardData.milkProductionData[milkDataPeriod]) ? CHART_COLORS.trends.positive : CHART_COLORS.trends.negative}
+                      stroke={isTrendingUp(dashboardData.milkProductionData) ? CHART_COLORS.trends.positive : CHART_COLORS.trends.negative}
                       strokeWidth={3}
-                      dot={(props) => <CustomizedDot {...props} data={dashboardData.milkProductionData[milkDataPeriod]} />}
-                      activeDot={{ r: 7, strokeWidth: 0, fill: isTrendingUp(dashboardData.milkProductionData[milkDataPeriod]) ? CHART_COLORS.trends.positive : CHART_COLORS.trends.negative }}
+                      dot={(props) => <CustomizedDot {...props} data={dashboardData.milkProductionData} />}
+                      activeDot={{ r: 7, strokeWidth: 0, fill: isTrendingUp(dashboardData.milkProductionData) ? CHART_COLORS.trends.positive : CHART_COLORS.trends.negative }}
                       fillOpacity={1}
-                      fill={`url(#${isTrendingUp(dashboardData.milkProductionData[milkDataPeriod]) ? 'greenGradient' : 'redGradient'})`}
+                      fill={`url(#${isTrendingUp(dashboardData.milkProductionData) ? 'greenGradient' : 'redGradient'})`}
                     />
                   </LineChart>
                   </ResponsiveContainer>
                 </div>
-                
+
                 {/* Add a milk production summary below the chart */}
                 <div className="grid grid-cols-3 gap-3 mt-4">
                   <div className="text-center p-2 rounded-lg bg-gradient-to-b from-blue-50 to-blue-100 border border-blue-200">
                     <p className="text-xs text-gray-500">{DEFAULT_VALUES.ui.labels.average}</p>
                     <p className="text-lg font-bold text-blue-600">
-                      {calculateMilkAverage(dashboardData.milkProductionData[milkDataPeriod])}{DEFAULT_VALUES.kpi.volumeUnit}
+                      {calculateMilkAverage(dashboardData.milkProductionData)}{DEFAULT_VALUES.kpi.volumeUnit}
                     </p>
                   </div>
                   <div className="text-center p-2 rounded-lg bg-gradient-to-b from-green-50 to-green-100 border border-green-200">
                     <p className="text-xs text-gray-500">{DEFAULT_VALUES.ui.labels.highest}</p>
                     <p className="text-lg font-bold text-green-600">
-                      {calculateMilkHighest(dashboardData.milkProductionData[milkDataPeriod])}{DEFAULT_VALUES.kpi.volumeUnit}
+                      {calculateMilkHighest(dashboardData.milkProductionData)}{DEFAULT_VALUES.kpi.volumeUnit}
                     </p>
                   </div>
                   <div className="text-center p-2 rounded-lg bg-gradient-to-b from-purple-50 to-purple-100 border border-purple-200">
                     <p className="text-xs text-gray-500">{DEFAULT_VALUES.ui.labels.total}</p>
                     <p className="text-lg font-bold text-purple-600">
-                      {calculateMilkTotal(dashboardData.milkProductionData[milkDataPeriod])}{DEFAULT_VALUES.kpi.volumeUnit}
+                      {calculateMilkTotal(dashboardData.milkProductionData)}{DEFAULT_VALUES.kpi.volumeUnit}
                     </p>
                   </div>
                 </div>
@@ -1328,49 +1243,73 @@ const NavItem = ({ icon, label, active = false, collapsed = false }) => {
 };
 
 // Component for KPI card
-const KpiCard = ({ title, value, icon, trend, positive = true }) => {
-  // Fix: Improved logic to determine which gradient to use based on title
-  let gradientType = "cows"; // Default
-  
+const KpiCard = ({ title, value, icon, trend, positive = true, subdivision }) => {
+  // Determine icon background color based on title
+  let iconBgColor = "bg-blue-100";
+  let iconColor = "text-blue-600";
+
   if (title.toLowerCase().includes("milk")) {
-    gradientType = "milk";
+    iconBgColor = "bg-blue-100";
+    iconColor = "text-blue-600";
   } else if (title.toLowerCase().includes("health")) {
-    gradientType = "health";
+    iconBgColor = "bg-red-100";
+    iconColor = "text-red-600";
   } else if (title.toLowerCase().includes("task")) {
-    gradientType = "tasks";
+    iconBgColor = "bg-amber-100";
+    iconColor = "text-amber-600";
   } else if (title.toLowerCase().includes("revenue")) {
-    gradientType = "revenue";
+    iconBgColor = "bg-green-100";
+    iconColor = "text-green-700";
+  } else if (title.toLowerCase().includes("cow")) {
+    iconBgColor = "bg-green-100";
+    iconColor = "text-green-600";
   }
 
-  // Get the actual gradient class
-  const gradient = GRADIENT_CLASSES.kpi[gradientType];
+  // Determine value text color
+  let valueColor = "text-gray-800";
+  if (title.toLowerCase().includes("milk")) {
+    valueColor = "text-blue-600";
+  } else if (title.toLowerCase().includes("health")) {
+    valueColor = "text-red-600";
+  } else if (title.toLowerCase().includes("revenue")) {
+    valueColor = "text-green-700";
+  }
 
   return (
-    <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300 border border-gray-100">
-      <div className={`h-2 bg-gradient-to-r ${gradient}`}></div>
-      <div className="p-3 sm:p-5">
-        <div className="flex justify-between items-start">
-          <div className="min-w-0">
-            <h3 className="text-xs sm:text-sm font-medium text-gray-500 truncate">{title}</h3>
-            <p className={`text-lg sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r ${gradient} mt-1 mb-2 sm:mb-3`}>
-              {value}
-            </p>
-          </div>
-          <div className={`p-2 sm:p-2.5 rounded-xl bg-gradient-to-r ${gradient} flex-shrink-0 ml-2`}>
-            {React.cloneElement(icon, { className: "text-white", size: window.innerWidth < 640 ? 16 : 20 })}
-          </div>
-        </div>
-        <div className={`text-xs flex items-center ${positive ? 'text-emerald-600' : 'text-red-500'} mt-1 sm:mt-2 font-medium`}>
-          {positive ? (
-            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-            </svg>
-          ) : (
-            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-            </svg>
+    <div className="bg-white rounded-xl shadow-md p-5 border border-gray-100 hover:shadow-lg transition-all duration-300">
+      <div className="flex items-center justify-between">
+        <div className="flex-1">
+          <p className="text-sm text-gray-500">{title}</p>
+          <p className={`text-2xl font-bold ${valueColor} mt-1`}>
+            {value}
+          </p>
+          {subdivision && (
+            <div className="mt-2 flex flex-wrap gap-2 text-xs">
+              {subdivision.map((item, index) => (
+                <span key={index} className="inline-flex items-center px-2 py-1 rounded-md bg-gray-100 text-gray-700">
+                  <span className="font-medium">{item.label}:</span>
+                  <span className="ml-1">{item.value}</span>
+                </span>
+              ))}
+            </div>
           )}
-          <span className="truncate">{trend}</span>
+          {trend && !subdivision && (
+            <div className={`text-xs flex items-center ${positive ? 'text-emerald-600' : 'text-red-500'} mt-2 font-medium`}>
+              {positive ? (
+                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                </svg>
+              ) : (
+                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
+              )}
+              <span>{trend}</span>
+            </div>
+          )}
+        </div>
+        <div className={`p-3 ${iconBgColor} rounded-lg flex-shrink-0`}>
+          {React.cloneElement(icon, { className: iconColor, size: 24 })}
         </div>
       </div>
     </div>
@@ -2095,10 +2034,9 @@ const AddTaskModal = ({ onClose }) => {
 const ChartCard = ({ title, children, periodSelector }) => {
   return (
     <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100">
-      <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
-      <div className="p-4 sm:p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
-          <h2 className="text-lg font-semibold text-gray-800 bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 truncate">
+      <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-blue-50">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold text-gray-800">
             {title}
           </h2>
           {periodSelector && (
@@ -2107,6 +2045,8 @@ const ChartCard = ({ title, children, periodSelector }) => {
             </div>
           )}
         </div>
+      </div>
+      <div className="p-4 sm:p-6">
         <div className="overflow-x-auto">
           {children}
         </div>

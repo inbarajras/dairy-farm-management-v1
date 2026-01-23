@@ -97,6 +97,8 @@ const MilkProduction = () => {
     alerts: []
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false); // For add/edit operations
+  const [isRefreshing, setIsRefreshing] = useState(false); // For date range changes
   const [error, setError] = useState(null);
   
   const navigateDate = useCallback((direction) => {
@@ -129,9 +131,13 @@ const MilkProduction = () => {
   }, [currentDate, dateRange]);
 
   // Define loadMilkData function with useCallback to make it available throughout the component
-  const loadMilkData = useCallback(async () => {
+  const loadMilkData = useCallback(async (showRefreshLoader = false) => {
     try {
-      setIsLoading(true);
+      if (showRefreshLoader || milkData.dailyCollections.length > 0) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
 
       // Create clean date strings (no time component) for exact date matching
       const currentDateStr = currentDate.toISOString().split('T')[0];
@@ -219,13 +225,24 @@ const MilkProduction = () => {
       setError(error.message);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange, currentDate, customStartDate, customEndDate]);
 
   // Load data when dependencies change
   useEffect(() => {
     loadMilkData();
   }, [loadMilkData]);
+
+  // Show refresh loader when date range changes
+  useEffect(() => {
+    const isInitialRender = milkData.dailyCollections.length === 0;
+    if (!isInitialRender) {
+      loadMilkData(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange]);
   
   // Calculate statistics safely
   const getTotal = (data) => {
@@ -499,6 +516,11 @@ const MilkProduction = () => {
 
   return (
     <div className="h-full bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30 overflow-y-auto">
+      {/* Loading Overlay for add/edit operations */}
+      {isSubmitting && <LoadingSpinner message="Saving..." />}
+      {/* Loading Overlay for date range changes */}
+      {isRefreshing && <LoadingSpinner message="Updating data..." />}
+
       <div className="px-4 sm:px-6 py-6 max-w-[1600px] mx-auto">
         <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
           <h1 className="text-xl sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Milk Production</h1>
