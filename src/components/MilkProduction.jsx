@@ -732,13 +732,13 @@ const MilkProduction = () => {
               </div>
             </div>
             
-            {/* Production Chart */}
+            {/* Total Production Chart */}
             <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 mb-6">
               <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
               <div className="p-6">
                 <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
-                  <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Daily Milk Production</h2>
-                  <button 
+                  <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Total Daily Milk Production</h2>
+                  <button
                     onClick={() => handleDownload(chartData, `milk-collections-${new Date().toISOString().slice(0, 10)}.csv`, 'csv')}
                     className="text-sm text-white flex items-center px-3 py-2 rounded-md bg-gradient-to-r from-green-500 to-green-600 hover:opacity-90 transition-opacity shadow-sm"
                   >
@@ -750,13 +750,13 @@ const MilkProduction = () => {
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={chartData}>
                       <defs>
-                        <linearGradient id="colorMilk" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#4CAF50" stopOpacity={0.8}/>
-                          <stop offset="95%" stopColor="#4CAF50" stopOpacity={0.1}/>
+                        <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10B981" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#059669" stopOpacity={0.1}/>
                         </linearGradient>
                         <linearGradient id="colorCows" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.6}/>
-                          <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.05}/>
+                          <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#7C3AED" stopOpacity={0.1}/>
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -767,20 +767,20 @@ const MilkProduction = () => {
                       />
                       <YAxis
                         yAxisId="left"
-                        stroke="#4CAF50"
+                        stroke="#10B981"
                         style={{ fontSize: '12px' }}
-                        label={{ value: 'Milk (L)', angle: -90, position: 'insideLeft', style: { fill: '#4CAF50' } }}
+                        label={{ value: 'Milk (L)', angle: -90, position: 'insideLeft', style: { fill: '#10B981' } }}
                       />
                       <YAxis
                         yAxisId="right"
                         orientation="right"
-                        stroke="#3B82F6"
+                        stroke="#8B5CF6"
                         style={{ fontSize: '12px' }}
-                        label={{ value: 'Cows', angle: 90, position: 'insideRight', style: { fill: '#3B82F6' } }}
+                        label={{ value: 'Cows', angle: 90, position: 'insideRight', style: { fill: '#8B5CF6' } }}
                       />
                       <Tooltip
                         formatter={(value, name) => {
-                          if (name === 'totalQuantity') return [`${value} L`, 'Milk Production'];
+                          if (name === 'totalQuantity') return [`${value.toFixed(2)} L`, 'Total Milk'];
                           if (name === 'cowCount') return [`${value} cows`, 'Number of Cows'];
                           return [value, name];
                         }}
@@ -793,21 +793,32 @@ const MilkProduction = () => {
                         }}
                         labelStyle={{ fontWeight: 600, marginBottom: '4px' }}
                       />
+                      <Legend
+                        verticalAlign="top"
+                        height={36}
+                        iconType="rect"
+                        formatter={(value) => {
+                          if (value === 'totalQuantity') return 'Total Milk';
+                          if (value === 'cowCount') return 'Number of Cows';
+                          return value;
+                        }}
+                      />
                       <Area
                         yAxisId="left"
                         type="monotone"
                         dataKey="totalQuantity"
-                        stroke="#4CAF50"
+                        stroke="#10B981"
                         strokeWidth={3}
-                        fill="url(#colorMilk)"
+                        fill="url(#colorTotal)"
                         animationDuration={1000}
                       />
                       <Area
                         yAxisId="right"
                         type="monotone"
                         dataKey="cowCount"
-                        stroke="#3B82F6"
+                        stroke="#8B5CF6"
                         strokeWidth={2}
+                        strokeDasharray="5 5"
                         fill="url(#colorCows)"
                         animationDuration={1000}
                       />
@@ -842,7 +853,158 @@ const MilkProduction = () => {
                 </div>
               </div>
             </div>
-            
+
+            {/* Shift-wise Production Charts */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              {/* Morning Shift Chart */}
+              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
+                <div className="h-1 bg-gradient-to-r from-orange-400 to-orange-600"></div>
+                <div className="p-6">
+                  <h2 className="text-lg font-semibold text-orange-600 mb-4">Morning Shift Production</h2>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={chartData}>
+                        <defs>
+                          <linearGradient id="colorMorning" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#FFA726" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="#FF9800" stopOpacity={0.1}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis
+                          dataKey="displayDate"
+                          stroke="#888"
+                          style={{ fontSize: '11px' }}
+                        />
+                        <YAxis
+                          stroke="#FF9800"
+                          style={{ fontSize: '11px' }}
+                          label={{ value: 'Milk (L)', angle: -90, position: 'insideLeft', style: { fill: '#FF9800' } }}
+                        />
+                        <Tooltip
+                          formatter={(value) => [`${value.toFixed(2)} L`, 'Morning Shift']}
+                          contentStyle={{
+                            background: 'rgba(255, 255, 255, 0.98)',
+                            border: '1px solid #e0e0e0',
+                            borderRadius: '12px',
+                            boxShadow: '0 8px 16px -4px rgba(0, 0, 0, 0.15)',
+                            padding: '12px'
+                          }}
+                          labelStyle={{ fontWeight: 600, marginBottom: '4px' }}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="morningQuantity"
+                          stroke="#FF9800"
+                          strokeWidth={3}
+                          fill="url(#colorMorning)"
+                          animationDuration={1000}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mt-4">
+                    <div className="text-center p-2 rounded-lg bg-gradient-to-b from-orange-50 to-orange-100 border border-orange-200">
+                      <p className="text-xs text-gray-500">Average</p>
+                      <p className="text-sm font-bold text-orange-600">
+                        {chartData.length > 0 ?
+                          (chartData.reduce((sum, record) => sum + (record.morningQuantity || 0), 0) / chartData.length).toFixed(1) :
+                          '0.0'}L
+                      </p>
+                    </div>
+                    <div className="text-center p-2 rounded-lg bg-gradient-to-b from-orange-50 to-orange-100 border border-orange-200">
+                      <p className="text-xs text-gray-500">Highest</p>
+                      <p className="text-sm font-bold text-orange-600">
+                        {chartData.length > 0 ?
+                          Math.max(...chartData.map(record => record.morningQuantity || 0)).toFixed(1) :
+                          '0.0'}L
+                      </p>
+                    </div>
+                    <div className="text-center p-2 rounded-lg bg-gradient-to-b from-orange-50 to-orange-100 border border-orange-200">
+                      <p className="text-xs text-gray-500">Total</p>
+                      <p className="text-sm font-bold text-orange-600">
+                        {chartData.reduce((sum, record) => sum + (record.morningQuantity || 0), 0).toFixed(1)}L
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Evening Shift Chart */}
+              <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
+                <div className="h-1 bg-gradient-to-r from-blue-400 to-indigo-600"></div>
+                <div className="p-6">
+                  <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-800 mb-4">Evening Shift Production</h2>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={chartData}>
+                        <defs>
+                          <linearGradient id="colorEvening" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#5C6BC0" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="#3F51B5" stopOpacity={0.1}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis
+                          dataKey="displayDate"
+                          stroke="#888"
+                          style={{ fontSize: '11px' }}
+                        />
+                        <YAxis
+                          stroke="#5C6BC0"
+                          style={{ fontSize: '11px' }}
+                          label={{ value: 'Milk (L)', angle: -90, position: 'insideLeft', style: { fill: '#5C6BC0' } }}
+                        />
+                        <Tooltip
+                          formatter={(value) => [`${value.toFixed(2)} L`, 'Evening Shift']}
+                          contentStyle={{
+                            background: 'rgba(255, 255, 255, 0.98)',
+                            border: '1px solid #e0e0e0',
+                            borderRadius: '12px',
+                            boxShadow: '0 8px 16px -4px rgba(0, 0, 0, 0.15)',
+                            padding: '12px'
+                          }}
+                          labelStyle={{ fontWeight: 600, marginBottom: '4px' }}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="eveningQuantity"
+                          stroke="#5C6BC0"
+                          strokeWidth={3}
+                          fill="url(#colorEvening)"
+                          animationDuration={1000}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mt-4">
+                    <div className="text-center p-2 rounded-lg bg-gradient-to-b from-blue-50 to-blue-100 border border-blue-200">
+                      <p className="text-xs text-gray-500">Average</p>
+                      <p className="text-sm font-bold text-blue-600">
+                        {chartData.length > 0 ?
+                          (chartData.reduce((sum, record) => sum + (record.eveningQuantity || 0), 0) / chartData.length).toFixed(1) :
+                          '0.0'}L
+                      </p>
+                    </div>
+                    <div className="text-center p-2 rounded-lg bg-gradient-to-b from-blue-50 to-blue-100 border border-blue-200">
+                      <p className="text-xs text-gray-500">Highest</p>
+                      <p className="text-sm font-bold text-blue-600">
+                        {chartData.length > 0 ?
+                          Math.max(...chartData.map(record => record.eveningQuantity || 0)).toFixed(1) :
+                          '0.0'}L
+                      </p>
+                    </div>
+                    <div className="text-center p-2 rounded-lg bg-gradient-to-b from-blue-50 to-blue-100 border border-blue-200">
+                      <p className="text-xs text-gray-500">Total</p>
+                      <p className="text-sm font-bold text-blue-600">
+                        {chartData.reduce((sum, record) => sum + (record.eveningQuantity || 0), 0).toFixed(1)}L
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Recent Collections */}
             <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
               <div className="px-6 py-4 border-b border-gray-200">
