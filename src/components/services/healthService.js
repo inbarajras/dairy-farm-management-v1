@@ -312,6 +312,43 @@ export const createVaccinationScheduleIfNeeded = async () => {
   }
 };
 
+// Fetch overdue vaccinations (for dashboard health alerts)
+export const fetchOverdueVaccinations = async () => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+
+    // Check if table exists first
+    await createVaccinationScheduleIfNeeded();
+
+    // Get overdue vaccinations from vaccination_schedule table
+    const { data: vacScheduleData, error: vacScheduleError } = await supabase
+      .from('vaccination_schedule')
+      .select(`
+        id,
+        cow_id,
+        vaccination_type,
+        due_date,
+        status,
+        assigned_to,
+        notes,
+        cows:cow_id (id, name, tag_number)
+      `)
+      .lt('due_date', today)
+      .not('status', 'eq', 'Completed')
+      .order('due_date');
+
+    if (vacScheduleError) {
+      console.log('Error fetching overdue vaccinations:', vacScheduleError);
+      return [];
+    }
+
+    return vacScheduleData || [];
+  } catch (error) {
+    console.error('Error fetching overdue vaccinations:', error);
+    return [];
+  }
+};
+
 // Fetch vaccination schedule
 export const fetchVaccinationSchedule = async () => {
   try {

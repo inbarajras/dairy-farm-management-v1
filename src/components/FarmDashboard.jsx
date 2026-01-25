@@ -28,7 +28,7 @@ import {
 } from 'recharts';
 import { fetchCows } from './services/cowService';
 import { fetchMilkCollections, fetchMonthlyTotals } from './services/milkService';
-import { fetchHealthEvents } from './services/healthService';
+import { fetchHealthEvents, fetchOverdueVaccinations } from './services/healthService';
 import { fetchEmployees, getMonthlyAttendanceSummary } from './services/employeeService';
 import { fetchCurrentUser } from './services/userService';
 import { getFinancialDashboardData } from './services/financialService';
@@ -480,8 +480,19 @@ const FarmDashboard = () => {
         event.status === 'In progress' || event.status === 'Monitoring'
       ).length;
 
+      // Get overdue vaccinations and add to health alerts
+      const overdueVaccinations = await fetchOverdueVaccinations();
+      console.log('Overdue vaccinations:', overdueVaccinations);
+      console.log('Active health alerts:', activeHealthAlerts);
+      const totalHealthAlerts = activeHealthAlerts + overdueVaccinations.length;
+      console.log('Total health alerts:', totalHealthAlerts);
+
       // Get financial data
       const financialData = await getFinancialDashboardData();
+
+      // Get employee data
+      const employeesData = await fetchEmployees();
+      const activeEmployees = employeesData.filter(emp => emp.status === 'Active').length;
 
       // Process milk data into the format needed for charts
       const processedMilkData = processMilkData(milkData, startDate, endDate, dateRange);
@@ -518,9 +529,12 @@ const FarmDashboard = () => {
         totalCows: totalCowsExcludingSold,
         cowSubdivision: { milking: milkingCows, sold: soldCows, calves: calves },
         milkProduction: Math.round(totalMilk * 100) / 100, // Round to 2 decimals
-        healthAlerts: activeHealthAlerts,
+        healthAlerts: totalHealthAlerts,
         activeTasks: activeTasks,
-        revenue: financialData?.financialStats?.revenue?.current || 0
+        revenue: financialData?.financialStats?.revenue?.current || 0,
+        expenses: financialData?.financialStats?.expenses?.current || 0,
+        activeEmployees: activeEmployees,
+        totalEmployees: employeesData.length
       };
 
       // Calculate previous period data for trend comparison
@@ -583,7 +597,10 @@ const FarmDashboard = () => {
         milkProduction: Math.max(1, previousTotalMilk || (currentData.milkProduction * (0.85 + Math.random() * 0.3))), // Use actual data or simulate
         healthAlerts: Math.max(0, previousHealthAlerts || Math.floor(currentData.healthAlerts * (0.5 + Math.random() * 1.5))), // Simulate variation
         activeTasks: Math.max(0, previousActiveTasks || Math.floor(currentData.activeTasks * (0.7 + Math.random() * 0.6))), // Simulate variation
-        revenue: Math.max(1, currentData.revenue * (0.8 + Math.random() * 0.3)) // Simulate 8-12% variation
+        revenue: Math.max(1, currentData.revenue * (0.8 + Math.random() * 0.3)), // Simulate 8-12% variation
+        expenses: Math.max(1, currentData.expenses * (0.8 + Math.random() * 0.3)), // Simulate 8-12% variation
+        activeEmployees: currentData.activeEmployees, // Usually stable
+        totalEmployees: currentData.totalEmployees // Usually stable
       };
       
       console.log('Previous period data calculated:', simulatedPreviousData);
@@ -596,7 +613,10 @@ const FarmDashboard = () => {
         milkProduction: Math.max(1, (currentData?.milkProduction || 500) * 0.9),
         healthAlerts: Math.max(0, (currentData?.healthAlerts || 3) - 1),
         activeTasks: Math.max(0, (currentData?.activeTasks || 5) - 1),
-        revenue: Math.max(1, (currentData?.revenue || 10000) * 0.85)
+        revenue: Math.max(1, (currentData?.revenue || 10000) * 0.85),
+        expenses: Math.max(1, (currentData?.expenses || 8000) * 0.85),
+        activeEmployees: currentData?.activeEmployees || 10,
+        totalEmployees: currentData?.totalEmployees || 12
       };
     }
   };
@@ -926,7 +946,7 @@ const FarmDashboard = () => {
           </div>
           
           {/* KPI Cards Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
             <KpiCard
               title="Total Cows"
               value={dashboardData.kpiData.totalCows}
@@ -951,19 +971,27 @@ const FarmDashboard = () => {
               trend={calculateKpiTrend(dashboardData.kpiData.healthAlerts, dashboardData.previousKpiData.healthAlerts, 'healthAlerts')}
               positive={isTrendPositive('healthAlerts', dashboardData.kpiData.healthAlerts, dashboardData.previousKpiData.healthAlerts)}
             />
-            {/* <KpiCard
-              title="Active Tasks"
-              value={dashboardData.kpiData.activeTasks}
-              icon={<Clipboard className="text-amber-500" />}
-              trend={calculateKpiTrend(dashboardData.kpiData.activeTasks, dashboardData.previousKpiData.activeTasks, 'activeTasks')}
-              positive={isTrendPositive('activeTasks', dashboardData.kpiData.activeTasks, dashboardData.previousKpiData.activeTasks)}
-            /> */}
+            <KpiCard
+              title="Active Employees"
+              value={dashboardData.kpiData.activeEmployees}
+              icon={<Users className="text-purple-600" />}
+              subdivision={[
+                { label: 'Total', value: dashboardData.kpiData.totalEmployees }
+              ]}
+            />
             <KpiCard
               title="Revenue (MTD)"
-              value={`${DEFAULT_VALUES.kpi.currencySymbol}${dashboardData.kpiData.revenue}`}
+              value={`${DEFAULT_VALUES.kpi.currencySymbol}${Math.round(dashboardData.kpiData.revenue).toLocaleString()}`}
               icon={<DollarSign className="text-green-700" />}
               trend={calculateKpiTrend(dashboardData.kpiData.revenue, dashboardData.previousKpiData.revenue, 'revenue')}
               positive={isTrendPositive('revenue', dashboardData.kpiData.revenue, dashboardData.previousKpiData.revenue)}
+            />
+            <KpiCard
+              title="Expenses (MTD)"
+              value={`${DEFAULT_VALUES.kpi.currencySymbol}${Math.round(dashboardData.kpiData.expenses).toLocaleString()}`}
+              icon={<DollarSign className="text-red-600" />}
+              trend={calculateKpiTrend(dashboardData.kpiData.expenses, dashboardData.previousKpiData.expenses, 'expenses')}
+              positive={isTrendPositive('expenses', dashboardData.kpiData.expenses, dashboardData.previousKpiData.expenses)}
             />
           </div>
 
