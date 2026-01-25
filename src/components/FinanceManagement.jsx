@@ -659,13 +659,17 @@ const EmptyEmployeeSection = ({ onRetry }) => {
   
   // Toggle modals
   const toggleAddExpenseModal = () => setIsAddExpenseModalOpen(!isAddExpenseModalOpen);
-  const toggleAddInvoiceModal = (customer = null) => {
+  const toggleAddInvoiceModal = async (customer = null) => {
     if (isAddInvoiceModalOpen) {
       // Clear selected customer when closing modal
       setSelectedCustomer(null);
-    } else if (customer) {
-      // Set selected customer when opening modal with a customer
-      setSelectedCustomer(customer);
+    } else {
+      // Fetch customers when opening the modal
+      await fetchCustomers();
+      if (customer) {
+        // Set selected customer when opening modal with a customer
+        setSelectedCustomer(customer);
+      }
     }
     setIsAddInvoiceModalOpen(!isAddInvoiceModalOpen);
   };
@@ -1176,11 +1180,9 @@ const EmptyEmployeeSection = ({ onRetry }) => {
       // Refresh dashboard data to reflect new expense
       await fetchRevenueData(dateRange, customStartDate, customEndDate);
 
-      // If on expenses tab, refresh the expenses list
-      if (activeTab === 'expenses') {
-        const { startDate, endDate } = calculateDateRange();
-        fetchExpenses(expensePage, expenseSearchQuery, dateRange, startDate, endDate);
-      }
+      // Always refresh the expenses list to show the new expense immediately
+      const { startDate, endDate } = calculateDateRange();
+      await fetchExpenses(expensePage, expenseSearchQuery, dateRange, startDate, endDate);
 
       // Close the modal
       toggleAddExpenseModal();
@@ -1200,39 +1202,27 @@ const EmptyEmployeeSection = ({ onRetry }) => {
   // Handle expense update
   const handleExpenseUpdate = async (expenseId, expenseData) => {
     try {
-      setIsLoading(true);
-      
+      setIsSubmitting(true);
+
       // Update the expense in the database
       const updatedExpense = await updateExpense(expenseId, expenseData);
-      
-      // Update the financial data state
-      setFinancialData(prevData => {
-        const updatedRecent = prevData.expenses.recent.map(expense => 
-          expense.id === expenseId ? updatedExpense : expense
-        );
-        
-        return {
-          ...prevData,
-          expenses: {
-            ...prevData.expenses,
-            recent: updatedRecent
-          }
-        };
-      });
-      
-      // If on expenses tab, refresh the expenses list
-      if (activeTab === 'expenses') {
-        const { startDate, endDate } = calculateDateRange();
-        fetchExpenses(expensePage, expenseSearchQuery, dateRange, startDate, endDate);
-      }
+
+      // Always refresh the expenses list to show changes immediately
+      const { startDate, endDate } = calculateDateRange();
+      await fetchExpenses(expensePage, expenseSearchQuery, dateRange, startDate, endDate);
+
+      // Refresh dashboard data
+      await fetchRevenueData(dateRange, customStartDate, customEndDate);
 
       // Close the edit modal
       toggleEditExpenseModal();
+      toast.success('Expense updated successfully');
     } catch (err) {
       console.error('Error updating expense:', err);
       setError('Failed to update expense. Please try again.');
+      toast.error('Failed to update expense. Please try again.');
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
   
@@ -1241,38 +1231,27 @@ const EmptyEmployeeSection = ({ onRetry }) => {
     if (!window.confirm('Are you sure you want to delete this expense?')) {
       return;
     }
-    
+
     try {
-      setIsLoading(true);
-      
+      setIsSubmitting(true);
+
       // Delete the expense from the database
       await deleteExpense(expenseId);
-      
-      // Update the financial data state
-      setFinancialData(prevData => {
-        const filteredRecent = prevData.expenses.recent.filter(expense => 
-          expense.id !== expenseId
-        );
-        
-        return {
-          ...prevData,
-          expenses: {
-            ...prevData.expenses,
-            recent: filteredRecent
-          }
-        };
-      });
-      
-      // If on expenses tab, refresh the expenses list
-      if (activeTab === 'expenses') {
-        const { startDate, endDate } = calculateDateRange();
-        fetchExpenses(expensePage, expenseSearchQuery, dateRange, startDate, endDate);
-      }
+
+      // Always refresh the expenses list to show changes immediately
+      const { startDate, endDate } = calculateDateRange();
+      await fetchExpenses(expensePage, expenseSearchQuery, dateRange, startDate, endDate);
+
+      // Refresh dashboard data
+      await fetchRevenueData(dateRange, customStartDate, customEndDate);
+
+      toast.success('Expense deleted successfully');
     } catch (err) {
       console.error('Error deleting expense:', err);
       setError('Failed to delete expense. Please try again.');
+      toast.error('Failed to delete expense. Please try again.');
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
   
@@ -1323,35 +1302,24 @@ const EmptyEmployeeSection = ({ onRetry }) => {
   // Handle expense status change
   const handleExpenseStatusChange = async (expenseId, newStatus) => {
     try {
-      setIsLoading(true);
-      
+      setIsSubmitting(true);
+
       await updateExpense(expenseId, { status: newStatus });
-      
-      // Update the financial data state
-      setFinancialData(prevData => {
-        const updatedRecent = prevData.expenses.recent.map(expense => 
-          expense.id === expenseId ? { ...expense, status: newStatus } : expense
-        );
-        
-        return {
-          ...prevData,
-          expenses: {
-            ...prevData.expenses,
-            recent: updatedRecent
-          }
-        };
-      });
-      
-      // If on expenses tab, refresh the expenses list
-      if (activeTab === 'expenses') {
-        const { startDate, endDate } = calculateDateRange();
-        fetchExpenses(expensePage, expenseSearchQuery, dateRange, startDate, endDate);
-      }
+
+      // Always refresh the expenses list to show changes immediately
+      const { startDate, endDate } = calculateDateRange();
+      await fetchExpenses(expensePage, expenseSearchQuery, dateRange, startDate, endDate);
+
+      // Refresh dashboard data
+      await fetchRevenueData(dateRange, customStartDate, customEndDate);
+
+      toast.success('Expense status updated successfully');
     } catch (err) {
       console.error('Error updating expense status:', err);
       setError('Failed to update expense status. Please try again.');
+      toast.error('Failed to update expense status. Please try again.');
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -1436,6 +1404,9 @@ const EmptyEmployeeSection = ({ onRetry }) => {
       const data = await getFinancialDashboardData();
       setFinancialData(data);
 
+      // Refresh revenue data to update KPIs
+      await fetchRevenueData(dateRange, customStartDate, customEndDate);
+
       toast.success(`Invoice status updated to ${newStatus}`);
       return true;
     } catch (err) {
@@ -1450,35 +1421,40 @@ const EmptyEmployeeSection = ({ onRetry }) => {
   // Handle invoice submission from modal
   const handleInvoiceSubmit = async (invoiceData, invoiceItems) => {
     try {
-      setIsLoading(true);
-      
+      setIsSubmitting(true);
+
       // Generate an invoice number if needed
       const invoiceNumber = generateInvoiceNumber();
-      
+
       // Format data for the API
       const formattedData = {
         ...invoiceData,
         invoiceNumber,
         customerId: invoiceData.customerId // Ensure this is passed correctly
       };
-      
+
       // Call the API
       await addInvoice(formattedData, invoiceItems);
-      
+
       // Refresh the invoices list
       await fetchInvoices(invoicesPage, invoiceSearchQuery);
-      
-      // Update the financial dashboard data
+
+      // Update the financial dashboard data and revenue data immediately
       const data = await getFinancialDashboardData();
       setFinancialData(data);
-      
+
+      // Refresh revenue data to update KPIs
+      await fetchRevenueData(dateRange, customStartDate, customEndDate);
+
+      toast.success('Invoice created successfully');
       return true;
     } catch (err) {
       console.error('Error creating invoice:', err);
       setError('Failed to create invoice. Please try again.');
+      toast.error('Failed to create invoice. Please try again.');
       return false;
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
   
@@ -1487,30 +1463,35 @@ const EmptyEmployeeSection = ({ onRetry }) => {
     if (!window.confirm('Are you sure you want to delete this invoice? This action cannot be undone.')) {
       return;
     }
-    
+
     try {
-      setIsLoading(true);
+      setIsSubmitting(true);
       await deleteInvoice(invoiceId);
-      
+
       // Refresh invoices list
       await fetchInvoices(invoicesPage, invoiceSearchQuery);
-      
+
       // Close the details modal if it's open
       if (isViewInvoiceModalOpen && selectedInvoice?.id === invoiceId) {
         toggleViewInvoiceModal();
       }
-      
+
       // Update the financial dashboard data
       const data = await getFinancialDashboardData();
       setFinancialData(data);
-      
+
+      // Refresh revenue data to update KPIs
+      await fetchRevenueData(dateRange, customStartDate, customEndDate);
+
+      toast.success('Invoice deleted successfully');
       return true;
     } catch (err) {
       console.error('Error deleting invoice:', err);
       setError('Failed to delete invoice. Please try again.');
+      toast.error('Failed to delete invoice. Please try again.');
       return false;
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
   
@@ -3535,12 +3516,13 @@ const EmptyEmployeeSection = ({ onRetry }) => {
       )}
       
       {isAddInvoiceModalOpen && (
-        <AddInvoiceModal 
-          onClose={toggleAddInvoiceModal} 
-          onSubmit={handleInvoiceSubmit} 
+        <AddInvoiceModal
+          onClose={toggleAddInvoiceModal}
+          onSubmit={handleInvoiceSubmit}
           customers={customers || []}
           toggleAddCustomerModal={toggleAddCustomerModal}
           selectedCustomer={selectedCustomer}
+          isSubmitting={isSubmitting}
         />
       )}
       
@@ -5371,7 +5353,7 @@ const ProcessPayrollModal = ({ onClose, onSubmit, employees }) => {
 };
 
 // Add Invoice Modal Component
-const AddInvoiceModal = ({ onClose, onSubmit, customers = [], toggleAddCustomerModal, selectedCustomer = null }) => {
+const AddInvoiceModal = ({ onClose, onSubmit, customers = [], toggleAddCustomerModal, selectedCustomer = null, isSubmitting = false }) => {
   const [formData, setFormData] = useState({
     customer: '', // This will store the customer ID, not the name
     date: new Date().toISOString().split('T')[0],
@@ -5379,8 +5361,7 @@ const AddInvoiceModal = ({ onClose, onSubmit, customers = [], toggleAddCustomerM
     items: [{ description: '', quantity: 1, unitPrice: '', amount: 0 }],
     notes: ''
   });
-  
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const [error, setError] = useState(null);
   
   // Set default due date on component mount
@@ -5464,9 +5445,8 @@ const AddInvoiceModal = ({ onClose, onSubmit, customers = [], toggleAddCustomerM
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      setIsSubmitting(true);
       setError(null);
-      
+
       // Format items correctly
       const formattedItems = formData.items.map(item => ({
         description: item.description,
@@ -5474,10 +5454,10 @@ const AddInvoiceModal = ({ onClose, onSubmit, customers = [], toggleAddCustomerM
         unitPrice: parseFloat(item.unitPrice),
         amount: parseFloat(item.amount)
       }));
-      
+
       // Calculate total amount
       const totalAmount = formattedItems.reduce((sum, item) => sum + item.amount, 0);
-      
+
       // Prepare the invoice data with proper customer ID
       const invoiceData = {
         customerId: formData.customer, // This is the customer ID
@@ -5486,7 +5466,7 @@ const AddInvoiceModal = ({ onClose, onSubmit, customers = [], toggleAddCustomerM
         amount: totalAmount,
         notes: formData.notes
       };
-      
+
       const success = await onSubmit(invoiceData, formattedItems);
       if (success) {
         onClose();
@@ -5496,19 +5476,28 @@ const AddInvoiceModal = ({ onClose, onSubmit, customers = [], toggleAddCustomerM
     } catch (err) {
       console.error('Error creating invoice:', err);
       setError(`An error occurred: ${err.message || 'Please try again.'}`);
-    } finally {
-      setIsSubmitting(false);
     }
   };
   
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      {/* Processing Overlay */}
+      {isSubmitting && (
+        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 flex flex-col items-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mb-4"></div>
+            <p className="text-gray-700 font-medium">Processing Invoice...</p>
+            <p className="text-gray-500 text-sm mt-2">Please wait, do not close this window</p>
+          </div>
+        </div>
+      )}
       <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl my-8 mx-auto max-h-[85vh] overflow-y-auto">
         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
           <h3 className="text-lg font-medium text-gray-800">Create New Invoice</h3>
-          <button 
+          <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-500"
+            disabled={isSubmitting}
+            className="text-gray-400 hover:text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <X size={20} />
           </button>
@@ -5708,15 +5697,17 @@ const AddInvoiceModal = ({ onClose, onSubmit, customers = [], toggleAddCustomerM
             <button
               type="button"
               onClick={onClose}
-              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              disabled={isSubmitting}
+              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              disabled={isSubmitting}
+              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Create Invoice
+              {isSubmitting ? 'Creating...' : 'Create Invoice'}
             </button>
           </div>
         </form>
