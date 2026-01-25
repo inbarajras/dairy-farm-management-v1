@@ -677,8 +677,11 @@ const FarmDashboard = () => {
       [DEFAULT_VALUES.ui.labels.monitored]: 0,
       [DEFAULT_VALUES.ui.labels.treatment]: 0
     };
-    
-    cowsData.forEach(cow => {
+
+    // Filter out sold cows
+    const activeCows = cowsData.filter(cow => cow.status !== 'Sold');
+
+    activeCows.forEach(cow => {
       if (cow.healthStatus === 'Completed') {
         healthCounts[DEFAULT_VALUES.ui.labels.healthy]++;
       } else if (cow.healthStatus === 'Monitored') {
@@ -687,7 +690,7 @@ const FarmDashboard = () => {
         healthCounts[DEFAULT_VALUES.ui.labels.treatment]++;
       }
     });
-    
+
     return [
       { name: DEFAULT_VALUES.ui.labels.healthy, value: healthCounts[DEFAULT_VALUES.ui.labels.healthy], color: CHART_COLORS.health.healthy },
       { name: DEFAULT_VALUES.ui.labels.monitored, value: healthCounts[DEFAULT_VALUES.ui.labels.monitored], color: CHART_COLORS.health.monitored },
