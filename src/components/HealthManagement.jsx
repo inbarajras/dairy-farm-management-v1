@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, Plus, Calendar, Clipboard, AlertTriangle, ChevronLeft, ChevronRight, Thermometer, Heart, AlertCircle, MoreHorizontal, Download, RefreshCw,X } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { 
-  fetchHealthEvents, 
-  fetchVaccinationSchedule, 
-  fetchMedications, 
+import {
+  fetchHealthEvents,
+  fetchVaccinationSchedule,
+  fetchMedications,
   generateHealthStats,
   addHealthEvent,
   updateHealthEvent,
@@ -15,6 +15,7 @@ import {
 import { supabase } from '../lib/supabase';
 import LoadingSpinner from './LoadingSpinner';
 import {toast} from './utils/ToastContainer';
+import WeeklyInspection from './WeeklyInspection';
 
 // Status badge colors - no change
 const statusColors = {
@@ -396,6 +397,16 @@ const handleDeleteEvent = async () => {
               }`}
             >
               Health Events
+            </button>
+            <button
+              onClick={() => setActiveTab('weekly-inspection')}
+              className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px transition-all duration-300 ${
+                activeTab === 'weekly-inspection'
+                  ? 'border-green-500 text-green-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Weekly Inspection
             </button>
             <button
               onClick={() => setActiveTab('vaccinations')}
@@ -968,10 +979,15 @@ const handleDeleteEvent = async () => {
         )}
         
         {/* Vaccinations Tab */}
+        {/* Weekly Inspection Tab */}
+        {activeTab === 'weekly-inspection' && (
+          <WeeklyInspection />
+        )}
+
         {activeTab === 'vaccinations' && (
           <VaccinationsTab vaccinationSchedule={healthData.vaccinationSchedule} />
         )}
-        
+
         {/* Medications Tab */}
         {activeTab === 'medications' && (
           <MedicationsTab medications={healthData.medications} />

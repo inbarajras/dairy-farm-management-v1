@@ -9,7 +9,8 @@
       "Bash(rg:*)",
       "Bash(rm:*)",
       "Bash(npm start)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Read(//Users/inbaraj/Downloads/**)"
     ],
     "deny": []
   }
