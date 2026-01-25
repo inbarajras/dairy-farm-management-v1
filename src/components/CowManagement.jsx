@@ -10,6 +10,7 @@ import GrowthMilestoneSummary from './GrowthMilestoneSummary';
 import NextMilestoneReminder from './NextMilestoneReminder';
 import CowQRCode from './CowQRCode';
 import QRScanner from './QRScanner';
+import DeliveryTracker from './DeliveryTracker';
 import cowSample from '../assets/images/cow.jpg';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area } from 'recharts';
 import { supabase } from '../lib/supabase';
@@ -1564,6 +1565,11 @@ const CowManagement = () => {
 
             return (
             <div>
+              {/* Delivery Tracker Component */}
+              <div className="mb-6">
+                <DeliveryTracker />
+              </div>
+
               {/* Summary Cards */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div className="bg-white rounded-xl shadow-md p-5 border border-gray-100">
@@ -5810,7 +5816,7 @@ const RecordBreedingEventModal = ({ cow, onClose, onSubmit }) => {
   // Handle form field changes
   const handleChange = (e) => {
     const { name, value } = e.target;
-    
+
     // If changing event type, reset the result field to avoid invalid combinations
     if (name === 'eventType') {
       setFormData({
@@ -5829,7 +5835,7 @@ const RecordBreedingEventModal = ({ cow, onClose, onSubmit }) => {
   // Handle form submission
   const handleSubmit = (e) => {
     e.preventDefault();
-    
+
     // Create a new breeding event record
     const newEvent = {
       date: formData.date,
@@ -5839,7 +5845,7 @@ const RecordBreedingEventModal = ({ cow, onClose, onSubmit }) => {
       notes: formData.notes,
       performedBy: formData.performedBy
     };
-    
+
     onSubmit(cow.id, newEvent);
     onClose();
   };
@@ -5978,8 +5984,7 @@ const RecordBreedingEventModal = ({ cow, onClose, onSubmit }) => {
                 ))}
               </select>
             </div>
-            
-            
+
             <div>
               <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
                 Additional Notes

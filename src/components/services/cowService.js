@@ -658,6 +658,91 @@ export const fetchHealthHistory = async (cowId) => {
     }
   };
 
+  // Fetch delivery schedule - cows with expected delivery dates (calculated dynamically)
+  export const fetchDeliverySchedule = async () => {
+    try {
+      // Fetch pregnancy confirmations and inseminations
+      const { data, error } = await supabase
+        .from('breeding_events')
+        .select(`
+          id,
+          cow_id,
+          date,
+          event_type,
+          result,
+          cows (
+            id,
+            tag_number,
+            name,
+            breed
+          )
+        `)
+        .in('event_type', ['Pregnancy Check', 'Insemination'])
+        .in('result', ['Positive', 'Completed', 'Confirmed'])
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+
+      // Calculate expected delivery dates (280 days from event date)
+      const GESTATION_DAYS = 280;
+      const expectedDeliveries = (data || []).map(event => {
+        const eventDate = new Date(event.date);
+        const expectedDate = new Date(eventDate);
+        expectedDate.setDate(expectedDate.getDate() + GESTATION_DAYS);
+
+        return {
+          ...event,
+          expected_delivery_date: expectedDate.toISOString().split('T')[0]
+        };
+      });
+
+      // Filter out duplicates (keep most recent pregnancy event per cow)
+      const uniqueDeliveries = [];
+      const seenCows = new Set();
+
+      for (const delivery of expectedDeliveries) {
+        if (!seenCows.has(delivery.cow_id)) {
+          seenCows.add(delivery.cow_id);
+          uniqueDeliveries.push(delivery);
+        }
+      }
+
+      // Sort by expected delivery date
+      uniqueDeliveries.sort((a, b) =>
+        new Date(a.expected_delivery_date) - new Date(b.expected_delivery_date)
+      );
+
+      // Also fetch cows that already calved (for delivered tracking)
+      const { data: calvingData, error: calvingError } = await supabase
+        .from('breeding_events')
+        .select(`
+          id,
+          cow_id,
+          date,
+          event_type,
+          result,
+          cows (
+            id,
+            tag_number,
+            name,
+            breed
+          )
+        `)
+        .eq('event_type', 'Calving')
+        .order('date', { ascending: false });
+
+      if (calvingError) throw calvingError;
+
+      return {
+        expectedDeliveries: uniqueDeliveries,
+        completedDeliveries: calvingData || []
+      };
+    } catch (error) {
+      console.error('Error fetching delivery schedule:', error);
+      throw error;
+    }
+  };
+
   // Fetch reproductive status for a cow
   export const fetchReproductiveStatus = async (cowId) => {
     try {
