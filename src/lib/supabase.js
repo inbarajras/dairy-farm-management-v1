@@ -2,7 +2,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize the Supabase client
-const supabaseUrl = 'https://dairy-farm-management-v1.jiobase.com';
+const supabaseUrl = 'https://lpbqcskmlgfysijtxsau.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxwYnFjc2ttbGdmeXNpanR4c2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU2ODg3MjIsImV4cCI6MjA2MTI2NDcyMn0.2nzuxsqshaDcrY1TeXgiiCCoLr9z5uOAsM4yFdWqGQU';
 
 if (!supabaseUrl || !supabaseAnonKey) {
