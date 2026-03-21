@@ -160,13 +160,73 @@ const CowManagement = () => {
     loadBreedingData();
   }, [activeTab, cows]);
 
-  // Add periodic refresh to catch updates from other components
+  // Realtime subscription for instant updates across all clients
   useEffect(() => {
-    const interval = setInterval(() => {
-      refreshCowData();
-    }, REFRESH_INTERVAL_MS);
+    const channel = supabase
+      .channel('cows-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'cows'
+        },
+        (payload) => {
+          console.log('[Realtime] Cow data changed:', payload.eventType, payload);
+          refreshCowData();
+        }
+      )
+      .subscribe();
 
-    return () => clearInterval(interval);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [refreshCowData]);
+
+  // Realtime subscription for milk production updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('milk-production-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'milk_production'
+        },
+        (payload) => {
+          console.log('[Realtime] Milk production changed:', payload.eventType);
+          refreshCowData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [refreshCowData]);
+
+  // Realtime subscription for health events
+  useEffect(() => {
+    const channel = supabase
+      .channel('health-events-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'health_events'
+        },
+        (payload) => {
+          console.log('[Realtime] Health event changed:', payload.eventType);
+          refreshCowData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [refreshCowData]);
 
   const ensureValidCows = (cowsArray) => {

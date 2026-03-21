@@ -235,6 +235,29 @@ const MilkProduction = () => {
     loadMilkData();
   }, [loadMilkData]);
 
+  // Realtime subscription for milk production updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('milk-production-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'milk_production'
+        },
+        async (payload) => {
+          console.log('[Realtime] Milk production changed:', payload.eventType);
+          await loadMilkData(true); // Use refresh loader
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadMilkData]);
+
   // Show refresh loader when date range changes
   useEffect(() => {
     const isInitialRender = milkData.dailyCollections.length === 0;

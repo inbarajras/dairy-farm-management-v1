@@ -77,26 +77,26 @@ const HealthManagement = () => {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [eventToDelete, setEventToDelete] = useState(null);
 
-  
+
   // Load health data
   useEffect(() => {
     const loadHealthData = async () => {
       setIsLoading(true);
       setError(null);
-      
+
       try {
         // Fetch health events
         const events = await fetchHealthEvents();
-        
+
         // Fetch vaccination schedule
         const vaccinations = await fetchVaccinationSchedule();
-        
+
         // Generate health stats
         const stats = await generateHealthStats();
-        
+
         // Fetch medications
         const medications = await fetchMedications();
-        
+
         // Update state with all data
         setHealthData({
           healthEvents: events,
@@ -104,7 +104,7 @@ const HealthManagement = () => {
           healthStats: stats,
           medications: medications
         });
-        
+
         // Load dashboard data with real-time data
         await loadDashboardData(events, vaccinations);
       } catch (err) {
@@ -114,8 +114,48 @@ const HealthManagement = () => {
         setIsLoading(false);
       }
     };
-    
+
     loadHealthData();
+  }, []);
+
+  // Realtime subscription for health events
+  useEffect(() => {
+    const channel = supabase
+      .channel('health-events-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'health_events'
+        },
+        async (payload) => {
+          console.log('[Realtime] Health event changed:', payload.eventType);
+
+          // Refresh health data
+          try {
+            const events = await fetchHealthEvents();
+            const vaccinations = await fetchVaccinationSchedule();
+            const stats = await generateHealthStats();
+
+            setHealthData(prev => ({
+              ...prev,
+              healthEvents: events,
+              vaccinationSchedule: vaccinations,
+              healthStats: stats
+            }));
+
+            await loadDashboardData(events, vaccinations);
+          } catch (error) {
+            console.error('Error refreshing health data:', error);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
   
 

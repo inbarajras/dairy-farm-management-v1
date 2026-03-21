@@ -193,6 +193,31 @@ const InventoryManagement = () => {
   useEffect(() => {
     fetchInventoryData();
   }, []);
+
+  // Realtime subscription for inventory updates
+  useEffect(() => {
+    const { supabase } = require('../lib/supabase');
+
+    const channel = supabase
+      .channel('inventory-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'inventory'
+        },
+        async (payload) => {
+          console.log('[Realtime] Inventory changed:', payload.eventType);
+          await fetchInventoryData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
   
   // Fetch data when department or tab changes
   useEffect(() => {

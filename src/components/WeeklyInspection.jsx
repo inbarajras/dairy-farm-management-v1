@@ -45,6 +45,32 @@ const WeeklyInspection = () => {
     loadData();
   }, []);
 
+  // Realtime subscription for weekly inspections
+  useEffect(() => {
+    const { supabase } = require('../lib/supabase');
+
+    const channel = supabase
+      .channel('weekly-inspections-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'weekly_inspections'
+        },
+        async (payload) => {
+          console.log('[Realtime] Weekly inspection changed:', payload.eventType);
+          // Reload data when changes occur
+          await loadData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const loadData = async () => {
     setIsLoading(true);
     try {

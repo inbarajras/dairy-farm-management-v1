@@ -104,6 +104,31 @@ const EmployeeManagement = () => {
   useEffect(() => {
     loadEmployees();
   }, []);
+
+  // Realtime subscription for employee updates
+  useEffect(() => {
+    const { supabase } = require('../lib/supabase');
+
+    const channel = supabase
+      .channel('employees-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'employees'
+        },
+        async (payload) => {
+          console.log('[Realtime] Employee changed:', payload.eventType);
+          await loadEmployees();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
   
   // Load additional data when tab changes
   useEffect(() => {
