@@ -10,6 +10,7 @@ import {
 import { fetchCows } from './services/cowService';
 import LoadingSpinner from './LoadingSpinner';
 import toast from 'react-hot-toast';
+import { formatUserTrackingDisplay } from '../utils/userTracking';
 
 const WeeklyInspection = () => {
   const [activeView, setActiveView] = useState('list'); // list, create, view, edit
@@ -536,6 +537,26 @@ const WeeklyInspection = () => {
                 <div className="text-sm font-semibold text-gray-600">Inspector Name</div>
                 <div className="text-base mt-1">{selectedInspection.inspectorName}</div>
               </div>
+
+              {/* User Tracking Information */}
+              {(selectedInspection.createdAt || selectedInspection.updatedAt) && (
+                <div className="col-span-3 pt-4 border-t border-gray-200">
+                  <div className="grid grid-cols-2 gap-4 text-xs text-gray-500">
+                    {selectedInspection.createdAt && (
+                      <div>
+                        <span className="font-medium">Created: </span>
+                        {new Date(selectedInspection.createdAt).toLocaleString()}
+                      </div>
+                    )}
+                    {selectedInspection.updatedAt && (
+                      <div>
+                        <span className="font-medium">Last Updated: </span>
+                        {new Date(selectedInspection.updatedAt).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

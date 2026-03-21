@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase';
+import { getCreateUserTracking, getUpdateUserTracking } from '../../utils/userTracking';
 
 // Fetch all health events with cow details
 export const fetchHealthEvents = async () => {
@@ -9,10 +10,10 @@ export const fetchHealthEvents = async () => {
         *,
         cows:cow_id (id, name, tag_number, breed, owner)
       `)
-      .order('event_date', { ascending: false });
-    
+      .order('event_date', { ascending: false});
+
     if (error) throw error;
-    
+
     // Format the data to match the expected structure
     return data.map(event => ({
       id: event.id,
@@ -26,7 +27,11 @@ export const fetchHealthEvents = async () => {
       medications: event.medications || [],
       notes: event.notes || '',
       followUp: event.follow_up,
-      status: event.status
+      status: event.status,
+      createdAt: event.created_at,
+      updatedAt: event.updated_at,
+      createdBy: event.created_by,
+      updatedBy: event.updated_by
     }));
   } catch (error) {
     console.error('Error fetching health events:', error);
@@ -56,7 +61,8 @@ export const addHealthEvent = async (eventData) => {
   try {
     // Make sure medications is properly formatted as an array
     const medications = eventData.medications || [];
-    
+    const userTracking = await getCreateUserTracking();
+
     // Convert data to the database schema
     const dbRecord = {
       cow_id: eventData.cowId,
@@ -68,15 +74,16 @@ export const addHealthEvent = async (eventData) => {
       medications: Array.isArray(medications) ? medications : [],
       notes: eventData.notes,
       follow_up: eventData.followUp || null,
-      status: eventData.status
+      status: eventData.status,
+      ...userTracking
     };
-    
+
     const { data, error } = await supabase
       .from('health_events')
       .insert(dbRecord)
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   } catch (error) {
@@ -90,7 +97,8 @@ export const updateHealthEvent = async (eventId, eventData) => {
   try {
     // Make sure medications is properly formatted as an array
     const medications = eventData.medications || [];
-    
+    const userTracking = await getUpdateUserTracking();
+
     // Convert data to the database schema
     const dbRecord = {
       cow_id: eventData.cowId,
@@ -102,16 +110,17 @@ export const updateHealthEvent = async (eventId, eventData) => {
       medications: Array.isArray(medications) ? medications : [],
       notes: eventData.notes,
       follow_up: eventData.followUp || null,
-      status: eventData.status
+      status: eventData.status,
+      ...userTracking
     };
-    
+
     const { data, error } = await supabase
       .from('health_events')
       .update(dbRecord)
       .eq('id', eventId)
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   } catch (error) {

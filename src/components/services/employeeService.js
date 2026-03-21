@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase';
+import { getCreateUserTracking, getUpdateUserTracking } from '../../utils/userTracking';
 
 // Fetch all employees with basic details
 export const fetchEmployees = async () => {
@@ -7,9 +8,9 @@ export const fetchEmployees = async () => {
       .from('employees')
       .select('*')
       .order('name');
-    
+
     if (error) throw error;
-    
+
     return data;
   } catch (error) {
     console.error('Error fetching employees:', error);
@@ -52,6 +53,8 @@ export const fetchEmployeeById = async (employeeId) => {
 // Add a new employee
 export const addEmployee = async (employeeData) => {
     try {
+      const userTracking = await getCreateUserTracking();
+
       // Prepare employee record
       const employee = {
         name: `${employeeData.firstName} ${employeeData.lastName}`,
@@ -67,42 +70,43 @@ export const addEmployee = async (employeeData) => {
         attendance_rate: 100, // Default for new employee
         performance_rating: null, // Default for new employee
         skills: [],
-        certifications: []
+        certifications: [],
+        ...userTracking
       };
-      
+
       // Handle photo upload if provided
       if (employeeData.photo) {
         // Generate unique filename
         const fileExt = employeeData.photo.name.split('.').pop();
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
         const filePath = `employees/${fileName}`;
-        
+
         // Upload photo to storage
         const { error: uploadError } = await supabase.storage
           .from('images')
           .upload(filePath, employeeData.photo);
-        
+
         if (uploadError) throw uploadError;
-        
+
         // Get public URL for the uploaded file
         const { data: { publicUrl } } = supabase.storage
           .from('images')
           .getPublicUrl(filePath);
-        
+
         // Add image URL to employee data
         employee.image_url = publicUrl;
       } else {
         // Use default avatar
         employee.image_url = 'https://via.placeholder.com/150';
       }
-      
+
       // Add employee to database
       const { data: newEmployee, error } = await supabase
         .from('employees')
         .insert(employee)
         .select()
         .single();
-      
+
       if (error) throw error;
       
       // Try to create default shifts for the new employee
@@ -150,6 +154,8 @@ export const addEmployee = async (employeeData) => {
 // Update an employee
 export const updateEmployee = async (employeeId, employeeData) => {
   try {
+    const userTracking = await getUpdateUserTracking();
+
     const employee = {
         name: employeeData.name,
         email: employeeData.email,
@@ -164,7 +170,8 @@ export const updateEmployee = async (employeeId, employeeData) => {
         attendance_rate: employeeData.attendanceRate,
         performance_rating: employeeData.performance_rating || null,
         skills: employeeData.skills || [],
-        certifications: employeeData.certifications || []
+        certifications: employeeData.certifications || [],
+        ...userTracking
       };
 
     const { data, error} = await supabase

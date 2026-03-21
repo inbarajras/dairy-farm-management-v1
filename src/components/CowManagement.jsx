@@ -18,6 +18,7 @@ import LoadingSpinner from './LoadingSpinner';
 import {toast} from './utils/ToastContainer';
 import { useRole } from '../contexts/RoleContext';
 import UserRoleBadge from './UserRoleBadge';
+import { formatUserTrackingDisplay } from '../utils/userTracking';
 import {
   statusColors,
   healthStatusColors,

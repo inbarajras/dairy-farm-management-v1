@@ -1,5 +1,6 @@
 import { supabase } from '../../lib/supabase';
 import { updateRevenueData, updateRevenueCategories } from './revenueUpdateService';
+import { getCreateUserTracking, getUpdateUserTracking } from '../../utils/userTracking';
 
 // Date formatting utilities
 export const formatMonth = (month) => {
@@ -160,46 +161,49 @@ export const addExpense = async (expenseData) => {
   try {
     // Handle file upload if a receipt is present
     let receipt_url = null;
-    
+
     if (expenseData.receipt) {
       const file = expenseData.receipt;
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
       const filePath = `receipts/${fileName}`;
-      
+
       // Upload to storage bucket
       const { error: uploadError } = await supabase.storage
         .from('expense-receipts')
         .upload(filePath, file);
-        
+
       if (uploadError) throw uploadError;
-      
+
       // Get the public URL
       const { data } = supabase.storage
         .from('expense-receipts')
         .getPublicUrl(filePath);
-        
+
       receipt_url = data.publicUrl;
     }
-    
+
+    const userTracking = await getCreateUserTracking();
+
     // Format the expense data - remove receipt file object and add receipt_url
     const { receipt, ...restData } = expenseData;
-    const formattedData = { 
+    const formattedData = {
       ...restData,
       receipt_url,  // Use receipt_url instead of receipt
       // Ensure amount is a number
       amount: parseFloat(expenseData.amount),
       // Add created_at and updated_at timestamps
       created_at: new Date(),
-      updated_at: new Date()
+      updated_at: new Date(),
+      ...userTracking
     };
-    
+
     // Insert into expenses table
     const { data, error } = await supabase
       .from('expenses')
       .insert([formattedData])
       .select();
-      
+
     if (error) throw error;
     
     // Update revenue_data since expenses affect profit calculations
@@ -1155,46 +1159,49 @@ export const updateExpense = async (expenseId, expenseData) => {
   try {
     // Handle file upload if a receipt is present
     let receipt_url = undefined; // Use undefined to avoid updating if no new file
-    
+
     if (expenseData.receipt && expenseData.receipt instanceof File) {
       const file = expenseData.receipt;
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
       const filePath = `receipts/${fileName}`;
-      
+
       // Upload to storage bucket
       const { error: uploadError } = await supabase.storage
         .from('expense-receipts')
         .upload(filePath, file);
-        
+
       if (uploadError) throw uploadError;
-      
+
       // Get the public URL
       const { data } = supabase.storage
         .from('expense-receipts')
         .getPublicUrl(filePath);
-        
+
       receipt_url = data.publicUrl;
     }
-    
+
+    const userTracking = await getUpdateUserTracking();
+
     // Format the expense data
     const { receipt, ...restData } = expenseData;
-    const formattedData = { 
+    const formattedData = {
       ...restData,
       // Only include receipt_url if a new file was uploaded
       ...(receipt_url !== undefined && { receipt_url }),
       // Ensure amount is a number if it exists
       ...(expenseData.amount !== undefined && { amount: parseFloat(expenseData.amount) }),
       // Add updated_at timestamp
-      updated_at: new Date()
+      updated_at: new Date(),
+      ...userTracking
     };
-    
+
     const { data, error } = await supabase
       .from('expenses')
       .update(formattedData)
       .eq('id', expenseId)
       .select();
-      
+
     if (error) throw error;
     
     // Update revenue_data since expenses affect profit calculations
@@ -1744,7 +1751,8 @@ export const addInvoice = async (invoiceData, invoiceItems) => {
   try {
     // Generate invoice number if not provided
     const invoiceNumber = invoiceData.invoiceNumber || generateInvoiceNumber();
-    
+    const userTracking = await getCreateUserTracking();
+
     // 1. Insert invoice
     const { data: invoice, error: invoiceError } = await supabase
       .from('invoices')
@@ -1755,10 +1763,11 @@ export const addInvoice = async (invoiceData, invoiceItems) => {
         due_date: invoiceData.dueDate,
         amount: invoiceData.amount || invoiceItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0),
         status: 'Pending',
-        notes: invoiceData.notes
+        notes: invoiceData.notes,
+        ...userTracking
       })
       .select();
-    
+
     if (invoiceError) {
       console.error('Invoice insertion error:', invoiceError);
       throw invoiceError;
@@ -1801,15 +1810,18 @@ export const addInvoice = async (invoiceData, invoiceItems) => {
 // Update invoice status
 export const updateInvoiceStatus = async (invoiceId, status) => {
   try {
+    const userTracking = await getUpdateUserTracking();
+
     const { data, error } = await supabase
       .from('invoices')
-      .update({ 
-        status, 
-        updated_at: new Date().toISOString() 
+      .update({
+        status,
+        updated_at: new Date().toISOString(),
+        ...userTracking
       })
       .eq('id', invoiceId)
       .select();
-    
+
     if (error) throw error;
     
     // If invoice is marked as paid, update revenue tables

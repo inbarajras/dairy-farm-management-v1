@@ -1,8 +1,11 @@
 import { supabase } from '../../lib/supabase';
+import { getCreateUserTracking, getUpdateUserTracking } from '../../utils/userTracking';
 
 // Create a new weekly inspection
 export const createWeeklyInspection = async (inspectionData) => {
   try {
+    const userTracking = await getCreateUserTracking();
+
     const { data, error } = await supabase
       .from('weekly_inspections')
       .insert([
@@ -20,7 +23,8 @@ export const createWeeklyInspection = async (inspectionData) => {
           deworming_due_date: inspectionData.dewormingDueDate || null,
           vaccination_due: inspectionData.vaccinationDue,
           remarks: inspectionData.remarks,
-          inspector_name: inspectionData.inspectorName
+          inspector_name: inspectionData.inspectorName,
+          ...userTracking
         }
       ])
       .select();
@@ -63,7 +67,10 @@ export const fetchWeeklyInspections = async () => {
       vaccinationDue: inspection.vaccination_due,
       remarks: inspection.remarks,
       inspectorName: inspection.inspector_name,
-      createdAt: inspection.created_at
+      createdAt: inspection.created_at,
+      updatedAt: inspection.updated_at,
+      createdBy: inspection.created_by,
+      updatedBy: inspection.updated_by
     }));
   } catch (error) {
     console.error('Error fetching weekly inspections:', error);
@@ -147,6 +154,8 @@ export const fetchWeeklyInspectionById = async (inspectionId) => {
 // Update a weekly inspection
 export const updateWeeklyInspection = async (inspectionId, inspectionData) => {
   try {
+    const userTracking = await getUpdateUserTracking();
+
     const { data, error } = await supabase
       .from('weekly_inspections')
       .update({
@@ -163,7 +172,8 @@ export const updateWeeklyInspection = async (inspectionId, inspectionData) => {
         deworming_due_date: inspectionData.dewormingDueDate || null,
         vaccination_due: inspectionData.vaccinationDue,
         remarks: inspectionData.remarks,
-        inspector_name: inspectionData.inspectorName
+        inspector_name: inspectionData.inspectorName,
+        ...userTracking
       })
       .eq('id', inspectionId)
       .select();

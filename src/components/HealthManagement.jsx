@@ -16,6 +16,7 @@ import { supabase } from '../lib/supabase';
 import LoadingSpinner from './LoadingSpinner';
 import {toast} from './utils/ToastContainer';
 import WeeklyInspection from './WeeklyInspection';
+import { formatUserTrackingDisplay } from '../utils/userTracking';
 
 // Status badge colors - no change
 const statusColors = {
@@ -2894,8 +2895,28 @@ const ViewHealthEventModal = ({ event, onClose }) => {
               <p className="mt-1 text-base">{formatDate(event.followUp)}</p>
             </div>
           )}
+
+          {/* User Tracking Information */}
+          {(event.createdAt || event.updatedAt) && (
+            <div className="mt-6 pt-4 border-t border-gray-200">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-500">
+                {event.createdAt && (
+                  <div>
+                    <span className="font-medium">Created: </span>
+                    {new Date(event.createdAt).toLocaleString()}
+                  </div>
+                )}
+                {event.updatedAt && (
+                  <div>
+                    <span className="font-medium">Last Updated: </span>
+                    {new Date(event.updatedAt).toLocaleString()}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
-        
+
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50 sticky bottom-0">
           <button
             onClick={onClose}

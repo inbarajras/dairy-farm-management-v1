@@ -1,5 +1,6 @@
 import { supabase } from '../../lib/supabase';
 import { sortMilkProductionRecords, compareMilkProductionRecords } from '../utils/cowSorting';
+import { getCreateUserTracking, getUpdateUserTracking } from '../../utils/userTracking';
 import {
   COW_HEAT_CYCLE_DAYS,
   COW_GESTATION_DAYS,
@@ -24,7 +25,7 @@ export const fetchCows = async () => {
       .order('id', { ascending: true });
 
     if (error) throw error;
-    
+
     // Transform the data to match the component's expected format
     return data.map(cow => ({
       id: cow.id,
@@ -59,7 +60,11 @@ export const fetchCows = async () => {
       mother: cow.mother,
       father: cow.father,
       birthType: cow.birth_type,
-      isCalf: cow.is_calf
+      isCalf: cow.is_calf,
+      createdAt: cow.created_at,
+      updatedAt: cow.updated_at,
+      createdBy: cow.created_by,
+      updatedBy: cow.updated_by
     }));
   } catch (error) {
     console.error('Error fetching cows:', error);
@@ -70,6 +75,8 @@ export const fetchCows = async () => {
 // Add a new cow
 export const addCow = async (cowData) => {
   try {
+    const userTracking = await getCreateUserTracking();
+
     // Transform the data to match the database schema
     const dbCow = {
       tag_number: cowData.tagNumber,
@@ -92,7 +99,8 @@ export const addCow = async (cowData) => {
       mother: cowData.mother || null,
       father: cowData.father || null,
       birth_type: cowData.birthType || 'Single',
-      is_calf: cowData.status === 'Calf'
+      is_calf: cowData.status === 'Calf',
+      ...userTracking
     }
     console.log('dbCow', dbCow);
 
@@ -142,7 +150,8 @@ export const addCow = async (cowData) => {
 export const updateCow = async (cowId, cowData) => {
   try {
     console.log('Update cow received data:', cowData);
-    
+    const userTracking = await getUpdateUserTracking();
+
     // Transform the data to match the database schema
     const dbCow = {
       tag_number: cowData.tagNumber,
@@ -160,11 +169,12 @@ export const updateCow = async (cowId, cowData) => {
       initial_weight: cowData.initialWeight ? parseFloat(cowData.initialWeight) : null,
       notes: cowData.notes || null,
       updated_at: new Date().toISOString(), // Add updated timestamp
-      
+
       // Handle transition data if present
       transition_date: cowData.transitionDate || null,
       current_weight: cowData.currentWeight ? parseFloat(cowData.currentWeight) : null,
-      is_calf: cowData.status === 'Calf'
+      is_calf: cowData.status === 'Calf',
+      ...userTracking
     };
     
     console.log('Transformed data for database:', dbCow);
