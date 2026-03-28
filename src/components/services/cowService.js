@@ -61,6 +61,10 @@ export const fetchCows = async () => {
       father: cow.father,
       birthType: cow.birth_type,
       isCalf: cow.is_calf,
+      // Pregnancy fields
+      isPregnant: cow.is_pregnant || false,
+      pregnancyDate: cow.pregnancy_date || null,
+      expectedDeliveryDate: cow.expected_delivery_date || null,
       createdAt: cow.created_at,
       updatedAt: cow.updated_at,
       createdBy: cow.created_by,
@@ -97,6 +101,10 @@ export const addCow = async (cowData) => {
       notes: cowData.notes || null,
       // Add calf-specific fields
       mother: cowData.mother || null,
+      // Add pregnancy fields
+      is_pregnant: cowData.isPregnant || false,
+      pregnancy_date: cowData.isPregnant && cowData.pregnancyDate ? cowData.pregnancyDate : null,
+      expected_delivery_date: cowData.isPregnant && cowData.expectedDeliveryDate ? cowData.expectedDeliveryDate : null,
       father: cowData.father || null,
       birth_type: cowData.birthType || 'Single',
       is_calf: cowData.status === 'Calf',
@@ -138,7 +146,11 @@ export const addCow = async (cowData) => {
       mother: cow.mother,
       father: cow.father,
       birthType: cow.birth_type,
-      isCalf: cow.is_calf
+      isCalf: cow.is_calf,
+      // Pregnancy fields
+      isPregnant: cow.is_pregnant || false,
+      pregnancyDate: cow.pregnancy_date || null,
+      expectedDeliveryDate: cow.expected_delivery_date || null
     };
   } catch (error) {
     console.error('Error adding cow:', error)
@@ -174,6 +186,10 @@ export const updateCow = async (cowId, cowData) => {
       transition_date: cowData.transitionDate || null,
       current_weight: cowData.currentWeight ? parseFloat(cowData.currentWeight) : null,
       is_calf: cowData.status === 'Calf',
+      // Pregnancy fields
+      is_pregnant: cowData.isPregnant || false,
+      pregnancy_date: cowData.isPregnant && cowData.pregnancyDate ? cowData.pregnancyDate : null,
+      expected_delivery_date: cowData.isPregnant && cowData.expectedDeliveryDate ? cowData.expectedDeliveryDate : null,
       ...userTracking
     };
     
@@ -242,6 +258,10 @@ export const updateCow = async (cowId, cowData) => {
       father: cow.father,
       birthType: cow.birth_type,
       isCalf: cow.is_calf,
+      // Pregnancy fields
+      isPregnant: cow.is_pregnant || false,
+      pregnancyDate: cow.pregnancy_date || null,
+      expectedDeliveryDate: cow.expected_delivery_date || null,
       milkProduction: cow.milk_production ? sortMilkProductionRecords(
         cow.milk_production.map(record => ({
           date: record.date,
@@ -671,8 +691,16 @@ export const fetchHealthHistory = async (cowId) => {
   // Fetch delivery schedule - cows with expected delivery dates (calculated dynamically)
   export const fetchDeliverySchedule = async () => {
     try {
-      // Fetch pregnancy confirmations and inseminations
-      const { data, error } = await supabase
+      // 1. Fetch pregnant cows from cow table (direct pregnancy data)
+      const { data: pregnantCows, error: pregnantError } = await supabase
+        .from('cows')
+        .select('id, tag_number, name, breed, is_pregnant, pregnancy_date, expected_delivery_date')
+        .eq('is_pregnant', true);
+
+      if (pregnantError) throw pregnantError;
+
+      // 2. Fetch pregnancy confirmations and inseminations from breeding events
+      const { data: breedingEvents, error: breedingError } = await supabase
         .from('breeding_events')
         .select(`
           id,
@@ -691,11 +719,11 @@ export const fetchHealthHistory = async (cowId) => {
         .in('result', ['Positive', 'Completed', 'Confirmed'])
         .order('date', { ascending: false });
 
-      if (error) throw error;
+      if (breedingError) throw breedingError;
 
-      // Calculate expected delivery dates (280 days from event date)
+      // Calculate expected delivery dates from breeding events (280 days from event date)
       const GESTATION_DAYS = 280;
-      const expectedDeliveries = (data || []).map(event => {
+      const breedingDeliveries = (breedingEvents || []).map(event => {
         const eventDate = new Date(event.date);
         const expectedDate = new Date(eventDate);
         expectedDate.setDate(expectedDate.getDate() + GESTATION_DAYS);
@@ -706,23 +734,44 @@ export const fetchHealthHistory = async (cowId) => {
         };
       });
 
-      // Filter out duplicates (keep most recent pregnancy event per cow)
-      const uniqueDeliveries = [];
+      // 3. Merge cow table pregnancies with breeding events
+      const expectedDeliveries = [];
       const seenCows = new Set();
 
-      for (const delivery of expectedDeliveries) {
+      // Add cow table pregnancies first (priority)
+      (pregnantCows || []).forEach(cow => {
+        if (cow.expected_delivery_date) {
+          seenCows.add(cow.id);
+          expectedDeliveries.push({
+            cow_id: cow.id,
+            expected_delivery_date: cow.expected_delivery_date,
+            date: cow.pregnancy_date,
+            event_type: 'Pregnancy',
+            result: 'Confirmed',
+            cows: {
+              id: cow.id,
+              tag_number: cow.tag_number,
+              name: cow.name,
+              breed: cow.breed
+            }
+          });
+        }
+      });
+
+      // Add breeding event pregnancies (skip if already added from cow table)
+      breedingDeliveries.forEach(delivery => {
         if (!seenCows.has(delivery.cow_id)) {
           seenCows.add(delivery.cow_id);
-          uniqueDeliveries.push(delivery);
+          expectedDeliveries.push(delivery);
         }
-      }
+      });
 
       // Sort by expected delivery date
-      uniqueDeliveries.sort((a, b) =>
+      expectedDeliveries.sort((a, b) =>
         new Date(a.expected_delivery_date) - new Date(b.expected_delivery_date)
       );
 
-      // Also fetch cows that already calved (for delivered tracking)
+      // 4. Fetch cows that already calved (for delivered tracking)
       const { data: calvingData, error: calvingError } = await supabase
         .from('breeding_events')
         .select(`
@@ -744,7 +793,7 @@ export const fetchHealthHistory = async (cowId) => {
       if (calvingError) throw calvingError;
 
       return {
-        expectedDeliveries: uniqueDeliveries,
+        expectedDeliveries,
         completedDeliveries: calvingData || []
       };
     } catch (error) {

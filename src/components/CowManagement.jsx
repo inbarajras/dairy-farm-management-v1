@@ -883,7 +883,33 @@ const CowManagement = () => {
     try {
       setLoading(true);
       const newEvent = await recordBreedingEvent(cowId, eventData);
-      
+
+      // If this is a pregnancy check with positive result, update cow pregnancy status
+      if (eventData.eventType === 'Pregnancy Check' &&
+          (eventData.result === 'Positive' || eventData.result === 'Confirmed')) {
+        const pregnancyDate = eventData.date;
+        const expectedDeliveryDate = new Date(pregnancyDate);
+        expectedDeliveryDate.setDate(expectedDeliveryDate.getDate() + 280); // 280 days gestation
+
+        // Update cow with pregnancy information
+        await updateCow(cowId, {
+          ...cows.find(c => c.id === cowId),
+          isPregnant: true,
+          pregnancyDate: pregnancyDate,
+          expectedDeliveryDate: expectedDeliveryDate.toISOString().split('T')[0]
+        });
+      }
+
+      // If this is a calving event, mark pregnancy as complete
+      if (eventData.eventType === 'Calving') {
+        await updateCow(cowId, {
+          ...cows.find(c => c.id === cowId),
+          isPregnant: false,
+          pregnancyDate: null,
+          expectedDeliveryDate: null
+        });
+      }
+
       // Refresh cow data to get the latest breeding events and reproductive status
       await refreshCowData();
 
@@ -1083,7 +1109,7 @@ const CowManagement = () => {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                Milking Cows
+                Active & Pregnant Cows
               </button>
               <button
                 onClick={() => setActiveTab('breeding')}
@@ -1230,7 +1256,7 @@ const CowManagement = () => {
           {activeTab === 'dashboard' && (
             <div>
               {/* Summary Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
                 <div className="bg-white rounded-xl shadow-md p-5 border border-gray-100">
                   <div className="flex items-center justify-between">
                     <div>
@@ -1248,7 +1274,7 @@ const CowManagement = () => {
                     <div>
                       <p className="text-sm text-gray-500">Milking Cows</p>
                       <p className="text-2xl font-bold text-green-600">
-                        {cows.filter(c => ['Active', 'Dry'].includes(c.status)).length}
+                        {cows.filter(c => c.status === 'Active' && !c.isPregnant).length}
                       </p>
                     </div>
                     <div className="p-3 bg-green-100 rounded-lg">
@@ -1260,13 +1286,15 @@ const CowManagement = () => {
                 <div className="bg-white rounded-xl shadow-md p-5 border border-gray-100">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-gray-500">Calves</p>
-                      <p className="text-2xl font-bold text-purple-600">
-                        {cows.filter(c => ['Calf', 'Heifer'].includes(c.status)).length}
+                      <p className="text-sm text-gray-500">Pregnant Cows</p>
+                      <p className="text-2xl font-bold text-pink-600">
+                        {cows.filter(c => c.isPregnant).length}
                       </p>
                     </div>
-                    <div className="p-3 bg-purple-100 rounded-lg">
-                      <Award size={24} className="text-purple-600" />
+                    <div className="p-3 bg-pink-100 rounded-lg">
+                      <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="text-pink-600">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                      </svg>
                     </div>
                   </div>
                 </div>
@@ -1274,16 +1302,29 @@ const CowManagement = () => {
                 <div className="bg-white rounded-xl shadow-md p-5 border border-gray-100">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-gray-500">Avg Daily Milk</p>
-                      <p className="text-2xl font-bold text-amber-600">
-                        {topMilkingCows.length > 0
-                          ? `${(topMilkingCows.reduce((sum, c) => sum + c.avgDailyMilk, 0) / topMilkingCows.length).toFixed(1)}L`
-                          : '0L'
-                        }
+                      <p className="text-sm text-gray-500">Dry Cows</p>
+                      <p className="text-2xl font-bold text-orange-600">
+                        {cows.filter(c => c.status === 'Dry').length}
                       </p>
                     </div>
-                    <div className="p-3 bg-amber-100 rounded-lg">
-                      <Droplet size={24} className="text-amber-600" />
+                    <div className="p-3 bg-orange-100 rounded-lg">
+                      <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="text-orange-600">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-md p-5 border border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Calves & Heifers</p>
+                      <p className="text-2xl font-bold text-purple-600">
+                        {cows.filter(c => ['Calf', 'Heifer'].includes(c.status)).length}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-purple-100 rounded-lg">
+                      <Award size={24} className="text-purple-600" />
                     </div>
                   </div>
                 </div>
@@ -1402,20 +1443,83 @@ const CowManagement = () => {
           </div>
 
           {view === 'grid' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-              {currentCows.map(cow => (
-                <CowCard 
-                  key={cow.id} 
-                  cow={cow} 
-                  onClick={() => openCowProfile(cow)}
-                  onEdit={(e) => toggleEditModal(cow, e)}
-                  onDelete={(e) => toggleDeleteModal(cow, e)}
-                  checkCowMilkingStatus={checkCowMilkingStatus}
-                  hasPermission={hasPermission}
-                  onShowQRCode={handleShowQRCode}
-                />
-              ))}
-            </div>
+            <>
+              {/* Milking Cows Group */}
+              {currentCows.filter(cow => !cow.isPregnant && cow.status === 'Active').length > 0 && (
+                <div className="mb-8">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                    <Droplet className="mr-2 text-blue-600" size={20} />
+                    Milking Cows ({currentCows.filter(cow => !cow.isPregnant && cow.status === 'Active').length})
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                    {currentCows.filter(cow => !cow.isPregnant && cow.status === 'Active').map(cow => (
+                      <CowCard
+                        key={cow.id}
+                        cow={cow}
+                        onClick={() => openCowProfile(cow)}
+                        onEdit={(e) => toggleEditModal(cow, e)}
+                        onDelete={(e) => toggleDeleteModal(cow, e)}
+                        checkCowMilkingStatus={checkCowMilkingStatus}
+                        hasPermission={hasPermission}
+                        onShowQRCode={handleShowQRCode}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Pregnant Cows Group */}
+              {currentCows.filter(cow => cow.isPregnant).length > 0 && (
+                <div className="mb-8">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                    <svg className="mr-2 text-pink-600" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                    </svg>
+                    Pregnant Cows ({currentCows.filter(cow => cow.isPregnant).length})
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                    {currentCows.filter(cow => cow.isPregnant).map(cow => (
+                      <CowCard
+                        key={cow.id}
+                        cow={cow}
+                        onClick={() => openCowProfile(cow)}
+                        onEdit={(e) => toggleEditModal(cow, e)}
+                        onDelete={(e) => toggleDeleteModal(cow, e)}
+                        checkCowMilkingStatus={checkCowMilkingStatus}
+                        hasPermission={hasPermission}
+                        onShowQRCode={handleShowQRCode}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Other Cows (Dry, Heifer, Calf, etc.) */}
+              {currentCows.filter(cow => !cow.isPregnant && cow.status !== 'Active').length > 0 && (
+                <div className="mb-8">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                    <svg className="mr-2 text-gray-600" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                    </svg>
+                    Other Cows ({currentCows.filter(cow => !cow.isPregnant && cow.status !== 'Active').length})
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                    {currentCows.filter(cow => !cow.isPregnant && cow.status !== 'Active').map(cow => (
+                      <CowCard
+                        key={cow.id}
+                        cow={cow}
+                        onClick={() => openCowProfile(cow)}
+                        onEdit={(e) => toggleEditModal(cow, e)}
+                        onDelete={(e) => toggleDeleteModal(cow, e)}
+                        checkCowMilkingStatus={checkCowMilkingStatus}
+                        hasPermission={hasPermission}
+                        onShowQRCode={handleShowQRCode}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           ) : (
             <div className="overflow-x-auto bg-white shadow-lg rounded-lg border border-gray-100">
               <table className="min-w-full divide-y divide-gray-200">
@@ -1577,60 +1681,47 @@ const CowManagement = () => {
           {activeTab === 'breeding' && (() => {
             const today = new Date();
 
-            // Calculate breeding statistics from real data
+            // Calculate breeding statistics - merge cow pregnancy data with breeding events
             const inseminatedCows = cows.filter(cow => {
+              if (cow.status === 'Calf' || cow.status === 'Sold' || cow.status === 'Deceased') return false;
+              if (cow.isPregnant) return false; // Already pregnant
+
               const events = breedingData[cow.id] || [];
               const lastInsemination = events.find(e =>
                 (e.event_type === 'Insemination' || e.event_type === 'Artificial Insemination' || e.event_type === 'Natural Breeding') &&
                 (new Date() - new Date(e.date)) / (1000 * 60 * 60 * 24) <= 90
               );
-              const reproStatus = reproductiveStatuses[cow.id];
-              return lastInsemination && reproStatus?.status !== 'Pregnant';
+              return !!lastInsemination;
             });
 
-            const pregnantCows = cows.filter(cow => {
-              const reproStatus = reproductiveStatuses[cow.id];
-              return reproStatus?.status === 'Pregnant' || reproStatus?.status === 'Confirmed';
-            });
+            const pregnantCows = cows.filter(cow =>
+              cow.isPregnant && cow.status !== 'Calf' && cow.status !== 'Sold' && cow.status !== 'Deceased'
+            );
 
             const dueForCheck = cows.filter(cow => {
+              if (cow.status === 'Calf' || cow.status === 'Sold' || cow.status === 'Deceased') return false;
+              if (cow.isPregnant) return false; // Already confirmed pregnant
+
               const events = breedingData[cow.id] || [];
               const lastInsemination = events.find(e =>
                 e.event_type === 'Insemination' || e.event_type === 'Artificial Insemination' || e.event_type === 'Natural Breeding'
               );
               if (!lastInsemination) return false;
+
               const daysSince = (new Date() - new Date(lastInsemination.date)) / (1000 * 60 * 60 * 24);
-              const reproStatus = reproductiveStatuses[cow.id];
-              return daysSince >= 30 && daysSince <= 45 && reproStatus?.status !== 'Pregnant';
+              return daysSince >= 30 && daysSince <= 45;
             });
 
             const expectedCalvings = cows.filter(cow => {
-              const reproStatus = reproductiveStatuses[cow.id];
-              if (reproStatus?.status !== 'Pregnant' && reproStatus?.status !== 'Confirmed') return false;
+              if (!cow.isPregnant || !cow.expectedDeliveryDate) return false;
 
-              const events = breedingData[cow.id] || [];
-              const confirmEvent = events.find(e =>
-                e.event_type === 'Pregnancy Check' && (e.result === 'Confirmed' || e.result === 'Positive')
-              );
-              const inseminationEvent = events.find(e =>
-                e.event_type === 'Insemination' || e.event_type === 'Artificial Insemination'
-              );
-
-              const eventDate = confirmEvent?.date || inseminationEvent?.date;
-              if (!eventDate) return false;
-
-              const daysPregnant = (today - new Date(eventDate)) / (1000 * 60 * 60 * 24);
-              const daysUntilCalving = 283 - daysPregnant;
-              return daysUntilCalving > 0 && daysUntilCalving <= 60;
+              const deliveryDate = new Date(cow.expectedDeliveryDate);
+              const daysUntil = Math.ceil((deliveryDate - today) / (1000 * 60 * 60 * 24));
+              return daysUntil > 0 && daysUntil <= 60;
             });
 
             return (
             <div>
-              {/* Delivery Tracker Component */}
-              <div className="mb-6">
-                <DeliveryTracker />
-              </div>
-
               {/* Summary Cards */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div className="bg-white rounded-xl shadow-md p-5 border border-gray-100">
@@ -1678,7 +1769,7 @@ const CowManagement = () => {
                 <div className="bg-white rounded-xl shadow-md p-5 border border-gray-100">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-gray-500">Expected Calvings</p>
+                      <p className="text-sm text-gray-500">Expected Calvings (60d)</p>
                       <p className="text-2xl font-bold text-blue-600">
                         {expectedCalvings.length}
                       </p>
@@ -1698,13 +1789,10 @@ const CowManagement = () => {
                   onChange={(e) => setFilters({...filters, reproductiveStatus: e.target.value})}
                   className="appearance-none bg-white border border-gray-200 rounded-lg pl-3 pr-10 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200 min-w-[180px]"
                 >
-                  <option value="All">All Reproductive Status</option>
-                  <option value="Open">Open</option>
+                  <option value="All">All Status</option>
                   <option value="Pregnant">Pregnant</option>
-                  <option value="Confirmed">Confirmed</option>
-                  <option value="Bred">Bred</option>
-                  <option value="Inseminated">Inseminated</option>
-                  <option value="Heat">Heat/Estrus</option>
+                  <option value="Not Pregnant">Not Pregnant</option>
+                  <option value="Inseminated">Recently Inseminated</option>
                 </select>
               </div>
 
@@ -1729,13 +1817,19 @@ const CowManagement = () => {
                           Status
                         </th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Reproductive Status
+                          Pregnancy Status
                         </th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Last Breeding Event
+                          Pregnancy Date
                         </th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Days Since Event
+                          Current Month
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Expected Delivery
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Days Since Insemination
                         </th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Actions
@@ -1745,47 +1839,38 @@ const CowManagement = () => {
                     <tbody className="bg-white divide-y divide-gray-200">
                       {cows
                         .filter(cow => {
-                          // Filter out Calves, Sold, and Deceased
-                          if (cow.status === 'Calf' || cow.status === 'Sold' || cow.status === 'Deceased') {
-                            return false;
-                          }
+                          if (cow.status === 'Calf' || cow.status === 'Sold' || cow.status === 'Deceased') return false;
 
-                          // Filter by reproductive status
-                          if (filters.reproductiveStatus !== 'All') {
-                            const reproStatus = reproductiveStatuses[cow.id];
-                            const statusText = reproStatus?.status || 'Open';
-
-                            // Handle Heat/Estrus
-                            if (filters.reproductiveStatus === 'Heat') {
-                              return statusText === 'Heat' || statusText === 'Estrus';
-                            }
-
-                            return statusText === filters.reproductiveStatus;
+                          if (filters.reproductiveStatus === 'Pregnant') {
+                            return cow.isPregnant;
+                          } else if (filters.reproductiveStatus === 'Not Pregnant') {
+                            return !cow.isPregnant;
+                          } else if (filters.reproductiveStatus === 'Inseminated') {
+                            const events = breedingData[cow.id] || [];
+                            const lastInsemination = events.find(e =>
+                              (e.event_type === 'Insemination' || e.event_type === 'Artificial Insemination' || e.event_type === 'Natural Breeding') &&
+                              (new Date() - new Date(e.date)) / (1000 * 60 * 60 * 24) <= 90
+                            );
+                            return !!lastInsemination && !cow.isPregnant;
                           }
 
                           return true;
                         })
                         .map(cow => {
-                          const events = breedingData[cow.id] || [];
-                          const reproStatus = reproductiveStatuses[cow.id];
-
-                          // Get last breeding event
-                          const lastEvent = events.length > 0 ? events[0] : null;
-                          const daysSinceEvent = lastEvent
-                            ? Math.floor((today - new Date(lastEvent.date)) / (1000 * 60 * 60 * 24))
+                          const currentMonth = cow.isPregnant && cow.pregnancyDate
+                            ? Math.floor(Math.ceil((new Date() - new Date(cow.pregnancyDate)) / (1000 * 60 * 60 * 24)) / 30)
                             : null;
 
-                          // Determine reproductive status
-                          let statusText = reproStatus?.status || 'Open';
-                          let statusColor = 'bg-purple-100 text-purple-800';
-
-                          if (statusText === 'Pregnant' || statusText === 'Confirmed') {
-                            statusColor = 'bg-green-100 text-green-800';
-                          } else if (statusText === 'Bred' || statusText === 'Inseminated') {
-                            statusColor = 'bg-blue-100 text-blue-800';
-                          } else if (statusText === 'Heat' || statusText === 'Estrus') {
-                            statusColor = 'bg-orange-100 text-orange-800';
-                          }
+                          // Get last insemination event
+                          const events = breedingData[cow.id] || [];
+                          const lastInsemination = events.find(e =>
+                            e.event_type === 'Insemination' ||
+                            e.event_type === 'Artificial Insemination' ||
+                            e.event_type === 'Natural Breeding'
+                          );
+                          const daysSinceInsemination = lastInsemination
+                            ? Math.floor((today - new Date(lastInsemination.date)) / (1000 * 60 * 60 * 24))
+                            : null;
 
                           return (
                           <tr
@@ -1813,28 +1898,73 @@ const CowManagement = () => {
                               </span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor}`}>
-                                {statusText}
-                              </span>
+                              {(() => {
+                                // Check cow table pregnancy status first
+                                if (cow.isPregnant) {
+                                  return (
+                                    <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-pink-100 text-pink-800">
+                                      Pregnant
+                                    </span>
+                                  );
+                                }
+
+                                // Check breeding events for reproductive status
+                                const reproStatus = reproductiveStatuses[cow.id];
+                                if (reproStatus) {
+                                  const statusText = reproStatus.status;
+
+                                  if (statusText === 'Pregnant' || statusText === 'Confirmed') {
+                                    return (
+                                      <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                        {statusText}
+                                      </span>
+                                    );
+                                  } else if (statusText === 'Bred' || statusText === 'Inseminated') {
+                                    return (
+                                      <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                                        {statusText}
+                                      </span>
+                                    );
+                                  } else if (statusText === 'Heat' || statusText === 'Estrus') {
+                                    return (
+                                      <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">
+                                        {statusText}
+                                      </span>
+                                    );
+                                  } else if (statusText === 'Open') {
+                                    return (
+                                      <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                                        Open
+                                      </span>
+                                    );
+                                  }
+                                }
+
+                                // Default: Not Pregnant
+                                return (
+                                  <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                                    Not Pregnant
+                                  </span>
+                                );
+                              })()}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {lastEvent ? (
-                                <div className="flex flex-col">
-                                  <span className="font-medium">{lastEvent.event_type}</span>
-                                  <span className="text-xs text-gray-400">{new Date(lastEvent.date).toLocaleDateString()}</span>
-                                </div>
-                              ) : (
-                                <span className="text-gray-400">No events</span>
-                              )}
+                              {cow.pregnancyDate ? new Date(cow.pregnancyDate).toLocaleDateString() : '-'}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {daysSinceEvent !== null ? (
+                              {currentMonth !== null ? `${currentMonth} months` : '-'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {cow.expectedDeliveryDate ? new Date(cow.expectedDeliveryDate).toLocaleDateString() : '-'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {daysSinceInsemination !== null ? (
                                 <span className={`font-medium ${
-                                  daysSinceEvent > 45 ? 'text-red-600' :
-                                  daysSinceEvent > 30 ? 'text-orange-600' :
+                                  daysSinceInsemination > 45 ? 'text-red-600' :
+                                  daysSinceInsemination > 30 ? 'text-orange-600' :
                                   'text-gray-900'
                                 }`}>
-                                  {daysSinceEvent} days
+                                  {daysSinceInsemination} days
                                 </span>
                               ) : (
                                 <span className="text-gray-400">-</span>
@@ -1857,6 +1987,11 @@ const CowManagement = () => {
                     </tbody>
                   </table>
                 </div>
+              </div>
+
+              {/* 12-Month Outlook - Delivery Tracker Component */}
+              <div className="mt-6">
+                <DeliveryTracker />
               </div>
             </div>
             );
@@ -2009,37 +2144,33 @@ const CowCard = ({ cow, onClick, onEdit, onDelete, checkCowMilkingStatus, hasPer
   const milkingStatus = checkCowMilkingStatus(cow);
 
   return (
-    <div 
-      className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 cursor-pointer"
+    <div
+      className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 cursor-pointer flex"
       onClick={onClick}
     >
-      {/* Add color bar at top based on health status */}
-      <div className={`h-2 bg-gradient-to-r ${
-        cow?.healthStatus === 'Completed' ? 'from-green-500 to-green-500' :
-        cow?.healthStatus === 'Monitored' ? 'from-yellow-500 to-yellow-400' :
-        cow?.healthStatus === 'In progress' ? 'from-red-500 to-red-400' :
-        'from-gray-500 to-gray-400'
-      }`}></div>
-      
-      <div className="p-4">
-        <div className="flex justify-between items-start">
-          <div className="mb-3 max-w-[70%]">
+      {/* Left portion - Full height image */}
+      <div className="relative w-2/5 bg-gray-100">
+        <img
+          src={cow?.image || cow?.photo || cowSample}
+          alt={cow?.name}
+          className="w-full h-full object-cover"
+          onError={(e) => { e.target.src = cowSample; }}
+        />
+
+        {/* Health status badge on image */}
+        <span className={`absolute top-2 left-2 px-2 py-1 text-xs font-semibold rounded-full ${healthStatusColors[cow?.healthStatus] || 'bg-gray-100 text-gray-800'} backdrop-blur-sm bg-opacity-90`}>
+          {cow?.healthStatus}
+        </span>
+      </div>
+
+      {/* Right portion - Content */}
+      <div className="flex-1 p-4 flex flex-col">
+        <div className="flex justify-between items-start mb-3">
+          <div className="max-w-[70%]">
             <h3 className="text-lg font-semibold text-gray-800 bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 truncate">{cow?.name}</h3>
             <p className="text-sm text-gray-500 truncate">Tag: {cow?.tagNumber}</p>
           </div>
-          <span className={`px-2 py-1 text-xs font-semibold rounded-full ${healthStatusColors[cow?.healthStatus] || 'bg-gray-100 text-gray-800'}`}>
-            {cow?.healthStatus}
-          </span>
-        </div>
-        
-        <div className="flex items-center mb-4">
-          <img
-            src={cow?.image || cow?.photo || cowSample}
-            alt={cow?.name}
-            className="w-16 h-16 object-cover rounded-full bg-gray-200 border-2 border-green-100 flex-shrink-0"
-            onError={(e) => { e.target.src = cowSample; }}
-          />
-          <div className="ml-4 min-w-0">
+          <div className="text-right min-w-0">
             <p className="text-sm text-gray-600 truncate">{cow?.breed}</p>
             <p className="text-sm text-gray-600">{cow?.age}</p>
           </div>
@@ -2047,11 +2178,14 @@ const CowCard = ({ cow, onClick, onEdit, onDelete, checkCowMilkingStatus, hasPer
         
         <div className="border-t pt-3">
           <div className="flex items-center justify-between text-sm">
-            <div className="flex items-center text-blue-600 min-w-0">
-              <Droplet size={16} className="mr-1 flex-shrink-0" />
-              <span className="truncate">{getLatestMilkProduction()}</span>
-            </div>
-            <div className="flex items-center text-gray-500 min-w-0 ml-2">
+            {/* Only show milk production for non-dry, non-calf, non-heifer cows */}
+            {cow?.status !== 'Dry' && cow?.status !== 'Calf' && cow?.status !== 'Heifer' && (
+              <div className="flex items-center text-blue-600 min-w-0">
+                <Droplet size={16} className="mr-1 flex-shrink-0" />
+                <span className="truncate">{getLatestMilkProduction()}</span>
+              </div>
+            )}
+            <div className={`flex items-center text-gray-500 min-w-0 ${cow?.status !== 'Dry' && cow?.status !== 'Calf' && cow?.status !== 'Heifer' ? 'ml-2' : ''}`}>
               <Calendar size={16} className="mr-1 flex-shrink-0" />
               <span className="truncate">Last: {getLastHealthCheckDate()}</span>
             </div>
@@ -2465,14 +2599,17 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
         <div className="flex flex-col lg:flex-row gap-8">
           <div className="lg:w-1/3 mb-8 lg:mb-0 lg:pr-8">
             <div className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
-              <div className="p-6 flex flex-col items-center">
-                <div className="h-1 w-full bg-gradient-to-r from-green-400 to-blue-500 absolute top-0 left-0"></div>
+              {/* Full-width cover photo at top - Facebook profile style with more space */}
+              <div className="relative h-56 bg-gray-100">
                 <img
                   src={cow.image || cow.photo || cowSample}
                   alt={cow.name}
-                  className="w-32 h-32 object-cover rounded-full bg-gray-200 mb-4 border-4 border-green-100 shadow-md"
+                  className="w-full h-full object-cover"
                   onError={(e) => { e.target.src = cowSample; }}
                 />
+              </div>
+
+              <div className="p-6 flex flex-col items-center">
                 <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-600">{cow.name}</h2>
                 <p className="text-gray-500">Tag: {cow.tagNumber}</p>
                 
@@ -3361,20 +3498,20 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                         <div>
                           <h4 className="text-sm font-medium text-gray-500 mb-2">Reproductive Status</h4>
                           <p className="text-sm font-medium text-gray-800">{reproductiveStatus.status}</p>
-                          
+
                           <h4 className="text-sm font-medium text-gray-500 mt-6 mb-2">Last Heat</h4>
                           <p className="text-sm text-gray-800">
-                            {reproductiveStatus.last_heat_date ? 
+                            {reproductiveStatus.last_heat_date ?
                               formatDate(reproductiveStatus.last_heat_date) : 'Not recorded'}
                           </p>
-                          
+
                           <h4 className="text-sm font-medium text-gray-500 mt-6 mb-2">Next Expected Heat</h4>
                           <p className="text-sm text-gray-800">
-                            {reproductiveStatus.next_heat_date ? 
+                            {reproductiveStatus.next_heat_date ?
                               formatDate(reproductiveStatus.next_heat_date) : 'Not calculated'}
                           </p>
                         </div>
-                        
+
                         <div className="border-l border-gray-200 pl-6">
                           <h4 className="text-sm font-medium text-gray-500 mb-2">Calving History</h4>
                           <div className="space-y-2">
@@ -3387,7 +3524,7 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                               </div>
                             )}
                           </div>
-                          
+
                           <h4 className="text-sm font-medium text-gray-500 mt-6 mb-2">Breeding Plan</h4>
                           <p className="text-sm text-gray-800">{reproductiveStatus.breeding_plan || 'No breeding plan set'}</p>
                         </div>
@@ -3398,7 +3535,7 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                       </div>
                     )}
                   </div>
-                  
+
                   <div className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition-all duration-300">
                     <div className="px-6 py-4 border-b border-gray-200 flex flex-wrap justify-between items-center gap-3">
                       <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-700 to-blue-700">Breeding Events</h3>
@@ -3409,7 +3546,7 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                         </button>
                       )}
                     </div>
-                    <div className="overflow-x-auto">  
+                    <div className="overflow-x-auto">
                     {loading.breeding ? (
                       <div className="flex justify-center items-center p-8">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
@@ -3794,7 +3931,11 @@ const AddCowModal = ({ onClose, onAdd }) => {
     // Calf-specific fields
     mother: '',
     father: '',
-    birthType: 'Single' // Single, Twin, etc.
+    birthType: 'Single', // Single, Twin, etc.
+    // Pregnancy fields
+    isPregnant: false,
+    pregnancyDate: '',
+    expectedDeliveryDate: ''
   });
   const [errors, setErrors] = useState({});
   const [availableBreeds, setAvailableBreeds] = useState([]);
@@ -4485,7 +4626,101 @@ const AddCowModal = ({ onClose, onAdd }) => {
                     <p className="mt-1 text-xs text-red-500">{errors.currentWeight}</p>
                   )}
                 </div>
-                
+
+                {/* Pregnancy Information Section - Only show for non-calf status */}
+                {formData.status !== 'Calf' && (
+                  <div className="border-t border-gray-200 pt-6">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-4">Pregnancy Information</h4>
+
+                    <div className="mb-4">
+                      <label className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          name="isPregnant"
+                          checked={formData.isPregnant}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setFormData(prev => ({
+                              ...prev,
+                              isPregnant: checked,
+                              pregnancyDate: checked ? prev.pregnancyDate : '',
+                              expectedDeliveryDate: checked ? prev.expectedDeliveryDate : ''
+                            }));
+                          }}
+                          className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                        />
+                        <span className="text-sm font-medium text-gray-700">Currently Pregnant</span>
+                      </label>
+                    </div>
+
+                    {formData.isPregnant && (
+                      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 animate-fadeIn">
+                        <div>
+                          <label htmlFor="pregnancyDate" className="block text-sm font-medium text-gray-700 mb-1">
+                            Pregnancy Confirmation Date
+                          </label>
+                          <input
+                            type="date"
+                            id="pregnancyDate"
+                            name="pregnancyDate"
+                            value={formData.pregnancyDate}
+                            onChange={(e) => {
+                              const pregDate = e.target.value;
+                              setFormData(prev => {
+                                // Auto-calculate expected delivery date (280 days gestation period for cows)
+                                let expectedDate = '';
+                                if (pregDate) {
+                                  const date = new Date(pregDate);
+                                  date.setDate(date.getDate() + 280);
+                                  expectedDate = date.toISOString().split('T')[0];
+                                }
+                                return {
+                                  ...prev,
+                                  pregnancyDate: pregDate,
+                                  expectedDeliveryDate: expectedDate
+                                };
+                              });
+                            }}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                          />
+                        </div>
+
+                        <div>
+                          <label htmlFor="expectedDeliveryDate" className="block text-sm font-medium text-gray-700 mb-1">
+                            Expected Delivery Date
+                          </label>
+                          <input
+                            type="date"
+                            id="expectedDeliveryDate"
+                            name="expectedDeliveryDate"
+                            value={formData.expectedDeliveryDate}
+                            onChange={handleChange}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                          />
+                        </div>
+
+                        {formData.pregnancyDate && (
+                          <div className="sm:col-span-2 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <div className="flex items-center space-x-2">
+                              <Heart className="h-5 w-5 text-blue-600" />
+                              <span className="text-sm font-medium text-blue-900">
+                                Current Month: {(() => {
+                                  const pregDate = new Date(formData.pregnancyDate);
+                                  const today = new Date();
+                                  const diffTime = Math.abs(today - pregDate);
+                                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                  const months = Math.floor(diffDays / 30);
+                                  return `${months} month${months !== 1 ? 's' : ''}`;
+                                })()}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div>
                   <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
                     Notes
@@ -4667,7 +4902,11 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
     currentWeight: cow.currentWeight || cow.initialWeight || '',
     notes: cow.notes || '',
     photo: cow.image && cow.image !== '/api/placeholder/160/160' ? cow.image : null,
-    alerts: Array.isArray(cow.alerts) ? [...cow.alerts] : []
+    alerts: Array.isArray(cow.alerts) ? [...cow.alerts] : [],
+    // Pregnancy fields
+    isPregnant: cow.isPregnant || false,
+    pregnancyDate: cow.pregnancyDate ? new Date(cow.pregnancyDate).toISOString().split('T')[0] : '',
+    expectedDeliveryDate: cow.expectedDeliveryDate ? new Date(cow.expectedDeliveryDate).toISOString().split('T')[0] : ''
   });
 
   const [errors, setErrors] = useState({});
@@ -4809,7 +5048,11 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
       currentWeight: formData.currentWeight ? parseFloat(formData.currentWeight) : (formData.initialWeight ? parseFloat(formData.initialWeight) : null),
       notes: formData.notes || null,
       photo: formData.photo,
-      alerts: formData.alerts || []
+      alerts: formData.alerts || [],
+      // Pregnancy fields
+      isPregnant: formData.isPregnant || false,
+      pregnancyDate: formData.isPregnant && formData.pregnancyDate ? formData.pregnancyDate : null,
+      expectedDeliveryDate: formData.isPregnant && formData.expectedDeliveryDate ? formData.expectedDeliveryDate : null
     };
     
     console.log('Submitting updated cow data:', submissionData);
@@ -5103,52 +5346,97 @@ const EditCowModal = ({ cow, onClose, onEdit }) => {
                 <p className="mt-1 text-xs text-red-500">{errors.initialWeight}</p>
               )}
             </div>
-            
-            <div>
-              <label htmlFor="photo" className="block text-sm font-medium text-gray-700 mb-1">
-                Photo
-              </label>
-              <div className="mt-1 flex items-center">
-                {getPhotoPreview() ? (
-                  <div className="relative">
-                    <img
-                      src={getPhotoPreview()}
-                      alt="Cow"
-                      className="h-24 w-24 object-cover rounded-md border-2 border-green-100 shadow-sm"
+
+            {/* Pregnancy Information Section */}
+            <div className="border-t border-gray-200 pt-6">
+              <h4 className="text-sm font-semibold text-gray-700 mb-4">Pregnancy Information</h4>
+
+              <div className="mb-4">
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    name="isPregnant"
+                    checked={formData.isPregnant}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setFormData(prev => ({
+                        ...prev,
+                        isPregnant: checked,
+                        pregnancyDate: checked ? prev.pregnancyDate : '',
+                        expectedDeliveryDate: checked ? prev.expectedDeliveryDate : ''
+                      }));
+                    }}
+                    className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Currently Pregnant</span>
+                </label>
+              </div>
+
+              {formData.isPregnant && (
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 animate-fadeIn">
+                  <div>
+                    <label htmlFor="pregnancyDate" className="block text-sm font-medium text-gray-700 mb-1">
+                      Pregnancy Confirmation Date
+                    </label>
+                    <input
+                      type="date"
+                      id="pregnancyDate"
+                      name="pregnancyDate"
+                      value={formData.pregnancyDate}
+                      onChange={(e) => {
+                        const pregDate = e.target.value;
+                        setFormData(prev => {
+                          // Auto-calculate expected delivery date (280 days gestation period for cows)
+                          let expectedDate = '';
+                          if (pregDate) {
+                            const date = new Date(pregDate);
+                            date.setDate(date.getDate() + 280);
+                            expectedDate = date.toISOString().split('T')[0];
+                          }
+                          return {
+                            ...prev,
+                            pregnancyDate: pregDate,
+                            expectedDeliveryDate: expectedDate
+                          };
+                        });
+                      }}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, photo: null })}
-                      className="absolute top-0 right-0 -mt-2 -mr-2 bg-red-500 text-white rounded-full p-1 shadow-md transform transition-transform duration-300 hover:scale-110"
-                    >
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
                   </div>
-                ) : (
-                  <div className="flex items-center justify-center h-24 w-24 border-2 border-gray-300 border-dashed rounded-md hover:border-green-400 transition-colors duration-300">
-                    <label htmlFor="file-upload-edit" className="relative cursor-pointer">
-                      <div className="flex flex-col items-center justify-center">
-                        <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        <span className="mt-2 block text-xs text-gray-600">
-                          Upload
+
+                  <div>
+                    <label htmlFor="expectedDeliveryDate" className="block text-sm font-medium text-gray-700 mb-1">
+                      Expected Delivery Date
+                    </label>
+                    <input
+                      type="date"
+                      id="expectedDeliveryDate"
+                      name="expectedDeliveryDate"
+                      value={formData.expectedDeliveryDate}
+                      onChange={handleChange}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm transition-all duration-300"
+                    />
+                  </div>
+
+                  {formData.pregnancyDate && (
+                    <div className="sm:col-span-2 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-center space-x-2">
+                        <Heart className="h-5 w-5 text-blue-600" />
+                        <span className="text-sm font-medium text-blue-900">
+                          Current Month: {(() => {
+                            const pregDate = new Date(formData.pregnancyDate);
+                            const today = new Date();
+                            const diffTime = Math.abs(today - pregDate);
+                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                            const months = Math.floor(diffDays / 30);
+                            return `${months} month${months !== 1 ? 's' : ''}`;
+                          })()}
                         </span>
                       </div>
-                      <input
-                        id="file-upload-edit"
-                        name="file-upload-edit"
-                        type="file"
-                        className="sr-only"
-                        onChange={handleFileChange}
-                        accept="image/*"
-                      />
-                    </label>
-                  </div>
-                )}
-              </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div>

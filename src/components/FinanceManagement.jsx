@@ -656,6 +656,32 @@ const EmptyEmployeeSection = ({ onRetry }) => {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange, customStartDate, customEndDate]);
+
+  // Realtime subscription for employee updates to sync with payroll
+  useEffect(() => {
+    const { supabase } = require('../lib/supabase');
+
+    const channel = supabase
+      .channel('finance-employees-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'employees'
+        },
+        async (payload) => {
+          console.log('[Realtime Finance] Employee changed:', payload.eventType);
+          // Refresh employee data when employees are updated
+          await fetchEmployees();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
   
   // Toggle modals
   const toggleAddExpenseModal = () => setIsAddExpenseModalOpen(!isAddExpenseModalOpen);
@@ -3657,12 +3683,6 @@ const ViewPayrollHistoryModal = ({ employee, payrollHistory, isLoading, onClose 
                         Hours
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Gross
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Deductions
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Net Pay
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -3682,14 +3702,8 @@ const ViewPayrollHistoryModal = ({ employee, payrollHistory, isLoading, onClose 
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {payment.hours_worked > 0 ? payment.hours_worked : 'N/A'}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {formatCurrency(payment.gross_pay || 0)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {formatCurrency(payment.deductions || 0)}
-                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {formatCurrency(payment.net_pay || 0)}
+                          {formatCurrency(payment.gross_pay || 0)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
                             payment.status === 'Completed' || payment.status === 'Paid' ? 'bg-green-100 text-green-800' : 
@@ -3857,7 +3871,7 @@ const EditEmployeePayrollModal = ({ employee, onClose, onSubmit }) => {
                 </label>
                 <div className="mt-1 relative rounded-lg shadow-sm">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500 sm:text-sm">$</span>
+                    <span className="text-gray-500 sm:text-sm">₹</span>
                   </div>
                   <input
                     type="number"
@@ -3882,7 +3896,7 @@ const EditEmployeePayrollModal = ({ employee, onClose, onSubmit }) => {
                 </label>
                 <div className="mt-1 relative rounded-lg shadow-sm">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500 sm:text-sm">$</span>
+                    <span className="text-gray-500 sm:text-sm">₹</span>
                   </div>
                   <input
                     type="number"
@@ -4051,12 +4065,6 @@ const PayrollDetailsModal = ({ payrollData, isLoading, onClose, onVoid }) => {
                       Hours
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Gross Pay
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Deductions
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Net Pay
                     </th>
                   </tr>
@@ -4077,20 +4085,14 @@ const PayrollDetailsModal = ({ payrollData, isLoading, onClose, onVoid }) => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {item.hours_worked > 0 ? item.hours_worked : 'N/A'}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {formatCurrency(item.gross_pay)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {formatCurrency(item.deductions)}
-                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {formatCurrency(item.net_pay)}
+                          {formatCurrency(item.gross_pay)}
                         </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="7" className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">
+                      <td colSpan="5" className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">
                         {payrollData.status === 'Voided' ? 
                           'No item details available for this voided payment.' : 
                           'No payment items found.'}
@@ -4532,7 +4534,7 @@ const AddExpenseModal = ({ onClose, onSubmit }) => {
               </label>
               <div className="relative rounded-md shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <span className="text-gray-500 sm:text-sm">$</span>
+                  <span className="text-gray-500 sm:text-sm">₹</span>
                 </div>
                 <input
                   type="number"
@@ -4805,7 +4807,7 @@ const EditExpenseModal = ({ expense, onClose, onSubmit }) => {
               </label>
               <div className="relative rounded-md shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <span className="text-gray-500 sm:text-sm">$</span>
+                  <span className="text-gray-500 sm:text-sm">₹</span>
                 </div>
                 <input
                   type="number"
@@ -4988,39 +4990,63 @@ const ProcessPayrollModal = ({ onClose, onSubmit, employees }) => {
   // Initialize with all employees selected
   useEffect(() => {
     if (employees && employees.length > 0) {
-      // Filter employees based on payment type
+      // Map payment type to frequency (match database capitalization)
+      const typeToFrequency = {
+        'Daily Wages': 'Daily',
+        'Weekly Wages': 'Weekly',
+        'Bi-Weekly Wages': 'Bi-Weekly',
+        'Monthly Salary': 'Monthly'
+      };
+
+      const selectedFrequency = typeToFrequency[formData.type] || 'Monthly';
+
+      // Filter employees by payment frequency and salary
       const eligibleEmployees = employees.filter(emp => {
-        if (formData.type === 'Monthly Salary') {
-          return emp.salary > 0;
-        } else {
-          return emp.hourlyRate > 0;
-        }
+        const empFrequency = emp.payment_frequency || 'Monthly';
+        const hasSalary = emp.salary > 0 || emp.daily_rate > 0 || emp.hourly_rate > 0;
+        return empFrequency === selectedFrequency && hasSalary;
       });
-      
+
+      // Helper function to calculate gross pay based on payment type
+      const calculateGrossPay = (emp, paymentType) => {
+        const annualSalary = parseFloat(emp.salary || 0);
+        const dailyRate = parseFloat(emp.daily_rate || 0);
+        const hourlyRate = parseFloat(emp.hourly_rate || emp.hourlyRate || 0);
+
+        switch(paymentType) {
+          case 'Daily Wages':
+            return dailyRate > 0 ? dailyRate : annualSalary / 365;
+          case 'Weekly Wages':
+            return annualSalary / 52;
+          case 'Bi-Weekly Wages':
+            if (hourlyRate > 0) {
+              return hourlyRate * 80; // Default 80 hours for bi-weekly
+            }
+            return annualSalary / 26;
+          case 'Monthly Salary':
+          default:
+            return annualSalary / 12;
+        }
+      };
+
       // Prepare employee payment records
       const empPayments = eligibleEmployees.map(emp => {
-        const isSalaried = emp.salary > 0;
-        const monthlyPay = isSalaried ? emp.salary / 12 : 0;
-        const hourlyPay = !isSalaried ? emp.hourlyRate : 0;
-        const hoursWorked = !isSalaried ? 80 : 0; // Default bi-weekly hours
-        const grossPay = isSalaried ? monthlyPay : hourlyPay * hoursWorked;
-        const taxRate = emp.taxWithholding || 15;
-        const deductions = grossPay * (taxRate / 100);
-        
+        const grossPay = calculateGrossPay(emp, formData.type);
+
         return {
           employee_id: emp.id,
           name: emp.name,
-          position: emp.position,
-          is_salaried: isSalaried,
+          position: emp.position || emp.job_title,
           salary: emp.salary || 0,
-          hourly_rate: emp.hourlyRate || 0,
-          hours_worked: hoursWorked,
+          hourly_rate: emp.hourly_rate || emp.hourlyRate || 0,
+          daily_rate: emp.daily_rate || 0,
+          hours_worked: formData.type === 'Bi-Weekly Wages' ? 80 : 0,
           gross_pay: grossPay,
-          deductions: deductions,
-          net_pay: grossPay - deductions
+          deductions: 0,
+          net_pay: grossPay
         };
       });
-      
+
       setFormData(prev => ({...prev, selectedEmployees: empPayments}));
     }
   }, [employees, formData.type]);
@@ -5044,13 +5070,9 @@ const ProcessPayrollModal = ({ onClose, onSubmit, employees }) => {
           // Recalculate values if necessary
           if (field === 'hours_worked' || field === 'hourly_rate') {
             updatedEmp.gross_pay = updatedEmp.hourly_rate * updatedEmp.hours_worked;
-            updatedEmp.deductions = updatedEmp.gross_pay * (emp.tax_rate || 15) / 100;
-            updatedEmp.net_pay = updatedEmp.gross_pay - updatedEmp.deductions;
+            updatedEmp.net_pay = updatedEmp.gross_pay;
           } else if (field === 'gross_pay') {
-            updatedEmp.deductions = value * (emp.tax_rate || 15) / 100;
-            updatedEmp.net_pay = value - updatedEmp.deductions;
-          } else if (field === 'deductions') {
-            updatedEmp.net_pay = updatedEmp.gross_pay - value;
+            updatedEmp.net_pay = value;
           }
           
           return updatedEmp;
@@ -5157,8 +5179,10 @@ const ProcessPayrollModal = ({ onClose, onSubmit, employees }) => {
                   required
                   className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                 >
+                  <option value="Daily Wages">Daily Wages</option>
+                  <option value="Weekly Wages">Weekly Wages</option>
+                  <option value="Bi-Weekly Wages">Bi-Weekly Wages</option>
                   <option value="Monthly Salary">Monthly Salary</option>
-                  <option value="Bi-weekly Wages">Bi-weekly Wages</option>
                 </select>
               </div>
               
@@ -5168,13 +5192,13 @@ const ProcessPayrollModal = ({ onClose, onSubmit, employees }) => {
                 </label>
                 <div className="relative rounded-lg shadow-sm">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500 sm:text-sm">$</span>
+                    <span className="text-gray-500 sm:text-sm">₹</span>
                   </div>
                   <input
                     type="text"
                     id="totalAmount"
                     name="totalAmount"
-                    value={formatCurrency(totalAmount).replace('$', '')}
+                    value={formatCurrency(totalAmount).replace('₹', '')}
                     readOnly
                     className="block w-full pl-7 py-2 bg-gray-100 border border-gray-300 rounded-lg shadow-sm focus:outline-none sm:text-sm"
                   />
@@ -5221,12 +5245,6 @@ const ProcessPayrollModal = ({ onClose, onSubmit, employees }) => {
                         </>
                       )}
                       <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Gross Pay
-                      </th>
-                      <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Deductions
-                      </th>
-                      <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Net Pay
                       </th>
                     </tr>
@@ -5259,7 +5277,7 @@ const ProcessPayrollModal = ({ onClose, onSubmit, employees }) => {
                               </td>
                               <td className="px-3 py-2 whitespace-nowrap">
                                 <div className="flex items-center">
-                                  <span className="text-gray-500 mr-1">$</span>
+                                  <span className="text-gray-500 mr-1">₹</span>
                                   <input
                                     type="number"
                                     value={emp.hourly_rate}
@@ -5278,13 +5296,13 @@ const ProcessPayrollModal = ({ onClose, onSubmit, employees }) => {
                           )}
                           <td className="px-3 py-2 whitespace-nowrap">
                             <div className="flex items-center">
-                              <span className="text-gray-500 mr-1">$</span>
+                              <span className="text-gray-500 mr-1">₹</span>
                               <input
                                 type="number"
                                 value={emp.gross_pay.toFixed(2)}
                                 onChange={(e) => handleEmployeeChange(
-                                  emp.employee_id, 
-                                  'gross_pay', 
+                                  emp.employee_id,
+                                  'gross_pay',
                                   parseFloat(e.target.value)
                                 )}
                                 min="0"
@@ -5292,32 +5310,12 @@ const ProcessPayrollModal = ({ onClose, onSubmit, employees }) => {
                                 className="w-24 px-2 py-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                               />
                             </div>
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <span className="text-gray-500 mr-1">$</span>
-                              <input
-                                type="number"
-                                value={emp.deductions.toFixed(2)}
-                                onChange={(e) => handleEmployeeChange(
-                                  emp.employee_id, 
-                                  'deductions', 
-                                  parseFloat(e.target.value)
-                                )}
-                                min="0"
-                                step="0.01"
-                                className="w-24 px-2 py-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                              />
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {formatCurrency(emp.net_pay)}
                           </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={formData.type === 'Bi-weekly Wages' ? 7 : 5} className="px-3 py-4 text-center text-sm text-gray-500">
+                        <td colSpan={formData.type === 'Bi-weekly Wages' ? 5 : 3} className="px-3 py-4 text-center text-sm text-gray-500">
                           No eligible employees for {formData.type}
                         </td>
                       </tr>
@@ -5630,7 +5628,7 @@ const AddInvoiceModal = ({ onClose, onSubmit, customers = [], toggleAddCustomerM
                         <td className="px-4 py-2 whitespace-nowrap">
                           <div className="relative rounded-md">
                             <div className="absolute inset-y-0 left-0 pl-1 flex items-center pointer-events-none">
-                              <span className="text-gray-500 sm:text-sm">$</span>
+                              <span className="text-gray-500 sm:text-sm">₹</span>
                             </div>
                             <input
                               type="number"

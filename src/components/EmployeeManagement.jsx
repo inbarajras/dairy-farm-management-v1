@@ -21,9 +21,10 @@ import {
   createPerformanceReview,
   deletePerformanceReview,
   getEmployeePerformanceReviews,
-  updateEmployeeAttendanceRate
+  updateEmployeeAttendanceRate,
+  getSalaryChanges
 } from './services/employeeService';
-import { getEmployeePayrollHistory, getEmployeeSalaryHistory } from './services/financialService';
+import { getEmployeePayrollHistory } from './services/financialService';
 import { getShiftTemplates, addShiftTemplate, updateShiftTemplate, deleteShiftTemplate } from './services/shiftTemplateService';
 import generatePayslipPDF from '../utils/pdfGenerator';
 import emp from '../assets/images/emp.jpg';
@@ -329,31 +330,37 @@ const EmployeeManagement = () => {
   const handleRecordAttendance = async (employeeId, attendanceData) => {
     try {
       setIsLoading(true);
-      
+
       // Record attendance in database
       await recordAttendance({
         employeeId,
         ...attendanceData
       });
-      
+
       // If we're on the attendance tab, refresh data
       if (activeTab === 'attendance') {
         const today = new Date();
         const month = today.getMonth() + 1;
         const year = today.getFullYear();
-        
+
         const summary = await getMonthlyAttendanceSummary(month, year);
         const statistics = await getAttendanceStatistics(month, year);
-        
+
         setAttendanceData({
           summary,
           statistics
         });
       }
-      
+
       // Refresh employees list to get updated attendance rates
       await loadEmployees();
-      
+
+      // If viewing a specific employee, refresh their data
+      if (selectedEmployee && selectedEmployee.id === employeeId) {
+        const updatedEmployee = await fetchEmployeeById(employeeId);
+        setSelectedEmployee(updatedEmployee);
+      }
+
       // Close the modal and show success message
       setIsAttendanceModalOpen(false);
       toast.success('Attendance recorded successfully!');
@@ -1070,50 +1077,48 @@ const OverviewTab = ({ employee }) => {
     rating: employee.performance_rating || 0
   });
   const [attendanceMetrics, setAttendanceMetrics] = useState({
-    attendanceRate: employee.attendance_rate || 0
+    attendanceRate: 0
   });
-  const skills = employee.skills 
-    ? (Array.isArray(employee.skills) ? employee.skills : [employee.skills]) 
+  const skills = employee.skills
+    ? (Array.isArray(employee.skills) ? employee.skills : [employee.skills])
     : [];
-  
-  const certifications = employee.certifications 
-    ? (Array.isArray(employee.certifications) ? employee.certifications : [employee.certifications]) 
+
+  const certifications = employee.certifications
+    ? (Array.isArray(employee.certifications) ? employee.certifications : [employee.certifications])
     : [];
-  
+
   // Load recent activity and calculate metrics
   useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        
+
         // Get performance reviews for this employee - existing code
         const performanceReviews = await getEmployeePerformanceReviews(employee.id);
-        
+
         // Calculate actual performance rating
         if (performanceReviews && performanceReviews.length > 0) {
-          const completedReviews = performanceReviews.filter(review => 
+          const completedReviews = performanceReviews.filter(review =>
             review.status === 'Completed' && review.rating
           );
-          
+
           if (completedReviews.length > 0) {
-            const sum = completedReviews.reduce((total, review) => 
+            const sum = completedReviews.reduce((total, review) =>
               total + parseFloat(review.rating || 0), 0);
             const avgRating = (sum / completedReviews.length).toFixed(1);
             setPerformanceMetrics({ rating: avgRating });
           }
         }
-        
-        // Calculate attendance rate from attendance history
-        if (employee.attendanceHistory && Array.isArray(employee.attendanceHistory)) {
-          const presentDays = employee.attendanceHistory.filter(record => 
-            record && (record.status === 'Present' || record.status === 'Late')).length;
-          
-          const totalDays = employee.attendanceHistory.length;
-          
-          if (totalDays > 0) {
-            const attendanceRate = ((presentDays / totalDays) * 100).toFixed(1);
-            setAttendanceMetrics({ attendanceRate });
-          }
+
+        // Calculate attendance rate using new comprehensive function
+        try {
+          const { getTotalAttendanceSummary } = await import('./services/employeeService');
+          const attendanceSummary = await getTotalAttendanceSummary(employee.id);
+          setAttendanceMetrics({ attendanceRate: attendanceSummary.attendanceRate });
+        } catch (err) {
+          console.error('Error fetching attendance summary:', err);
+          // Fallback to 0 if error
+          setAttendanceMetrics({ attendanceRate: 0 });
         }
         
         // Format activities - existing code
@@ -1365,51 +1370,49 @@ const AttendanceDetailsTab = ({ employee }) => {
     }
   }, [employee?.id]);
   
-  // Calculate attendance metrics
-  const calculateAttendanceMetrics = () => {
-    if (!attendanceHistory || !Array.isArray(attendanceHistory) || attendanceHistory.length === 0) {
-      return {
-        attendanceRate: employee.attendance_rate || '100',
-        totalHours: 0,
-        lastAbsence: 'None recorded',
-        presentDays: 0,
-        absentDays: 0
-      };
-    }
-    
-    const presentDays = attendanceHistory.filter(record => 
-      record && (record.status === 'Present' || record.status === 'Late')).length;
-    const absentDays = attendanceHistory.filter(record => 
-      record && record.status === 'Absent').length;
-    const totalDays = attendanceHistory.length;
-    
-    // Calculate attendance rate with safeguards
-    const attendanceRate = totalDays > 0 
-      ? ((presentDays / totalDays) * 100).toFixed(1)
-      : employee.attendance_rate || '100';
-    
-    // Calculate total hours with better error handling
-    const totalHours = attendanceHistory.reduce((sum, record) => {
-      const hours = parseFloat(record.hours_worked || 0);
-      return sum + (isNaN(hours) ? 0 : hours);
-    }, 0);
-    
-    // Find last absence with proper sorting
-    const absences = attendanceHistory.filter(record => record && record.status === 'Absent');
-    const lastAbsence = absences.length > 0 
-      ? [...absences].sort((a, b) => new Date(b.date) - new Date(a.date))[0].date 
-      : 'None recorded';
-    
-    return {
-      attendanceRate,
-      totalHours,
-      lastAbsence,
-      presentDays,
-      absentDays
+  // Fetch monthly and total attendance summaries
+  const [monthlyMetrics, setMonthlyMetrics] = useState({
+    attendanceRate: 0,
+    totalHours: 0,
+    lastAbsence: 'None recorded',
+    presentDays: 0,
+    absentDays: 0,
+    paidLeaveDays: 0,
+    unpaidLeaveDays: 0,
+    holidayDays: 0,
+    totalWorkingDays: 0,
+    effectivePresentDays: 0,
+    lateDays: 0
+  });
+
+  const [totalMetrics, setTotalMetrics] = useState({
+    attendanceRate: 0,
+    totalHours: 0,
+    presentDays: 0,
+    absentDays: 0
+  });
+
+  useEffect(() => {
+    const fetchAttendanceSummaries = async () => {
+      try {
+        const { getAttendanceSummary, getTotalAttendanceSummary } = await import('./services/employeeService');
+
+        // Fetch monthly attendance
+        const monthlySummary = await getAttendanceSummary(employee.id);
+        setMonthlyMetrics(monthlySummary);
+
+        // Fetch total (all-time) attendance
+        const totalSummary = await getTotalAttendanceSummary(employee.id);
+        setTotalMetrics(totalSummary);
+      } catch (err) {
+        console.error('Error fetching attendance summary:', err);
+      }
     };
-  };
-  
-  const metrics = calculateAttendanceMetrics();
+
+    if (employee?.id) {
+      fetchAttendanceSummaries();
+    }
+  }, [employee?.id]);
   
   if (isLoading) {
     <LoadingSpinner message="Loading Attendance Data" />
@@ -1428,34 +1431,64 @@ const AttendanceDetailsTab = ({ employee }) => {
       {/* Attendance Summary Card */}
       <div className="bg-white shadow-sm rounded-lg p-6">
         <h3 className="text-lg font-medium text-gray-800 mb-4">Attendance Summary</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
           <div className="p-4 bg-green-50 rounded-lg">
-            <div className="text-sm font-medium text-gray-500">Attendance Rate</div>
-            <div className="mt-1 text-2xl font-semibold text-gray-800">{metrics.attendanceRate}%</div>
+            <div className="text-sm font-medium text-gray-500">Monthly Attendance</div>
+            <div className="mt-1 text-2xl font-semibold text-gray-800">{monthlyMetrics.attendanceRate}%</div>
+            <div className="text-xs text-gray-600 mt-1">This Month</div>
           </div>
           <div className="p-4 bg-blue-50 rounded-lg">
+            <div className="text-sm font-medium text-gray-500">Total Attendance</div>
+            <div className="mt-1 text-2xl font-semibold text-gray-800">{totalMetrics.attendanceRate}%</div>
+            <div className="text-xs text-gray-600 mt-1">Since Joining</div>
+          </div>
+          <div className="p-4 bg-indigo-50 rounded-lg">
             <div className="text-sm font-medium text-gray-500">Hours Worked</div>
             <div className="mt-1 text-2xl font-semibold text-gray-800">
-              {metrics.totalHours} hrs
+              {monthlyMetrics.totalHours} hrs
             </div>
+            <div className="text-xs text-gray-600 mt-1">This Month</div>
           </div>
           <div className="p-4 bg-purple-50 rounded-lg">
             <div className="text-sm font-medium text-gray-500">Last Absence</div>
             <div className="mt-1 text-lg font-semibold text-gray-800">
-              {metrics.lastAbsence !== 'None recorded' ? formatDate(metrics.lastAbsence) : 'None recorded'}
+              {monthlyMetrics.lastAbsence && monthlyMetrics.lastAbsence !== 'None recorded' ? formatDate(monthlyMetrics.lastAbsence) : 'None recorded'}
             </div>
           </div>
         </div>
         
-        {/* Additional stats */}
-        <div className="mt-6 grid grid-cols-2 gap-4">
-          <div className="flex items-center">
-            <div className="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
-            <span className="text-sm text-gray-600">Present days: {metrics.presentDays}</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
-            <span className="text-sm text-gray-600">Absent days: {metrics.absentDays}</span>
+        {/* Additional stats - Monthly Breakdown */}
+        <div className="mt-6">
+          <h4 className="text-sm font-medium text-gray-700 mb-3">This Month Breakdown</h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="flex items-center">
+              <div className="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
+              <span className="text-sm text-gray-600">Present: {monthlyMetrics.presentDays}</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-3 h-3 rounded-full bg-yellow-500 mr-2"></div>
+              <span className="text-sm text-gray-600">Late: {monthlyMetrics.lateDays}</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-3 h-3 rounded-full bg-blue-500 mr-2"></div>
+              <span className="text-sm text-gray-600">Paid Leave: {monthlyMetrics.paidLeaveDays}</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-3 h-3 rounded-full bg-orange-500 mr-2"></div>
+              <span className="text-sm text-gray-600">Unpaid Leave: {monthlyMetrics.unpaidLeaveDays}</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
+              <span className="text-sm text-gray-600">Absent: {monthlyMetrics.absentDays}</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-3 h-3 rounded-full bg-purple-500 mr-2"></div>
+              <span className="text-sm text-gray-600">Holidays: {monthlyMetrics.holidayDays}</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-3 h-3 rounded-full bg-gray-500 mr-2"></div>
+              <span className="text-sm text-gray-600">Total Days: {monthlyMetrics.totalDays}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -1528,12 +1561,12 @@ const AttendanceDetailsTab = ({ employee }) => {
               <p className="mb-4">Monthly attendance visualization would go here</p>
               <div className="flex justify-center space-x-8">
                 <div className="text-center">
-                  <p className="text-2xl font-semibold text-gray-800">{metrics.attendanceRate}%</p>
+                  <p className="text-2xl font-semibold text-gray-800">{monthlyMetrics.attendanceRate}%</p>
                   <p className="text-sm text-gray-500">Average Attendance</p>
                 </div>
                 <div className="text-center">
                   <p className="text-2xl font-semibold text-gray-800">
-                    {(metrics.totalHours / Math.max(1, metrics.presentDays)).toFixed(1)}
+                    {(monthlyMetrics.totalHours / Math.max(1, monthlyMetrics.presentDays)).toFixed(1)}
                   </p>
                   <p className="text-sm text-gray-500">Avg Hours/Day</p>
                 </div>
@@ -1766,14 +1799,13 @@ const PerformanceDetailsTab = ({ employee }) => {
 // Updated PayrollTab component with real data fetching
 const PayrollTab = ({ employee }) => {
   const [paymentHistory, setPaymentHistory] = useState([]);
-  const [salaryHistory, setSalaryHistory] = useState([]);
+  const [salaryChanges, setSalaryChanges] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSalaryHistoryLoading, setIsSalaryHistoryLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [salaryHistoryError, setSalaryHistoryError] = useState(null);
   const [downloadingPayslip, setDownloadingPayslip] = useState(false);
   const [downloadMessage, setDownloadMessage] = useState({ show: false, type: '', text: '' });
-  
+
   useEffect(() => {
     const fetchPayrollHistory = async () => {
       try {
@@ -1787,20 +1819,19 @@ const PayrollTab = ({ employee }) => {
         setIsLoading(false);
       }
     };
-    
+
     const fetchSalaryHistory = async () => {
       try {
         setIsSalaryHistoryLoading(true);
-        const data = await getEmployeeSalaryHistory(employee.id);
-        setSalaryHistory(data);
+        const data = await getSalaryChanges(employee.id);
+        setSalaryChanges(data);
       } catch (err) {
-        console.error('Error fetching employee salary history:', err);
-        setSalaryHistoryError('Failed to load salary history. Please try again later.');
+        console.error('Error fetching salary history:', err);
       } finally {
         setIsSalaryHistoryLoading(false);
       }
     };
-    
+
     fetchPayrollHistory();
     fetchSalaryHistory();
   }, [employee.id]);
@@ -1980,63 +2011,82 @@ const PayrollTab = ({ employee }) => {
         )}
       </div>
       
-      {/* Compensation History */}
+      {/* Compensation Overview */}
       <div className="bg-white shadow-sm rounded-lg overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-800">Compensation History</h3>
+          <h3 className="text-lg font-medium text-gray-800">Compensation Overview</h3>
         </div>
-        
+
         <div className="p-6">
           <div className="space-y-4">
             <div className="border-b border-gray-200 pb-4">
               <div className="flex justify-between mb-1">
-                <span className="text-sm font-medium text-gray-900">Current Salary</span>
+                <span className="text-sm font-medium text-gray-900">Current Annual Salary</span>
                 <span className="text-sm font-medium text-gray-900">{formatCurrency(employee.salary)}</span>
               </div>
               <div className="text-sm text-gray-500">Effective from {formatDate(employee.date_joined)}</div>
             </div>
-            
-            <div className="pt-2">
-              <h4 className="text-sm font-medium text-gray-700 mb-3">Salary History</h4>
-              {isSalaryHistoryLoading ? (
-                <div className="py-4 text-center">
-                  <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-green-500 mb-2"></div>
-                  <p className="text-gray-500 text-sm">Loading salary history...</p>
-                </div>
-              ) : salaryHistoryError ? (
-                <div className="py-4 text-center">
-                  <div className="text-red-500 mb-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <p className="text-gray-700 text-sm">{salaryHistoryError}</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {salaryHistory.length > 0 ? (
-                    salaryHistory.map((history) => (
-                      <div key={history.id} className="flex justify-between items-start">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">{formatCurrency(history.salary_amount)}</div>
-                          <div className="text-xs text-gray-500">
-                            From {formatDate(history.effective_from)} to {history.effective_to ? formatDate(history.effective_to) : 'Present'}
-                          </div>
-                          {history.reason && <div className="text-xs text-gray-500 mt-1">Reason: {history.reason}</div>}
-                        </div>
-                        {history.percentage_change > 0 && (
-                          <div className="text-sm text-green-600">+{history.percentage_change}% increase</div>
-                        )}
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-sm text-gray-500 py-2">No salary history records found.</div>
-                  )}
-                </div>
-              )}
-            </div>
           </div>
         </div>
+      </div>
+
+      {/* Salary History */}
+      <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-800">Salary History</h3>
+        </div>
+
+        {isSalaryHistoryLoading ? (
+          <div className="p-6 text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mb-2"></div>
+            <p className="text-gray-500">Loading salary history...</p>
+          </div>
+        ) : salaryChanges.length > 0 ? (
+          <div className="p-6">
+            <div className="space-y-4">
+              {salaryChanges.map((change) => (
+                <div key={change.id} className="border-b border-gray-200 pb-4 last:border-0 last:pb-0">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-baseline space-x-2">
+                        <span className="text-lg font-medium text-gray-900">
+                          {formatCurrency(change.previous_salary)}
+                        </span>
+                        <span className="text-gray-400">→</span>
+                        <span className="text-lg font-medium text-gray-900">
+                          {formatCurrency(change.new_salary)}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center space-x-3">
+                        <span className="text-sm text-gray-600">{change.reason}</span>
+                        <span className="text-sm text-gray-400">•</span>
+                        <span className="text-sm text-gray-600">{formatDate(change.effective_date)}</span>
+                      </div>
+                      {change.review && (
+                        <div className="mt-1 text-xs text-gray-500">
+                          Performance Review: {formatDate(change.review.completion_date || change.review.scheduled_date)}
+                          {change.review.rating && ` • Rating: ${change.review.rating}/5.0`}
+                        </div>
+                      )}
+                    </div>
+                    <div className="ml-4 flex flex-col items-end">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        +{change.increment_percentage}%
+                      </span>
+                      <span className="mt-1 text-xs text-gray-500">
+                        +{formatCurrency(change.increment_amount)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="p-6 text-center text-gray-500">
+            No salary history available
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3059,9 +3109,11 @@ const AttendanceTab = ({ attendanceData = [], statistics = {}, employees = [], i
                           <option value="Present">Present</option>
                           <option value="Absent">Absent</option>
                           <option value="Late">Late</option>
+                          <option value="On Leave">On Leave (Paid)</option>
+                          <option value="Unpaid Leave">Unpaid Leave</option>
+                          <option value="Holiday">Holiday</option>
                           <option value="Vacation">Vacation</option>
                           <option value="Sick">Sick Leave</option>
-                          <option value="Holiday">Holiday</option>
                         </select>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -4728,6 +4780,7 @@ const AddEmployeeModal = ({ onClose, onSubmit, isLoading }) => {
     dateJoined: '',
     salary: '',
     schedule: 'Full-time',
+    payment_frequency: 'Monthly',
     photo: null
   });
   
@@ -5003,7 +5056,7 @@ const AddEmployeeModal = ({ onClose, onSubmit, isLoading }) => {
                     </label>
                     <div className="relative rounded-md shadow-sm">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <span className="text-gray-500 sm:text-sm">$</span>
+                        <span className="text-gray-500 sm:text-sm">₹</span>
                       </div>
                       <input
                         type="number"
@@ -5035,6 +5088,26 @@ const AddEmployeeModal = ({ onClose, onSubmit, isLoading }) => {
                       <option value="Contract">Contract</option>
                       <option value="Seasonal">Seasonal</option>
                     </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="payment_frequency" className="block text-sm font-medium text-gray-700 mb-1">
+                      Payment Frequency *
+                    </label>
+                    <select
+                      id="payment_frequency"
+                      name="payment_frequency"
+                      value={formData.payment_frequency}
+                      onChange={handleChange}
+                      required
+                      className="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md"
+                    >
+                      <option value="Daily">Daily</option>
+                      <option value="Weekly">Weekly</option>
+                      <option value="Bi-Weekly">Bi-Weekly</option>
+                      <option value="Monthly">Monthly</option>
+                    </select>
+                    <p className="mt-1 text-xs text-gray-500">How often this employee will be paid</p>
                   </div>
                 </div>
               )}
@@ -5073,11 +5146,15 @@ const AddEmployeeModal = ({ onClose, onSubmit, isLoading }) => {
                       </div>
                       <div>
                         <h5 className="text-sm font-medium text-gray-500">Annual Salary</h5>
-                        <p className="text-gray-800">${formData.salary}</p>
+                        <p className="text-gray-800">₹{formData.salary}</p>
                       </div>
                       <div>
                         <h5 className="text-sm font-medium text-gray-500">Work Schedule</h5>
                         <p className="text-gray-800">{formData.schedule}</p>
+                      </div>
+                      <div>
+                        <h5 className="text-sm font-medium text-gray-500">Payment Frequency</h5>
+                        <p className="text-gray-800">{formData.payment_frequency}</p>
                       </div>
                     </div>
                     
@@ -5159,6 +5236,10 @@ const EditEmployeeModal = ({ employee, onClose, onSave }) => {
     ...employee,
     firstName: employee.name.split(' ')[0],
     lastName: employee.name.split(' ')[1] || '',
+    jobTitle: employee.job_title || employee.jobTitle || '',
+    dateJoined: employee.date_joined || employee.dateJoined || new Date().toISOString().split('T')[0],
+    attendanceRate: employee.attendance_rate || employee.attendanceRate || 100,
+    payment_frequency: employee.payment_frequency || 'Monthly',
   });
   
   // Handle form field changes
@@ -5347,18 +5428,54 @@ const EditEmployeeModal = ({ employee, onClose, onSave }) => {
               </div>
             </div>
             
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div>
+                <label htmlFor="salary" className="block text-sm font-medium text-gray-700 mb-1">
+                  Salary (₹) *
+                </label>
+                <input
+                  type="number"
+                  id="salary"
+                  name="salary"
+                  value={formData.salary}
+                  onChange={handleChange}
+                  required
+                  min="0"
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="payment_frequency" className="block text-sm font-medium text-gray-700 mb-1">
+                  Payment Frequency *
+                </label>
+                <select
+                  id="payment_frequency"
+                  name="payment_frequency"
+                  value={formData.payment_frequency}
+                  onChange={handleChange}
+                  required
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                >
+                  <option value="Daily">Daily</option>
+                  <option value="Weekly">Weekly</option>
+                  <option value="Bi-Weekly">Bi-Weekly</option>
+                  <option value="Monthly">Monthly</option>
+                </select>
+              </div>
+            </div>
+
             <div>
-              <label htmlFor="salary" className="block text-sm font-medium text-gray-700 mb-1">
-                Salary (₹) *
+              <label htmlFor="dateJoined" className="block text-sm font-medium text-gray-700 mb-1">
+                Date Joined *
               </label>
               <input
-                type="number"
-                id="salary"
-                name="salary"
-                value={formData.salary}
+                type="date"
+                id="dateJoined"
+                name="dateJoined"
+                value={formData.dateJoined}
                 onChange={handleChange}
                 required
-                min="0"
                 className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
               />
             </div>
@@ -5388,7 +5505,8 @@ const EditEmployeeModal = ({ employee, onClose, onSave }) => {
 // Add this component inside the EmployeeManagement.jsx file
 const RecordAttendanceModal = ({ employee, onClose, onSave }) => {
   const today = new Date().toISOString().split('T')[0];
-  
+  const [isSaving, setIsSaving] = useState(false);
+
   const [formData, setFormData] = useState({
     employeeId: employee.id,
     date: today,
@@ -5445,26 +5563,41 @@ const RecordAttendanceModal = ({ employee, onClose, onSave }) => {
   };
   
   // Handle form submission
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Create attendance record
-    const attendanceRecord = {
-      date: formData.date,
-      status: formData.status,
-      hoursWorked: parseFloat(formData.hoursWorked),
-      notes: formData.notes,
-    };
-    
-    onSave(employee.id, attendanceRecord);
+
+    if (isSaving) return; // Prevent double submission
+
+    setIsSaving(true);
+
+    try {
+      // Create attendance record with correct field names
+      const attendanceRecord = {
+        employeeId: employee.id,
+        date: formData.date,
+        status: formData.status,
+        hours_worked: parseFloat(formData.hoursWorked) || 0,
+        notes: formData.notes || ''
+      };
+
+      await onSave(employee.id, attendanceRecord);
+    } catch (error) {
+      console.error('Error saving attendance:', error);
+      setIsSaving(false);
+    }
+    // Note: Don't set isSaving to false here as the modal will close
   };
   
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full my-8 mx-auto">
+      <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full my-8 mx-auto">
         <div className="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-blue-50 flex justify-between items-center">
           <h3 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-700">Record Attendance</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
+          <button
+            onClick={onClose}
+            disabled={isSaving}
+            className="text-gray-400 hover:text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             <X size={20} className="h-6 w-6" />
           </button>
         </div>
@@ -5512,9 +5645,11 @@ const RecordAttendanceModal = ({ employee, onClose, onSave }) => {
                 <option value="Present">Present</option>
                 <option value="Absent">Absent</option>
                 <option value="Late">Late</option>
+                <option value="On Leave">On Leave (Paid)</option>
+                <option value="Unpaid Leave">Unpaid Leave</option>
+                <option value="Holiday">Holiday</option>
                 <option value="Vacation">Vacation</option>
                 <option value="Sick">Sick Leave</option>
-                <option value="Holiday">Holiday</option>
               </select>
             </div>
             
@@ -5587,18 +5722,27 @@ const RecordAttendanceModal = ({ employee, onClose, onSave }) => {
             <button
               type="button"
               onClick={onClose}
-              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"
+              disabled={isSaving}
+              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 focus:outline-none"
+              disabled={isSaving}
+              className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Save Attendance
+              {isSaving ? 'Saving...' : 'Save Attendance'}
             </button>
           </div>
         </form>
+
+        {/* Loading Overlay */}
+        {isSaving && (
+          <div className="absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center rounded-lg z-10">
+            <LoadingSpinner message="Saving Attendance..." />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -5614,7 +5758,7 @@ const PerformanceReviewModal = ({
 }) => {
   const isEditing = Boolean(review?.id);
   const today = new Date().toISOString().split('T')[0];
-  
+
   // Initialize form data based on whether we're editing or creating
   const [formData, setFormData] = useState(() => {
     if (review) {
@@ -5627,7 +5771,11 @@ const PerformanceReviewModal = ({
         review_type: review.review_type || 'Annual',
         status: review.status || 'Scheduled',
         rating: review.rating || '',
-        summary: review.summary || ''
+        summary: review.summary || '',
+        previous_salary: review.previous_salary || '',
+        new_salary: review.new_salary || '',
+        salary_effective_date: review.salary_effective_date || '',
+        salary_approved: review.salary_approved || false
       };
     } else {
       // Default values for new review
@@ -5639,10 +5787,17 @@ const PerformanceReviewModal = ({
         review_type: 'Annual',
         status: 'Scheduled',
         rating: '',
-        summary: ''
+        summary: '',
+        previous_salary: '',
+        new_salary: '',
+        salary_effective_date: '',
+        salary_approved: false
       };
     }
   });
+
+  // Get selected employee for salary data (must be after useState)
+  const selectedEmployee = employees.find(emp => emp.id === formData.employee_id);
 
   // Reset form data when review changes (e.g., when switching between different reviews to edit)
   useEffect(() => {
@@ -5656,7 +5811,11 @@ const PerformanceReviewModal = ({
           review_type: review.review_type || 'Annual',
           status: review.status || 'Scheduled',
           rating: review.rating || '',
-          summary: review.summary || ''
+          summary: review.summary || '',
+          previous_salary: review.previous_salary || '',
+          new_salary: review.new_salary || '',
+          salary_effective_date: review.salary_effective_date || '',
+          salary_approved: review.salary_approved || false
         });
       } else {
         setFormData({
@@ -5667,19 +5826,35 @@ const PerformanceReviewModal = ({
           review_type: 'Annual',
           status: 'Scheduled',
           rating: '',
-          summary: ''
+          summary: '',
+          previous_salary: '',
+          new_salary: '',
+          salary_effective_date: '',
+          salary_approved: false
         });
       }
     }
   }, [review, isOpen, today]);
+
+  // Auto-populate previous salary when employee is selected or status changes to Completed
+  useEffect(() => {
+    if (selectedEmployee && formData.status === 'Completed' && !formData.previous_salary) {
+      setFormData(prev => ({
+        ...prev,
+        previous_salary: selectedEmployee.salary || 0
+      }));
+    }
+  }, [selectedEmployee, formData.status, formData.previous_salary]);
   
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
+    const newValue = type === 'checkbox' ? checked : value;
+
     setFormData(prevState => ({
       ...prevState,
-      [name]: value
+      [name]: newValue
     }));
-    
+
     // If status is changed to "Completed", automatically set completion date to today
     if (name === 'status' && value === 'Completed' && !formData.completion_date) {
       setFormData(prevState => ({
@@ -5688,22 +5863,31 @@ const PerformanceReviewModal = ({
       }));
     }
   };
-  
+
+  // Calculate increment percentage
+  const calculateIncrement = () => {
+    if (formData.previous_salary && formData.new_salary) {
+      const increment = formData.new_salary - formData.previous_salary;
+      return ((increment / formData.previous_salary) * 100).toFixed(2);
+    }
+    return '0.00';
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    
+
     // Create a clean copy of form data for submission
     const cleanData = { ...formData };
-    
+
     // Handle empty fields
     if (cleanData.reviewer_id === '') {
       delete cleanData.reviewer_id;
     }
-    
+
     if (cleanData.completion_date === '') {
       delete cleanData.completion_date;
     }
-    
+
     // Handle rating based on status
     if (cleanData.status === 'Completed') {
       if (!cleanData.rating || cleanData.rating === '') {
@@ -5714,7 +5898,29 @@ const PerformanceReviewModal = ({
     } else {
       delete cleanData.rating;
     }
-    
+
+    // Handle salary fields - remove if empty to avoid PostgreSQL numeric errors
+    if (!cleanData.previous_salary || cleanData.previous_salary === '') {
+      delete cleanData.previous_salary;
+    } else {
+      cleanData.previous_salary = parseFloat(cleanData.previous_salary);
+    }
+
+    if (!cleanData.new_salary || cleanData.new_salary === '') {
+      delete cleanData.new_salary;
+    } else {
+      cleanData.new_salary = parseFloat(cleanData.new_salary);
+    }
+
+    if (!cleanData.salary_effective_date || cleanData.salary_effective_date === '') {
+      delete cleanData.salary_effective_date;
+    }
+
+    // If salary fields are not complete, ensure salary_approved is false
+    if (!cleanData.previous_salary || !cleanData.new_salary) {
+      cleanData.salary_approved = false;
+    }
+
     onSubmit(cleanData, isEditing ? review.id : null);
   };
   
@@ -5884,8 +6090,105 @@ const PerformanceReviewModal = ({
                 placeholder="Review notes, feedback, and goals..."
               ></textarea>
             </div>
+
+            {/* Salary Adjustment Section - Only show when status is Completed */}
+            {formData.status === 'Completed' && (
+              <div className="border-t border-gray-200 pt-6 mt-6">
+                <h4 className="text-md font-medium text-gray-900 mb-4">Salary Adjustment (Optional)</h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="previous_salary" className="block text-sm font-medium text-gray-700 mb-1">
+                      Current Salary (₹)
+                    </label>
+                    <input
+                      type="number"
+                      id="previous_salary"
+                      name="previous_salary"
+                      value={formData.previous_salary || ''}
+                      onChange={handleChange}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                      placeholder="Auto-filled from employee record"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="new_salary" className="block text-sm font-medium text-gray-700 mb-1">
+                      New Salary (₹)
+                    </label>
+                    <input
+                      type="number"
+                      id="new_salary"
+                      name="new_salary"
+                      value={formData.new_salary || ''}
+                      onChange={handleChange}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                      placeholder="Enter new salary"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  <div>
+                    <label htmlFor="increment_percentage" className="block text-sm font-medium text-gray-700 mb-1">
+                      Increment %
+                    </label>
+                    <input
+                      type="text"
+                      id="increment_percentage"
+                      value={`${calculateIncrement()}%`}
+                      disabled
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-100 text-gray-700 sm:text-sm font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="salary_effective_date" className="block text-sm font-medium text-gray-700 mb-1">
+                      Effective Date
+                    </label>
+                    <input
+                      type="date"
+                      id="salary_effective_date"
+                      name="salary_effective_date"
+                      value={formData.salary_effective_date || ''}
+                      onChange={handleChange}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                    />
+                  </div>
+                </div>
+
+                {formData.new_salary && formData.previous_salary && parseFloat(formData.new_salary) > parseFloat(formData.previous_salary) && (
+                  <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="ml-3 flex-1">
+                        <h3 className="text-sm font-medium text-blue-800">
+                          Salary Increment: ₹{(parseFloat(formData.new_salary) - parseFloat(formData.previous_salary)).toLocaleString()}
+                        </h3>
+                        <div className="mt-2">
+                          <label className="inline-flex items-center">
+                            <input
+                              type="checkbox"
+                              name="salary_approved"
+                              checked={formData.salary_approved}
+                              onChange={handleChange}
+                              className="rounded border-gray-300 text-green-600 shadow-sm focus:border-green-300 focus:ring focus:ring-green-200 focus:ring-opacity-50"
+                            />
+                            <span className="ml-2 text-sm text-blue-700">Approve salary change (will update employee salary immediately)</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          
+
           <div className="px-4 sm:px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3 sticky bottom-0 bg-white z-10">
             <button
               type="button"

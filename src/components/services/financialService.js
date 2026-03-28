@@ -269,39 +269,41 @@ export const getPayrollEmployees = async () => {
     console.log('Fetching payroll employees...');
     const { data, error } = await supabase
       .from('employees')
-      .select('id, name, job_title, salary, schedule')
+      .select('id, name, job_title, salary, schedule, payment_frequency')
       .eq('status', 'Active')
       .order('name');
-      
+
     if (error) {
       console.error('Supabase error fetching employees:', error);
       throw error;
     }
-    
+
     if (!data || data.length === 0) {
       console.log('No employees found in database');
       return [];
     }
-    
+
     console.log('Raw employee data from DB:', data);
-    
+
     // Format for payroll display
     const formattedEmployees = data.map(employee => {
       // Handle potential nulls or missing values with safe defaults
       const schedule = employee.schedule || '';
       const salary = employee.salary || 0;
+      const paymentFrequency = employee.payment_frequency || 'Monthly';
       const isPartTime = schedule.toLowerCase().includes('part-time');
-      
+
       return {
         id: employee.id || `emp-${Math.random().toString(36).substring(2, 9)}`,
         name: employee.name || 'Unnamed Employee',
         position: employee.job_title || 'Staff',
         salary: salary,
         hourlyRate: isPartTime ? parseFloat((salary / 2080).toFixed(2)) : null,
-        payPeriod: isPartTime ? 'Bi-weekly' : 'Monthly'
+        payPeriod: paymentFrequency, // Use the actual payment_frequency from database
+        payment_frequency: paymentFrequency // Also include for payroll processing logic
       };
     });
-    
+
     console.log('Formatted employee data:', formattedEmployees);
     return formattedEmployees;
   } catch (error) {
@@ -1403,34 +1405,102 @@ export const processPayroll = async (payrollData) => {
     
     const payrollPaymentId = paymentData[0].id;
     console.log(`Created payroll payment with ID: ${payrollPaymentId}`);
-    
+
+    // Helper function: Calculate pay period based on payment frequency
+    const calculatePayPeriod = (paymentDate, paymentFrequency) => {
+      const date = new Date(paymentDate);
+      const payPeriodEnd = new Date(date);
+      let payPeriodStart;
+
+      // Normalize payment frequency to handle both old format and new format
+      const frequency = paymentFrequency || 'Monthly';
+
+      switch(frequency) {
+        case 'Daily':
+        case 'Daily Wages':
+          // Same day
+          payPeriodStart = new Date(date);
+          break;
+
+        case 'Weekly':
+        case 'Weekly Wages':
+          // Last 7 days
+          payPeriodStart = new Date(date);
+          payPeriodStart.setDate(date.getDate() - 6);
+          break;
+
+        case 'Bi-Weekly':
+        case 'Bi-weekly':
+        case 'Bi-Weekly Wages':
+        case 'Bi-weekly Wages':
+          // Last 14 days
+          payPeriodStart = new Date(date);
+          payPeriodStart.setDate(date.getDate() - 13);
+          break;
+
+        case 'Monthly':
+        case 'Monthly Salary':
+        default:
+          // First day of month
+          payPeriodStart = new Date(date.getFullYear(), date.getMonth(), 1);
+          break;
+      }
+
+      return { payPeriodStart, payPeriodEnd };
+    };
+
+    // Helper function: Calculate gross pay based on payment frequency
+    const calculateGrossPay = (employee, paymentType) => {
+      const annualSalary = parseFloat(employee.salary || 0);
+      const dailyRate = parseFloat(employee.daily_rate || 0);
+      const hourlyRate = parseFloat(employee.hourly_rate || 0);
+      const hoursWorked = parseFloat(employee.hours_worked || 0);
+
+      switch(paymentType) {
+        case 'Daily Wages':
+          // Use daily_rate if set, otherwise calculate from annual
+          return dailyRate > 0 ? dailyRate : annualSalary / 365;
+
+        case 'Weekly Wages':
+          return annualSalary / 52;
+
+        case 'Bi-Weekly Wages':
+        case 'Bi-weekly Wages':
+          // Can use hourly rate * hours if available
+          if (hourlyRate > 0 && hoursWorked > 0) {
+            return hourlyRate * hoursWorked;
+          }
+          return annualSalary / 26;
+
+        case 'Monthly Salary':
+        default:
+          return annualSalary / 12;
+      }
+    };
+
     // 2. Record individual employee payment items in employee_payroll_items
     if (payrollData.employees && payrollData.employees.length > 0) {
       const payrollItems = payrollData.employees.map(emp => {
-        // Calculate pay period (for a monthly payment, it's typically the 1st to last day of month)
-        const paymentDate = new Date(payrollData.payment_date);
-        const payPeriodEnd = new Date(paymentDate);
-        
-        // For monthly payments, use first day of month to last day of month
-        let payPeriodStart;
-        if (payrollData.payment_type === 'Monthly Salary') {
-          payPeriodStart = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), 1);
-        } 
-        // For bi-weekly, use 2 weeks before payment date
-        else {
-          payPeriodStart = new Date(paymentDate);
-          payPeriodStart.setDate(payPeriodStart.getDate() - 14);
-        }
-        
+        // Calculate pay period for each employee based on their payment_frequency
+        const employeePaymentFrequency = emp.payment_frequency || payrollData.payment_type;
+        const { payPeriodStart, payPeriodEnd } = calculatePayPeriod(
+          payrollData.payment_date,
+          employeePaymentFrequency
+        );
+
+        // Use the gross_pay from the employee object (already calculated in UI)
+        // or calculate it here if not provided
+        const grossPay = emp.gross_pay || calculateGrossPay(emp, payrollData.payment_type);
+
         return {
           payroll_payment_id: payrollPaymentId,
           employee_id: emp.employee_id,
-          salary_amount: emp.is_salaried ? emp.salary / 12 : null, // Monthly portion of annual salary
-          hourly_rate: !emp.is_salaried ? emp.hourly_rate : null,
+          salary_amount: emp.salary || null,
+          hourly_rate: emp.hourly_rate || null,
           hours_worked: emp.hours_worked || 0,
-          gross_pay: emp.gross_pay,
-          deductions: emp.deductions,
-          net_pay: emp.net_pay,
+          gross_pay: grossPay,
+          deductions: emp.deductions || 0,
+          net_pay: grossPay - (emp.deductions || 0),
           pay_period_start: payPeriodStart.toISOString().split('T')[0],
           pay_period_end: payPeriodEnd.toISOString().split('T')[0]
         };
@@ -2361,45 +2431,44 @@ export const getCustomersWithRevenue = async (limit = 5, startDate = null, endDa
 // Fetch employee salary history
 export const getEmployeeSalaryHistory = async (employeeId) => {
   try {
-    // Get salary history from employee_payroll_items
+    // Get salary history from employee_payroll_items - use gross_pay to match Payment History
     const { data, error } = await supabase
       .from('employee_payroll_items')
       .select(`
         id,
         employee_id,
-        salary_amount,
         gross_pay,
         pay_period_start,
         pay_period_end
       `)
       .eq('employee_id', employeeId)
       .order('pay_period_start', { ascending: false });
-      
+
     if (error) throw error;
-    
+
     // Transform the data to match the expected format in the UI
     const formattedData = data.map((item, index) => {
       // Calculate percentage change if possible
       let percentageChange = null;
       if (index < data.length - 1) {
-        const currentAmount = item.salary_amount || item.gross_pay;
-        const previousAmount = data[index + 1].salary_amount || data[index + 1].gross_pay;
+        const currentAmount = item.gross_pay;
+        const previousAmount = data[index + 1].gross_pay;
         if (previousAmount && currentAmount > previousAmount) {
           percentageChange = parseFloat(((currentAmount - previousAmount) / previousAmount * 100).toFixed(1));
         }
       }
-      
+
       return {
         id: item.id,
         employee_id: item.employee_id,
-        salary_amount: item.salary_amount || item.gross_pay, // Use salary_amount if available, otherwise use gross_pay
+        salary_amount: item.gross_pay, // Use gross_pay to match Payment History
         effective_from: item.pay_period_start,
         effective_to: item.pay_period_end,
-        reason: "Regular payment", // Default reason since this table doesn't store reasons
+        reason: "Regular payment",
         percentage_change: percentageChange
       };
     });
-    
+
     return formattedData || [];
   } catch (error) {
     console.error('Error fetching employee salary history:', error);

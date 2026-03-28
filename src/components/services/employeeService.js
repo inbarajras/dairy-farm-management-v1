@@ -67,6 +67,7 @@ export const addEmployee = async (employeeData) => {
         status: 'Active',
         salary: parseFloat(employeeData.salary),
         schedule: employeeData.schedule,
+        payment_frequency: employeeData.payment_frequency || 'Monthly',
         attendance_rate: 100, // Default for new employee
         performance_rating: null, // Default for new employee
         skills: [],
@@ -167,7 +168,8 @@ export const updateEmployee = async (employeeId, employeeData) => {
         status: employeeData.status || 'Active', // Preserve status from input
         salary: parseFloat(employeeData.salary),
         schedule: employeeData.schedule,
-        attendance_rate: employeeData.attendanceRate,
+        payment_frequency: employeeData.payment_frequency || 'Monthly',
+        attendance_rate: employeeData.attendance_rate || employeeData.attendanceRate || 100,
         performance_rating: employeeData.performance_rating || null,
         skills: employeeData.skills || [],
         certifications: employeeData.certifications || [],
@@ -448,17 +450,18 @@ export const getEmployeePerformance = async () => {
   export const getScheduledReviews = async () => {
     try {
       const today = new Date().toISOString().split('T')[0];
-      
+
       const { data, error } = await supabase
-        .from('scheduled_reviews')
+        .from('performance_reviews')
         .select(`
           *,
           employees:employee_id (id, name, job_title, image_url),
           reviewer:reviewer_id (id, name)
         `)
-        .gte('review_date', today)
-        .order('review_date');
-      
+        .eq('status', 'Scheduled')
+        .gte('scheduled_date', today)
+        .order('scheduled_date');
+
       if (error) throw error;
       return data || [];
     } catch (error) {
@@ -763,38 +766,56 @@ export const getPerformanceReviews = async () => {
     try {
       // Create a clean copy of the data to avoid modifying the original
       const cleanData = { ...reviewData };
-      
+
       // Add updated_at timestamp
       cleanData.updated_at = new Date().toISOString();
-      
+
       // Handle reviewer_id - remove if empty string
       if (cleanData.reviewer_id === '') {
         delete cleanData.reviewer_id;
       }
-      
+
       // Handle empty dates
       if (cleanData.completion_date === '') {
         delete cleanData.completion_date;
       }
-      
+
       // Convert rating to a number if it exists
       if (cleanData.rating) {
         cleanData.rating = parseFloat(cleanData.rating);
       }
-      
+
       // For completed reviews with no rating, set a default
       if (cleanData.status === 'Completed' && !cleanData.rating) {
         cleanData.rating = 3.0;
       }
-      
+
+      // Calculate increment percentage if both salaries are provided
+      if (cleanData.previous_salary && cleanData.new_salary) {
+        const increment = cleanData.new_salary - cleanData.previous_salary;
+        cleanData.increment_percentage = parseFloat(((increment / cleanData.previous_salary) * 100).toFixed(2));
+      }
+
       // Update the review in the database
       const { data, error } = await supabase
         .from('performance_reviews')
         .update(cleanData)
         .eq('id', reviewId)
         .select();
-        
+
       if (error) throw error;
+
+      // If salary approved, apply the salary change
+      if (cleanData.salary_approved && cleanData.new_salary && cleanData.previous_salary && cleanData.new_salary > cleanData.previous_salary) {
+        await applySalaryChange(
+          reviewData.employee_id,
+          cleanData.previous_salary,
+          cleanData.new_salary,
+          cleanData.salary_effective_date || new Date().toISOString().split('T')[0],
+          reviewId
+        );
+      }
+
       return data[0];
     } catch (error) {
       console.error(`Error updating performance review ${reviewId}:`, error);
@@ -873,6 +894,473 @@ export const updateEmployeeAttendanceRate = async (employeeId) => {
     return data;
   } catch (error) {
     console.error(`Error updating attendance rate for employee ${employeeId}:`, error);
+    throw error;
+  }
+};
+
+// ==================== Salary Management Functions ====================
+
+// Apply salary change from performance review
+export const applySalaryChange = async (employeeId, previousSalary, newSalary, effectiveDate, reviewId) => {
+  try {
+    const incrementAmount = newSalary - previousSalary;
+    const incrementPercentage = parseFloat(((incrementAmount / previousSalary) * 100).toFixed(2));
+
+    // Update employee salary
+    const { error: empError } = await supabase
+      .from('employees')
+      .update({
+        salary: newSalary,
+        last_salary_increment_date: effectiveDate,
+        last_increment_percentage: incrementPercentage
+      })
+      .eq('id', employeeId);
+
+    if (empError) throw empError;
+
+    // Record in salary_changes table
+    const { data, error: historyError } = await supabase
+      .from('salary_changes')
+      .insert({
+        employee_id: employeeId,
+        previous_salary: previousSalary,
+        new_salary: newSalary,
+        increment_amount: incrementAmount,
+        increment_percentage: incrementPercentage,
+        effective_date: effectiveDate,
+        reason: 'Annual Performance Review',
+        review_id: reviewId
+      })
+      .select()
+      .single();
+
+    if (historyError) throw historyError;
+
+    console.log(`Salary updated for employee ${employeeId}: ${previousSalary} -> ${newSalary} (+${incrementPercentage}%)`);
+    return data;
+  } catch (error) {
+    console.error('Error applying salary change:', error);
+    throw error;
+  }
+};
+
+// Get salary change history for an employee
+export const getSalaryChanges = async (employeeId) => {
+  try {
+    const { data, error } = await supabase
+      .from('salary_changes')
+      .select(`
+        *,
+        review:review_id (
+          id,
+          scheduled_date,
+          completion_date,
+          rating,
+          status
+        )
+      `)
+      .eq('employee_id', employeeId)
+      .order('effective_date', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error(`Error fetching salary changes for employee ${employeeId}:`, error);
+    throw error;
+  }
+};
+
+// ============================================================================
+// LEAVE AND HOLIDAY MANAGEMENT FUNCTIONS
+// ============================================================================
+
+// Get all leave types
+export const getLeaveTypes = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('leave_types')
+      .select('*')
+      .eq('is_active', true)
+      .order('name');
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error fetching leave types:', error);
+    throw error;
+  }
+};
+
+// Get all holidays
+export const getHolidays = async (year = null) => {
+  try {
+    let query = supabase
+      .from('holidays')
+      .select('*')
+      .order('date');
+
+    if (year) {
+      const startDate = `${year}-01-01`;
+      const endDate = `${year}-12-31`;
+      query = query.gte('date', startDate).lte('date', endDate);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error fetching holidays:', error);
+    throw error;
+  }
+};
+
+// Create a new holiday
+export const createHoliday = async (holidayData) => {
+  try {
+    const userTracking = await getCreateUserTracking();
+
+    const { data, error } = await supabase
+      .from('holidays')
+      .insert({
+        ...holidayData,
+        ...userTracking
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error creating holiday:', error);
+    throw error;
+  }
+};
+
+// Delete a holiday
+export const deleteHoliday = async (holidayId) => {
+  try {
+    const { error } = await supabase
+      .from('holidays')
+      .delete()
+      .eq('id', holidayId);
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error('Error deleting holiday:', error);
+    throw error;
+  }
+};
+
+// Get employee leaves
+export const getEmployeeLeaves = async (employeeId, status = null) => {
+  try {
+    let query = supabase
+      .from('employee_leaves')
+      .select(`
+        *,
+        leave_type:leave_type_id (
+          id,
+          name,
+          is_paid,
+          affects_attendance
+        ),
+        approver:approved_by (
+          id,
+          name,
+          email
+        )
+      `)
+      .eq('employee_id', employeeId)
+      .order('start_date', { ascending: false });
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error fetching employee leaves:', error);
+    throw error;
+  }
+};
+
+// Get all pending leave requests (for managers)
+export const getPendingLeaveRequests = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('employee_leaves')
+      .select(`
+        *,
+        employee:employee_id (
+          id,
+          name,
+          job_title,
+          image_url
+        ),
+        leave_type:leave_type_id (
+          id,
+          name,
+          is_paid,
+          affects_attendance
+        )
+      `)
+      .eq('status', 'Pending')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error fetching pending leave requests:', error);
+    throw error;
+  }
+};
+
+// Request leave
+export const requestLeave = async (leaveData) => {
+  try {
+    const userTracking = await getCreateUserTracking();
+
+    // Calculate total days
+    const startDate = new Date(leaveData.start_date);
+    const endDate = new Date(leaveData.end_date);
+    const totalDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+
+    const { data, error } = await supabase
+      .from('employee_leaves')
+      .insert({
+        ...leaveData,
+        total_days: totalDays,
+        status: 'Pending',
+        ...userTracking
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error requesting leave:', error);
+    throw error;
+  }
+};
+
+// Approve/Reject leave
+export const updateLeaveStatus = async (leaveId, status, rejectionReason = null) => {
+  try {
+    const userTracking = await getUpdateUserTracking();
+
+    const updateData = {
+      status,
+      approved_at: status === 'Approved' ? new Date().toISOString() : null,
+      rejection_reason: status === 'Rejected' ? rejectionReason : null,
+      approved_by: userTracking.updated_by,
+      updated_at: userTracking.updated_at,
+      updated_by: userTracking.updated_by
+    };
+
+    const { data, error } = await supabase
+      .from('employee_leaves')
+      .update(updateData)
+      .eq('id', leaveId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error updating leave status:', error);
+    throw error;
+  }
+};
+
+// Get leave balance for an employee
+export const getLeaveBalance = async (employeeId, year = new Date().getFullYear()) => {
+  try {
+    const { data, error } = await supabase
+      .from('leave_balance')
+      .select(`
+        *,
+        leave_type:leave_type_id (
+          id,
+          name,
+          is_paid,
+          annual_quota
+        )
+      `)
+      .eq('employee_id', employeeId)
+      .eq('year', year);
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error fetching leave balance:', error);
+    throw error;
+  }
+};
+
+// Initialize leave balance for new employee
+export const initializeLeaveBalance = async (employeeId, year = new Date().getFullYear()) => {
+  try {
+    // Get all active leave types with quotas
+    const { data: leaveTypes, error: leaveTypesError } = await supabase
+      .from('leave_types')
+      .select('*')
+      .eq('is_active', true)
+      .not('annual_quota', 'is', null);
+
+    if (leaveTypesError) throw leaveTypesError;
+
+    // Create balance records for each leave type
+    const balanceRecords = leaveTypes.map(lt => ({
+      employee_id: employeeId,
+      leave_type_id: lt.id,
+      year: year,
+      total_allocated: lt.annual_quota,
+      used: 0
+    }));
+
+    const { data, error } = await supabase
+      .from('leave_balance')
+      .insert(balanceRecords)
+      .select();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error initializing leave balance:', error);
+    throw error;
+  }
+};
+
+// Get comprehensive attendance summary with leave and holiday calculations
+export const getAttendanceSummary = async (employeeId, startDate = null, endDate = null) => {
+  try {
+    // Default to current month start to today if no dates provided
+    const today = new Date().toISOString().split('T')[0];
+
+    if (!startDate) {
+      const now = new Date();
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    }
+    if (!endDate) {
+      endDate = today; // Use today, not end of month
+    }
+
+    // Calculate total calendar days in the period
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const calendarDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+
+    // Get attendance records
+    const { data: attendanceRecords, error: attError } = await supabase
+      .from('employee_attendance')
+      .select(`
+        *,
+        leave:leave_id (
+          id,
+          leave_type_id,
+          leave_type:leave_type_id (
+            name,
+            is_paid,
+            affects_attendance
+          )
+        ),
+        holiday:holiday_id (
+          id,
+          name
+        )
+      `)
+      .eq('employee_id', employeeId)
+      .gte('date', startDate)
+      .lte('date', endDate)
+      .order('date', { ascending: false });
+
+    if (attError) throw attError;
+
+    // Calculate metrics
+    const presentDays = attendanceRecords.filter(r => r.status === 'Present').length;
+    const lateDays = attendanceRecords.filter(r => r.status === 'Late').length;
+    const absentDays = attendanceRecords.filter(r =>
+      r.status === 'Absent' && !r.leave_id && !r.is_holiday
+    ).length;
+    const paidLeaveDays = attendanceRecords.filter(r =>
+      r.leave_id && r.leave?.leave_type?.is_paid
+    ).length;
+    const unpaidLeaveDays = attendanceRecords.filter(r =>
+      r.leave_id && !r.leave?.leave_type?.is_paid
+    ).length;
+    const holidayDays = attendanceRecords.filter(r => r.is_holiday).length;
+
+    // Total days = calendar days from start to end
+    const totalDays = calendarDays;
+
+    // Working days = Total calendar days - Paid Leaves only
+    // (Employee is expected to work or be present on all other days)
+    const totalWorkingDays = totalDays - paidLeaveDays;
+
+    // Effective present = Present + Late (exclude paid leaves from both numerator and denominator)
+    const effectivePresentDays = presentDays + lateDays;
+
+    // Calculate attendance rate: (Present + Late) / (Total Days - Paid Leaves) * 100
+    // Note: Unpaid leaves, absents, and holidays count against attendance
+    const attendanceRate = totalWorkingDays > 0
+      ? parseFloat(((effectivePresentDays / totalWorkingDays) * 100).toFixed(1))
+      : 0;
+
+    // Calculate total hours
+    const totalHours = attendanceRecords.reduce((sum, r) => {
+      return sum + (parseFloat(r.hours_worked) || 0);
+    }, 0);
+
+    // Find last absence
+    const absences = attendanceRecords.filter(r =>
+      r.status === 'Absent' && !r.leave_id && !r.is_holiday
+    );
+    const lastAbsence = absences.length > 0 ? absences[0].date : null;
+
+    return {
+      attendanceRate,
+      presentDays,
+      lateDays,
+      absentDays,
+      paidLeaveDays,
+      unpaidLeaveDays,
+      holidayDays,
+      totalDays,
+      totalWorkingDays,
+      effectivePresentDays,
+      calendarDays,
+      totalHours,
+      lastAbsence,
+      records: attendanceRecords
+    };
+  } catch (error) {
+    console.error('Error fetching attendance summary:', error);
+    throw error;
+  }
+};
+
+// Get total (all-time) attendance summary for an employee
+export const getTotalAttendanceSummary = async (employeeId) => {
+  try {
+    // Get employee's join date
+    const { data: employee, error: empError } = await supabase
+      .from('employees')
+      .select('date_joined')
+      .eq('id', employeeId)
+      .single();
+
+    if (empError) throw empError;
+
+    const startDate = employee.date_joined;
+    const endDate = new Date().toISOString().split('T')[0];
+
+    return await getAttendanceSummary(employeeId, startDate, endDate);
+  } catch (error) {
+    console.error('Error fetching total attendance summary:', error);
     throw error;
   }
 };
