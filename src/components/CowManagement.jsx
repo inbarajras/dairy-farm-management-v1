@@ -2287,6 +2287,7 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
   // Determine if cow is a calf based on age and status
   const isCalf = cow.status === 'Calf' || (cow.age && parseInt(cow.age) < 1);
   const isHeifer = cow.status === 'Heifer';
+  const isDry = cow.status === 'Dry';
   
   // Safely check for milkProduction array and ensure it has data
   const hasMilkProductionData = cow?.milkProduction && Array.isArray(cow.milkProduction) && cow.milkProduction.length > 0;
@@ -2712,8 +2713,8 @@ const CowProfile = ({ cow, onClose, onEdit, onRecordHealthEvent, toggleRecordMil
                   >
                     Overview
                   </button>
-                  {/* Show milk tab only for adults */}
-                  {!isCalf && !isHeifer && (
+                  {/* Show milk tab only for active milking cows (not calf, heifer, or dry) */}
+                  {!isCalf && !isHeifer && !isDry && (
                     <button
                       onClick={() => setActiveTab('milk')}
                       className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all duration-300 ${
