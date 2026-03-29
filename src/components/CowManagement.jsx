@@ -4,6 +4,7 @@ import { fetchCows, addCow, updateCow, deleteCow, recordHealthEvent, recordMilkP
   fetchRecentActivity,fetchBreedingEvents,fetchHealthHistory,fetchReproductiveStatus,
   fetchGrowthMilestones, recordGrowthMilestone
  } from './services/cowService';
+import { getMilkProductionTrends } from './services/milkService';
 import RecordGrowthMilestoneModal from './RecordGrowthMilestoneModal';
 import GrowthChart from './GrowthChart';
 import GrowthMilestoneSummary from './GrowthMilestoneSummary';
@@ -84,6 +85,13 @@ const CowManagement = () => {
   const [showQuickRecordModal, setShowQuickRecordModal] = useState(false);
   const [scannedCowData, setScannedCowData] = useState(null);
 
+  // Milk production trends state
+  const [productionTrends, setProductionTrends] = useState({
+    droppingCows: [],
+    improvingCows: [],
+    allTrends: []
+  });
+
   // Fetch cows on component mount
   useEffect(() => {
     const loadCows = async () => {
@@ -120,6 +128,23 @@ const CowManagement = () => {
       toast.error('Failed to refresh cow data.');
     }
   }, [selectedCow]);
+
+  // Fetch milk production trends
+  useEffect(() => {
+    const loadProductionTrends = async () => {
+      if (activeTab === 'dashboard') {
+        try {
+          const trends = await getMilkProductionTrends();
+          console.log('Cow Management - Production Trends:', trends);
+          setProductionTrends(trends);
+        } catch (err) {
+          console.error('Error loading production trends:', err);
+        }
+      }
+    };
+
+    loadProductionTrends();
+  }, [activeTab]);
 
   // Load breeding data when breeding tab is active
   useEffect(() => {
@@ -1325,6 +1350,133 @@ const CowManagement = () => {
                     </div>
                     <div className="p-3 bg-purple-100 rounded-lg">
                       <Award size={24} className="text-purple-600" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Milk Production Trends - Dropping & Improving Cows */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                {/* Dropping Cows */}
+                <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300 border border-gray-100">
+                  <div className="h-2 bg-gradient-to-r from-red-400 to-orange-400"></div>
+                  <div className="p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 bg-red-100 rounded-lg">
+                          <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
+                          </svg>
+                        </div>
+                        <h3 className="text-lg font-semibold text-gray-800">Dropping Production</h3>
+                      </div>
+                      <span className="px-3 py-1 bg-red-100 text-red-800 text-sm font-semibold rounded-full">
+                        {productionTrends.droppingCows.length} cows
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-4">Cows with ≥2L decrease from yesterday</p>
+
+                    <div className="space-y-3 max-h-80 overflow-y-auto">
+                      {productionTrends.droppingCows.length > 0 ? (
+                        productionTrends.droppingCows.slice(0, 10).map((cow) => (
+                          <div key={cow.cowId} className="flex items-center justify-between p-3 bg-gradient-to-r from-red-50/50 to-orange-50/50 rounded-lg border border-red-100 hover:shadow-sm transition-shadow cursor-pointer" onClick={() => openCowProfile(cows.find(c => c.id === cow.cowId))}>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-medium text-gray-900">{cow.cowName}</h4>
+                                <span className="text-xs text-gray-500">#{cow.cowTagNumber}</span>
+                              </div>
+                              <p className="text-xs text-gray-600 mt-0.5">{cow.cowBreed}</p>
+                            </div>
+                            <div className="text-right">
+                              <div className="flex items-center gap-2">
+                                <div className="text-sm">
+                                  <span className="text-gray-500">{cow.yesterdayAmount.toFixed(1)}L</span>
+                                  <span className="mx-1">→</span>
+                                  <span className="font-semibold text-gray-900">{cow.todayAmount.toFixed(1)}L</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-end gap-1 mt-1">
+                                <svg className="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 12.586V5a1 1 0 012 0v7.586l2.293-2.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                                <span className="text-sm font-bold text-red-600">
+                                  {Math.abs(cow.difference).toFixed(1)}L ({cow.percentageChange}%)
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-8 text-gray-500">
+                          <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                          </svg>
+                          <p className="text-sm font-medium">No significant drops</p>
+                          <p className="text-xs mt-1">All cows are maintaining or improving production</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Improving Cows */}
+                <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300 border border-gray-100">
+                  <div className="h-2 bg-gradient-to-r from-green-400 to-emerald-400"></div>
+                  <div className="p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 bg-green-100 rounded-lg">
+                          <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                          </svg>
+                        </div>
+                        <h3 className="text-lg font-semibold text-gray-800">Improving Production</h3>
+                      </div>
+                      <span className="px-3 py-1 bg-green-100 text-green-800 text-sm font-semibold rounded-full">
+                        {productionTrends.improvingCows.length} cows
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-4">Cows with ≥2L increase from yesterday</p>
+
+                    <div className="space-y-3 max-h-80 overflow-y-auto">
+                      {productionTrends.improvingCows.length > 0 ? (
+                        productionTrends.improvingCows.slice(0, 10).map((cow) => (
+                          <div key={cow.cowId} className="flex items-center justify-between p-3 bg-gradient-to-r from-green-50/50 to-emerald-50/50 rounded-lg border border-green-100 hover:shadow-sm transition-shadow cursor-pointer" onClick={() => openCowProfile(cows.find(c => c.id === cow.cowId))}>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-medium text-gray-900">{cow.cowName}</h4>
+                                <span className="text-xs text-gray-500">#{cow.cowTagNumber}</span>
+                              </div>
+                              <p className="text-xs text-gray-600 mt-0.5">{cow.cowBreed}</p>
+                            </div>
+                            <div className="text-right">
+                              <div className="flex items-center gap-2">
+                                <div className="text-sm">
+                                  <span className="text-gray-500">{cow.yesterdayAmount.toFixed(1)}L</span>
+                                  <span className="mx-1">→</span>
+                                  <span className="font-semibold text-gray-900">{cow.todayAmount.toFixed(1)}L</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-end gap-1 mt-1">
+                                <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                                </svg>
+                                <span className="text-sm font-bold text-green-600">
+                                  +{cow.difference.toFixed(1)}L (+{cow.percentageChange}%)
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-8 text-gray-500">
+                          <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                          </svg>
+                          <p className="text-sm font-medium">No significant improvements</p>
+                          <p className="text-xs mt-1">Check back tomorrow for production trends</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
