@@ -4,15 +4,16 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, Area, AreaChart, ReferenceLine
 } from 'recharts';
-import { 
-  fetchMilkCollections, 
-  fetchMonthlyTotals, 
-  fetchQualityTrends, 
-  addMilkCollection, 
-  updateMilkCollection, 
-  deleteMilkCollection, 
-  getQualityStandards, 
-  getMilkAlerts 
+import {
+  fetchMilkCollections,
+  fetchMonthlyTotals,
+  fetchQualityTrends,
+  addMilkCollection,
+  updateMilkCollection,
+  deleteMilkCollection,
+  getQualityStandards,
+  getMilkAlerts,
+  getMilkProductionTrends
 } from './services/milkService';
 import { supabase } from '../lib/supabase';
 import {
@@ -23,6 +24,7 @@ import LoadingSpinner from './LoadingSpinner';
 import {toast} from './utils/ToastContainer';
 import { useRole } from '../contexts/RoleContext';
 import UserRoleBadge from './UserRoleBadge';
+import SearchableSelect from './ui/SearchableSelect';
 
 
 
@@ -94,7 +96,8 @@ const MilkProduction = () => {
     monthlyTotals: [],
     qualityTrends: [],
     qualityStandards: {},
-    alerts: []
+    alerts: [],
+    trends: { droppingCows: [], improvingCows: [], allTrends: [] }
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false); // For add/edit operations
@@ -204,21 +207,29 @@ const MilkProduction = () => {
         monthlyTotals,
         qualityTrends,
         qualityStandards,
-        alerts
+        alerts,
+        trends
       ] = await Promise.all([
         fetchMilkCollections(startDateStr, endDateStr),
         fetchMonthlyTotals(currentDate.getFullYear()),
         fetchQualityTrends(dateRange === 'today' ? 1 : dateRange === 'week' ? 7 : 30),
         getQualityStandards(),
-        getMilkAlerts()
+        getMilkAlerts(),
+        getMilkProductionTrends()
       ]);
+
+      // Log trends data for debugging
+      console.log('Milk Production Trends:', trends);
+      console.log('Dropping Cows:', trends?.droppingCows?.length || 0);
+      console.log('Improving Cows:', trends?.improvingCows?.length || 0);
 
       setMilkData({
         dailyCollections: collections,
         monthlyTotals,
         qualityTrends,
         qualityStandards,
-        alerts
+        alerts,
+        trends
       });
     } catch (error) {
       console.error('Error loading milk data:', error);
@@ -754,7 +765,134 @@ const MilkProduction = () => {
                 </div>
               </div>
             </div>
-            
+
+            {/* Milk Production Trends - Dropping & Improving Cows */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                {/* Dropping Cows */}
+                <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300 border border-gray-100">
+                  <div className="h-2 bg-gradient-to-r from-red-400 to-orange-400"></div>
+                  <div className="p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 bg-red-100 rounded-lg">
+                          <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
+                          </svg>
+                        </div>
+                        <h3 className="text-lg font-semibold text-gray-800">Dropping Production</h3>
+                      </div>
+                      <span className="px-3 py-1 bg-red-100 text-red-800 text-sm font-semibold rounded-full">
+                        {milkData.trends.droppingCows.length} cows
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-4">Cows with ≥2L decrease from yesterday</p>
+
+                    <div className="space-y-3 max-h-80 overflow-y-auto">
+                      {milkData.trends.droppingCows.length > 0 ? (
+                        milkData.trends.droppingCows.slice(0, 10).map((cow) => (
+                          <div key={cow.cowId} className="flex items-center justify-between p-3 bg-gradient-to-r from-red-50/50 to-orange-50/50 rounded-lg border border-red-100 hover:shadow-sm transition-shadow">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-medium text-gray-900">{cow.cowName}</h4>
+                                <span className="text-xs text-gray-500">#{cow.cowTagNumber}</span>
+                              </div>
+                              <p className="text-xs text-gray-600 mt-0.5">{cow.cowBreed}</p>
+                            </div>
+                            <div className="text-right">
+                              <div className="flex items-center gap-2">
+                                <div className="text-sm">
+                                  <span className="text-gray-500">{cow.yesterdayAmount.toFixed(1)}L</span>
+                                  <span className="mx-1">→</span>
+                                  <span className="font-semibold text-gray-900">{cow.todayAmount.toFixed(1)}L</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-end gap-1 mt-1">
+                                <svg className="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 12.586V5a1 1 0 012 0v7.586l2.293-2.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                                <span className="text-sm font-bold text-red-600">
+                                  {Math.abs(cow.difference).toFixed(1)}L ({cow.percentageChange}%)
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-8 text-gray-500">
+                          <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                          </svg>
+                          <p className="text-sm font-medium">No significant drops</p>
+                          <p className="text-xs mt-1">All cows are maintaining or improving production</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Improving Cows */}
+                <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300 border border-gray-100">
+                  <div className="h-2 bg-gradient-to-r from-green-400 to-emerald-400"></div>
+                  <div className="p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 bg-green-100 rounded-lg">
+                          <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                          </svg>
+                        </div>
+                        <h3 className="text-lg font-semibold text-gray-800">Improving Production</h3>
+                      </div>
+                      <span className="px-3 py-1 bg-green-100 text-green-800 text-sm font-semibold rounded-full">
+                        {milkData.trends.improvingCows.length} cows
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-4">Cows with ≥2L increase from yesterday</p>
+
+                    <div className="space-y-3 max-h-80 overflow-y-auto">
+                      {milkData.trends.improvingCows.length > 0 ? (
+                        milkData.trends.improvingCows.slice(0, 10).map((cow) => (
+                          <div key={cow.cowId} className="flex items-center justify-between p-3 bg-gradient-to-r from-green-50/50 to-emerald-50/50 rounded-lg border border-green-100 hover:shadow-sm transition-shadow">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-medium text-gray-900">{cow.cowName}</h4>
+                                <span className="text-xs text-gray-500">#{cow.cowTagNumber}</span>
+                              </div>
+                              <p className="text-xs text-gray-600 mt-0.5">{cow.cowBreed}</p>
+                            </div>
+                            <div className="text-right">
+                              <div className="flex items-center gap-2">
+                                <div className="text-sm">
+                                  <span className="text-gray-500">{cow.yesterdayAmount.toFixed(1)}L</span>
+                                  <span className="mx-1">→</span>
+                                  <span className="font-semibold text-gray-900">{cow.todayAmount.toFixed(1)}L</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-end gap-1 mt-1">
+                                <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                                </svg>
+                                <span className="text-sm font-bold text-green-600">
+                                  +{cow.difference.toFixed(1)}L (+{cow.percentageChange}%)
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-8 text-gray-500">
+                          <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                          </svg>
+                          <p className="text-sm font-medium">No significant improvements</p>
+                          <p className="text-xs mt-1">Check back tomorrow for production trends</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+            </div>
+
             {/* Total Production Chart */}
             <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 mb-6">
               <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
@@ -2858,6 +2996,9 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [cows, setCows] = useState([]);
     const [isLoadingCows, setIsLoadingCows] = useState(true);
+    const [useCommonQuality, setUseCommonQuality] = useState(false);
+    const [commonFat, setCommonFat] = useState('');
+    const [commonSnf, setCommonSnf] = useState('');
 
     // Load cows for dropdown
     useEffect(() => {
@@ -2888,9 +3029,37 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
       ));
     };
 
+    // Handle common quality checkbox change
+    const handleCommonQualityToggle = (checked) => {
+      setUseCommonQuality(checked);
+      if (checked && (commonFat || commonSnf)) {
+        // Apply common values to all entries
+        setEntries(entries.map(entry => ({
+          ...entry,
+          fat: commonFat || entry.fat,
+          snf: commonSnf || entry.snf
+        })));
+      }
+    };
+
+    // Handle common fat/snf value changes
+    const handleCommonFatChange = (value) => {
+      setCommonFat(value);
+      if (useCommonQuality) {
+        setEntries(entries.map(entry => ({ ...entry, fat: value })));
+      }
+    };
+
+    const handleCommonSnfChange = (value) => {
+      setCommonSnf(value);
+      if (useCommonQuality) {
+        setEntries(entries.map(entry => ({ ...entry, snf: value })));
+      }
+    };
+
     // Add a new entry row
     const addEntry = () => {
-      setEntries([...entries, {
+      const newEntry = {
         id: Date.now(),
         date: new Date().toISOString().split('T')[0],
         shift: 'Morning',
@@ -2898,9 +3067,10 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
         cowId: '',
         quality: 'Good',
         notes: '',
-        fat: '',
-        snf: ''
-      }]);
+        fat: useCommonQuality ? commonFat : '',
+        snf: useCommonQuality ? commonSnf : ''
+      };
+      setEntries([...entries, newEntry]);
     };
 
     // Remove an entry row
@@ -2993,6 +3163,66 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                 <div className="py-4 text-center text-gray-500">Loading cows...</div>
               ) : (
                 <>
+                  {/* Common Fat/SNF Section */}
+                  <div className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30 p-4 rounded-lg border-2 border-dashed border-green-300">
+                    <div className="flex items-start gap-4">
+                      <div className="flex items-center pt-2">
+                        <input
+                          id="useCommonQuality"
+                          name="useCommonQuality"
+                          type="checkbox"
+                          checked={useCommonQuality}
+                          onChange={(e) => handleCommonQualityToggle(e.target.checked)}
+                          className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                        />
+                        <label htmlFor="useCommonQuality" className="ml-2 block text-sm font-medium text-gray-700">
+                          Use common Fat & SNF values
+                        </label>
+                      </div>
+
+                      {useCommonQuality && (
+                        <div className="flex-1 grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Common Fat (%)
+                            </label>
+                            <input
+                              type="number"
+                              value={commonFat}
+                              onChange={(e) => handleCommonFatChange(e.target.value)}
+                              min="0"
+                              step="0.1"
+                              placeholder="e.g. 3.8"
+                              className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Common SNF (%)
+                            </label>
+                            <input
+                              type="number"
+                              value={commonSnf}
+                              onChange={(e) => handleCommonSnfChange(e.target.value)}
+                              min="0"
+                              step="0.1"
+                              placeholder="e.g. 8.5"
+                              className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {useCommonQuality && (
+                      <p className="mt-2 text-xs text-gray-600 flex items-center gap-1">
+                        <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                        These values will be applied to all entries automatically
+                      </p>
+                    )}
+                  </div>
+
                   {/* Header Row */}
                   <div className="grid grid-cols-12 gap-2 text-xs font-medium text-gray-700 px-2">
                     <div className="col-span-2">Cow *</div>
@@ -3010,19 +3240,21 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                   {entries.map((entry) => (
                     <div key={entry.id} className="grid grid-cols-12 gap-2 items-start p-3 bg-gray-50 rounded-lg border border-gray-200">
                       <div className="col-span-2">
-                        <select
+                        <SearchableSelect
                           value={entry.cowId}
-                          onChange={(e) => handleEntryChange(entry.id, 'cowId', e.target.value)}
-                          required
-                          className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
-                        >
-                          <option value="">Select cow</option>
-                          {cows.filter(cow => ['Active'].includes(cow.status)).map(cow => (
-                            <option key={cow.id} value={cow.id}>
-                              {cow.name}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(value) => handleEntryChange(entry.id, 'cowId', value)}
+                          options={cows
+                            .filter(cow => ['Active'].includes(cow.status))
+                            .map(cow => ({
+                              value: cow.id,
+                              label: cow.name,
+                              subLabel: cow.tag_number ? `Tag: ${cow.tag_number}` : null,
+                              searchText: `${cow.name} ${cow.tag_number || ''}`
+                            }))}
+                          placeholder="Select cow"
+                          required={true}
+                          isLoading={isLoadingCows}
+                        />
                       </div>
 
                       <div className="col-span-2">
@@ -3080,7 +3312,8 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                           onChange={(e) => handleEntryChange(entry.id, 'fat', e.target.value)}
                           min="0"
                           step="0.1"
-                          className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                          disabled={useCommonQuality}
+                          className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                           placeholder="0.0"
                         />
                       </div>
@@ -3092,7 +3325,8 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                           onChange={(e) => handleEntryChange(entry.id, 'snf', e.target.value)}
                           min="0"
                           step="0.1"
-                          className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                          disabled={useCommonQuality}
+                          className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                           placeholder="0.0"
                         />
                       </div>

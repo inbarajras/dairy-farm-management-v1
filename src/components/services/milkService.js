@@ -396,9 +396,9 @@ export const getMilkProductionByCowId = async (cowId) => {
       .select('*')
       .eq('cow_id', cowId)
       .order('date', { ascending: false });
-    
+
     if (error) throw error;
-    
+
     return data.map(record => ({
       date: record.date,
       amount: parseFloat(record.amount),
@@ -408,6 +408,98 @@ export const getMilkProductionByCowId = async (cowId) => {
     }));
   } catch (error) {
     console.error('Error fetching cow milk production:', error);
+    throw error;
+  }
+};
+
+// Fetch milk production trends (dropping/improving cows)
+export const getMilkProductionTrends = async () => {
+  try {
+    // Get today and yesterday's dates
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    // Fetch today's and yesterday's milk production data
+    const { data: todayData, error: todayError } = await supabase
+      .from('milk_production')
+      .select(`
+        cow_id,
+        amount,
+        cows (
+          id,
+          name,
+          tag_number,
+          breed
+        )
+      `)
+      .eq('date', today);
+
+    if (todayError) throw todayError;
+
+    const { data: yesterdayData, error: yesterdayError } = await supabase
+      .from('milk_production')
+      .select('cow_id, amount')
+      .eq('date', yesterday);
+
+    if (yesterdayError) throw yesterdayError;
+
+    // Group by cow_id and sum amounts for each day
+    const todayTotals = {};
+    todayData.forEach(record => {
+      if (!todayTotals[record.cow_id]) {
+        todayTotals[record.cow_id] = {
+          cowId: record.cow_id,
+          cowName: record.cows?.name || 'Unknown',
+          cowTagNumber: record.cows?.tag_number || 'Unknown',
+          cowBreed: record.cows?.breed || 'Unknown',
+          todayAmount: 0
+        };
+      }
+      todayTotals[record.cow_id].todayAmount += parseFloat(record.amount || 0);
+    });
+
+    const yesterdayTotals = {};
+    yesterdayData.forEach(record => {
+      if (!yesterdayTotals[record.cow_id]) {
+        yesterdayTotals[record.cow_id] = 0;
+      }
+      yesterdayTotals[record.cow_id] += parseFloat(record.amount || 0);
+    });
+
+    // Calculate trends
+    const trends = [];
+    Object.keys(todayTotals).forEach(cowId => {
+      const todayAmount = todayTotals[cowId].todayAmount;
+      const yesterdayAmount = yesterdayTotals[cowId] || 0;
+      const difference = todayAmount - yesterdayAmount;
+
+      // Only include cows that have yesterday's data for comparison
+      if (yesterdayAmount > 0) {
+        trends.push({
+          ...todayTotals[cowId],
+          yesterdayAmount,
+          difference,
+          percentageChange: ((difference / yesterdayAmount) * 100).toFixed(1)
+        });
+      }
+    });
+
+    // Separate into dropping and improving (±2L threshold)
+    const droppingCows = trends
+      .filter(cow => cow.difference <= -2)
+      .sort((a, b) => a.difference - b.difference); // Most drop first
+
+    const improvingCows = trends
+      .filter(cow => cow.difference >= 2)
+      .sort((a, b) => b.difference - a.difference); // Most improvement first
+
+    return {
+      droppingCows,
+      improvingCows,
+      allTrends: trends
+    };
+  } catch (error) {
+    console.error('Error fetching milk production trends:', error);
     throw error;
   }
 };
