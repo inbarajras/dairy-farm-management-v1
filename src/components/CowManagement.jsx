@@ -401,8 +401,11 @@ const CowManagement = () => {
 
       // Tab-specific filtering
       if (activeTab === 'milking') {
-        // Show only milking cows (Active or Dry status, excluding calves/heifers)
-        if (!['Active', 'Dry'].includes(cow.status)) return false;
+        // Show only milking cows (Active and not pregnant)
+        if (cow.status !== 'Active' || cow.isPregnant) return false;
+      } else if (activeTab === 'pregnant') {
+        // Show only pregnant cows
+        if (!cow.isPregnant) return false;
       } else if (activeTab === 'calves') {
         // Show only calves and heifers
         if (!['Calf', 'Heifer'].includes(cow.status)) return false;
@@ -450,8 +453,8 @@ const CowManagement = () => {
 
       return matchesSearch && matchesStatus && matchesHealthStatus && matchesBreed && matchesMilkingStatus;
     }).sort((a, b) => {
-      // Sort by purchase date (newest first) for milking and calves tabs
-      if (activeTab === 'milking' || activeTab === 'calves') {
+      // Sort by purchase date (newest first) for milking, pregnant and calves tabs
+      if (activeTab === 'milking' || activeTab === 'pregnant' || activeTab === 'calves') {
         const dateA = a.purchaseDate ? new Date(a.purchaseDate) : new Date(0);
         const dateB = b.purchaseDate ? new Date(b.purchaseDate) : new Date(0);
         return dateB - dateA; // Descending order (newest first)
@@ -536,7 +539,7 @@ const CowManagement = () => {
     console.log('Custom end:', customEndDate);
 
     const milkingCows = ensureValidCows(cows).filter(cow =>
-      ['Active', 'Dry'].includes(cow.status) &&
+      cow.status === 'Active' &&
       cow.milkProduction &&
       cow.milkProduction.length > 0
     );
@@ -1130,11 +1133,27 @@ const CowManagement = () => {
                 onClick={() => setActiveTab('milking')}
                 className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap transition-all duration-300 ${
                   activeTab === 'milking'
-                    ? 'border-green-600 text-green-600'
+                    ? 'border-blue-600 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                Active & Pregnant Cows
+                <div className="flex items-center gap-1">
+                  <Droplet size={16} />
+                  Milking Cows
+                </div>
+              </button>
+              <button
+                onClick={() => setActiveTab('pregnant')}
+                className={`py-4 px-2 font-medium text-sm border-b-2 -mb-px whitespace-nowrap transition-all duration-300 ${
+                  activeTab === 'pregnant'
+                    ? 'border-pink-600 text-pink-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center gap-1">
+                  <Heart size={16} />
+                  Pregnant Cows
+                </div>
               </button>
               <button
                 onClick={() => setActiveTab('breeding')}
@@ -1199,8 +1218,8 @@ const CowManagement = () => {
             </div>
           )}
 
-          {/* Search and Filters - Only show on milking and calves tabs */}
-          {(activeTab === 'milking' || activeTab === 'calves') && (
+          {/* Search and Filters - Only show on milking, pregnant and calves tabs */}
+          {(activeTab === 'milking' || activeTab === 'pregnant' || activeTab === 'calves') && (
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
             <div className="md:col-span-2">
               <div className="relative">
@@ -1567,8 +1586,8 @@ const CowManagement = () => {
             </div>
           )}
 
-          {/* Milking Cows Tab and Calves Tab */}
-          {(activeTab === 'milking' || activeTab === 'calves') && (
+          {/* Milking Cows Tab, Pregnant Cows Tab and Calves Tab */}
+          {(activeTab === 'milking' || activeTab === 'pregnant' || activeTab === 'calves') && (
           <>
           <div className="flex justify-between items-center mb-4">
             <div className="text-sm text-gray-600">

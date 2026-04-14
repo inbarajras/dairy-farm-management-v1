@@ -615,12 +615,51 @@ export const fetchInventoryUsage = async (filters = {}) => {
       `)
       .order('usage_date', { ascending: false });
 
-    if (filters.startDate) {
-      query = query.gte('usage_date', filters.startDate);
-    }
+    // Calculate date range if dateRange is provided
+    if (filters.dateRange) {
+      const today = new Date().toISOString().split('T')[0];
+      let startDate;
 
-    if (filters.endDate) {
-      query = query.lte('usage_date', filters.endDate);
+      switch (filters.dateRange) {
+        case 'week':
+          const sevenDaysAgo = new Date();
+          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+          startDate = sevenDaysAgo.toISOString().split('T')[0];
+          break;
+        case 'month':
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          startDate = thirtyDaysAgo.toISOString().split('T')[0];
+          break;
+        case 'quarter':
+          const ninetyDaysAgo = new Date();
+          ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+          startDate = ninetyDaysAgo.toISOString().split('T')[0];
+          break;
+        case 'year':
+          const oneYearAgo = new Date();
+          oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+          startDate = oneYearAgo.toISOString().split('T')[0];
+          break;
+        case 'all':
+          startDate = '2000-01-01';
+          break;
+        default:
+          const defaultDaysAgo = new Date();
+          defaultDaysAgo.setDate(defaultDaysAgo.getDate() - 30);
+          startDate = defaultDaysAgo.toISOString().split('T')[0];
+      }
+
+      query = query.gte('usage_date', startDate).lte('usage_date', today);
+    } else {
+      // Use explicit start and end dates if provided
+      if (filters.startDate) {
+        query = query.gte('usage_date', filters.startDate);
+      }
+
+      if (filters.endDate) {
+        query = query.lte('usage_date', filters.endDate);
+      }
     }
 
     if (filters.department && filters.department !== 'all') {
@@ -642,12 +681,41 @@ export const fetchInventoryUsage = async (filters = {}) => {
 };
 
 // Get daily usage summary
-export const getDailyUsageSummary = async (department = null) => {
+export const getDailyUsageSummary = async (department = null, dateRange = 'month') => {
   try {
     const today = new Date().toISOString().split('T')[0];
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const startDate = thirtyDaysAgo.toISOString().split('T')[0];
+    let startDate;
+
+    // Calculate start date based on date range
+    switch (dateRange) {
+      case 'week':
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        startDate = sevenDaysAgo.toISOString().split('T')[0];
+        break;
+      case 'month':
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        startDate = thirtyDaysAgo.toISOString().split('T')[0];
+        break;
+      case 'quarter':
+        const ninetyDaysAgo = new Date();
+        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+        startDate = ninetyDaysAgo.toISOString().split('T')[0];
+        break;
+      case 'year':
+        const oneYearAgo = new Date();
+        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+        startDate = oneYearAgo.toISOString().split('T')[0];
+        break;
+      case 'all':
+        startDate = '2000-01-01'; // Effectively all time
+        break;
+      default:
+        const defaultDaysAgo = new Date();
+        defaultDaysAgo.setDate(defaultDaysAgo.getDate() - 30);
+        startDate = defaultDaysAgo.toISOString().split('T')[0];
+    }
 
     let query = supabase
       .from('inventory_usage')

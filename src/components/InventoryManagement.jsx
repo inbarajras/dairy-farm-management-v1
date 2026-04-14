@@ -238,7 +238,7 @@ const InventoryManagement = () => {
     } else if (activeTab === 'usage') {
       fetchUsageData();
     }
-  }, [activeTab, activeDepartment]);
+  }, [activeTab, activeDepartment, dateRange]);
   
   // Fetch all inventory data and stats
   const fetchInventoryData = async () => {
@@ -765,8 +765,11 @@ const InventoryManagement = () => {
     try {
       setIsLoading(true);
       const [records, summary] = await Promise.all([
-        fetchInventoryUsage({ department: activeDepartment }),
-        getDailyUsageSummary(activeDepartment)
+        fetchInventoryUsage({
+          department: activeDepartment,
+          dateRange: dateRange
+        }),
+        getDailyUsageSummary(activeDepartment, dateRange)
       ]);
 
       setUsageData({
@@ -2210,6 +2213,59 @@ return (
                     </div>
                 </div>
 
+                {/* Date Range and Department Filters */}
+                <div className="mb-6 flex flex-wrap items-center gap-4 bg-white rounded-lg shadow-sm p-4 border border-gray-200">
+                    <div className="flex items-center gap-2">
+                    <Filter className="h-5 w-5 text-gray-500" />
+                    <span className="text-sm font-semibold text-gray-700">Filters:</span>
+                    </div>
+
+                    {/* Date Range Selector */}
+                    <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-600">Date Range:</label>
+                    <select
+                        value={dateRange}
+                        onChange={(e) => setDateRange(e.target.value)}
+                        className="appearance-none bg-white border border-gray-300 rounded-lg pl-3 pr-10 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200"
+                    >
+                        <option value="week">Last 7 Days</option>
+                        <option value="month">Last 30 Days</option>
+                        <option value="quarter">Last 90 Days</option>
+                        <option value="year">Last Year</option>
+                        <option value="all">All Time</option>
+                    </select>
+                    </div>
+
+                    {/* Department Filter */}
+                    <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-600">Department:</label>
+                    <select
+                        value={activeDepartment}
+                        onChange={(e) => setActiveDepartment(e.target.value)}
+                        className="appearance-none bg-white border border-gray-300 rounded-lg pl-3 pr-10 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-300 shadow-sm hover:shadow-md transition-all duration-200"
+                    >
+                        <option value="all">All Departments</option>
+                        <option value="feed">Feed</option>
+                        <option value="milking">Milking</option>
+                        <option value="equipment">Equipment</option>
+                        <option value="health">Health</option>
+                    </select>
+                    </div>
+
+                    {/* Reset Filters Button */}
+                    <button
+                    onClick={() => {
+                        setDateRange('month');
+                        setActiveDepartment('all');
+                        setSearchQuery('');
+                    }}
+                    className="ml-auto px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors duration-200 flex items-center gap-2"
+                    >
+                    <X size={16} />
+                    Reset Filters
+                    </button>
+                </div>
+
                 {/* Usage Charts */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
                     {/* Usage Trend Chart */}
@@ -2217,7 +2273,7 @@ return (
                     <div className="h-1 bg-gradient-to-r from-purple-400 to-blue-500"></div>
                     <div className="p-6">
                         <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-blue-600 mb-4">
-                        Daily Usage Trend (Last 30 Days)
+                        Daily Usage Trend ({dateRange === 'week' ? 'Last 7 Days' : dateRange === 'month' ? 'Last 30 Days' : dateRange === 'quarter' ? 'Last 90 Days' : dateRange === 'year' ? 'Last Year' : 'All Time'})
                         </h2>
                         <div className="h-60 sm:h-72 md:h-80">
                         <ResponsiveContainer width="100%" height="100%">
