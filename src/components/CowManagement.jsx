@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, Filter, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Calendar, Clock, Mail, Phone, MapPin, Users, Award, FileText, Briefcase, User,Download,DollarSign,Droplet,Thermometer, QrCode, Camera, Heart, Activity, AlertTriangle } from 'lucide-react';
 import { fetchCows, addCow, updateCow, deleteCow, recordHealthEvent, recordMilkProduction, recordBreedingEvent,
   fetchRecentActivity,fetchBreedingEvents,fetchHealthHistory,fetchReproductiveStatus,
-  fetchGrowthMilestones, recordGrowthMilestone
+  fetchGrowthMilestones, recordGrowthMilestone, calculatePregnancyMonths, getGestationProgress,
+  updateStaleStatuses, getBreedingMetrics, validateBreedingEvent
  } from './services/cowService';
 import { getMilkProductionTrends } from './services/milkService';
 import RecordGrowthMilestoneModal from './RecordGrowthMilestoneModal';
@@ -12,6 +13,7 @@ import NextMilestoneReminder from './NextMilestoneReminder';
 import CowQRCode from './CowQRCode';
 import QRScanner from './QRScanner';
 import DeliveryTracker from './DeliveryTracker';
+import HeatDetectionReminder from './HeatDetectionReminder';
 import cowSample from '../assets/images/cow.jpg';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area } from 'recharts';
 import { supabase } from '../lib/supabase';
@@ -176,6 +178,9 @@ const CowManagement = () => {
 
           setBreedingData(breedingDataMap);
           setReproductiveStatuses(reproductiveStatusMap);
+
+          // Update stale statuses (Fresh -> Open after 45 days)
+          await updateStaleStatuses(cows, reproductiveStatusMap);
         } catch (error) {
           console.error('Error loading breeding data:', error);
         }
@@ -910,33 +915,15 @@ const CowManagement = () => {
   const handleRecordBreedingEvent = async (cowId, eventData) => {
     try {
       setLoading(true);
-      const newEvent = await recordBreedingEvent(cowId, eventData);
+      const result = await recordBreedingEvent(cowId, eventData);
 
-      // If this is a pregnancy check with positive result, update cow pregnancy status
-      if (eventData.eventType === 'Pregnancy Check' &&
-          (eventData.result === 'Positive' || eventData.result === 'Confirmed')) {
-        const pregnancyDate = eventData.date;
-        const expectedDeliveryDate = new Date(pregnancyDate);
-        expectedDeliveryDate.setDate(expectedDeliveryDate.getDate() + 280); // 280 days gestation
-
-        // Update cow with pregnancy information
-        await updateCow(cowId, {
-          ...cows.find(c => c.id === cowId),
-          isPregnant: true,
-          pregnancyDate: pregnancyDate,
-          expectedDeliveryDate: expectedDeliveryDate.toISOString().split('T')[0]
-        });
+      // Handle warnings if any
+      if (result && result.warnings && result.warnings.length > 0) {
+        result.warnings.forEach(warning => toast.warning(warning));
       }
 
-      // If this is a calving event, mark pregnancy as complete
-      if (eventData.eventType === 'Calving') {
-        await updateCow(cowId, {
-          ...cows.find(c => c.id === cowId),
-          isPregnant: false,
-          pregnancyDate: null,
-          expectedDeliveryDate: null
-        });
-      }
+      // Note: Pregnancy status is now automatically updated in updateReproductiveStatus()
+      // and synced to cow table, so we don't need to manually update it here
 
       // Refresh cow data to get the latest breeding events and reproductive status
       await refreshCowData();
@@ -1853,16 +1840,25 @@ const CowManagement = () => {
             const today = new Date();
 
             // Calculate breeding statistics - merge cow pregnancy data with breeding events
+            // FIXED: Only consider cows where the MOST RECENT breeding event is Insemination (within 90 days)
             const inseminatedCows = cows.filter(cow => {
               if (cow.status === 'Calf' || cow.status === 'Sold' || cow.status === 'Deceased') return false;
               if (cow.isPregnant) return false; // Already pregnant
 
               const events = breedingData[cow.id] || [];
-              const lastInsemination = events.find(e =>
-                (e.event_type === 'Insemination' || e.event_type === 'Artificial Insemination' || e.event_type === 'Natural Breeding') &&
-                (new Date() - new Date(e.date)) / (1000 * 60 * 60 * 24) <= 90
-              );
-              return !!lastInsemination;
+              if (events.length === 0) return false;
+
+              // Events are already sorted by created_at (most recent first) from fetchBreedingEvents
+              const mostRecentEvent = events[0];
+
+              // Check if most recent event is insemination and within 90 days
+              const isInsemination = mostRecentEvent.event_type === 'Insemination' ||
+                                     mostRecentEvent.event_type === 'Artificial Insemination' ||
+                                     mostRecentEvent.event_type === 'Natural Breeding';
+
+              const daysSinceEvent = (new Date() - new Date(mostRecentEvent.date)) / (1000 * 60 * 60 * 24);
+
+              return isInsemination && daysSinceEvent <= 90;
             });
 
             const pregnantCows = cows.filter(cow =>
@@ -1952,6 +1948,14 @@ const CowManagement = () => {
                 </div>
               </div>
 
+              {/* Heat Detection Reminders */}
+              <HeatDetectionReminder
+                cows={cows}
+                reproductiveStatuses={reproductiveStatuses}
+                breedingData={breedingData}
+                onCowClick={(cow) => openCowProfile(cow, 'breeding')}
+              />
+
               {/* Filters */}
               <div className="mb-6 flex flex-wrap items-center gap-3">
                 <span className="text-sm font-semibold text-gray-700">Filter by:</span>
@@ -2018,30 +2022,48 @@ const CowManagement = () => {
                             return !cow.isPregnant;
                           } else if (filters.reproductiveStatus === 'Inseminated') {
                             const events = breedingData[cow.id] || [];
-                            const lastInsemination = events.find(e =>
-                              (e.event_type === 'Insemination' || e.event_type === 'Artificial Insemination' || e.event_type === 'Natural Breeding') &&
-                              (new Date() - new Date(e.date)) / (1000 * 60 * 60 * 24) <= 90
-                            );
-                            return !!lastInsemination && !cow.isPregnant;
+                            if (events.length === 0) return false;
+
+                            // Events are already sorted by created_at (most recent first) from fetchBreedingEvents
+                            const mostRecentEvent = events[0];
+
+                            // Check if most recent event is insemination and within 90 days
+                            const isInsemination = mostRecentEvent.event_type === 'Insemination' ||
+                                                   mostRecentEvent.event_type === 'Artificial Insemination' ||
+                                                   mostRecentEvent.event_type === 'Natural Breeding';
+
+                            const daysSinceEvent = (new Date() - new Date(mostRecentEvent.date)) / (1000 * 60 * 60 * 24);
+
+                            return isInsemination && daysSinceEvent <= 90 && !cow.isPregnant;
                           }
 
                           return true;
                         })
                         .map(cow => {
+                          // Use accurate pregnancy month calculation
                           const currentMonth = cow.isPregnant && cow.pregnancyDate
-                            ? Math.floor(Math.ceil((new Date() - new Date(cow.pregnancyDate)) / (1000 * 60 * 60 * 24)) / 30)
+                            ? calculatePregnancyMonths(cow.pregnancyDate)
                             : null;
 
-                          // Get last insemination event
+                          // Get days since insemination - ONLY if most recent event is insemination
                           const events = breedingData[cow.id] || [];
-                          const lastInsemination = events.find(e =>
-                            e.event_type === 'Insemination' ||
-                            e.event_type === 'Artificial Insemination' ||
-                            e.event_type === 'Natural Breeding'
-                          );
-                          const daysSinceInsemination = lastInsemination
-                            ? Math.floor((today - new Date(lastInsemination.date)) / (1000 * 60 * 60 * 24))
-                            : null;
+                          let daysSinceInsemination = null;
+
+                          if (events.length > 0) {
+                            // Events are already sorted by created_at (most recent first) from fetchBreedingEvents
+                            const mostRecentEvent = events[0];
+
+                            // Only show days if most recent event is insemination
+                            const isInsemination = mostRecentEvent.event_type === 'Insemination' ||
+                                                   mostRecentEvent.event_type === 'Artificial Insemination' ||
+                                                   mostRecentEvent.event_type === 'Natural Breeding';
+
+                            if (isInsemination) {
+                              daysSinceInsemination = Math.floor(
+                                (today - new Date(mostRecentEvent.date)) / (1000 * 60 * 60 * 24)
+                              );
+                            }
+                          }
 
                           return (
                           <tr
@@ -2093,13 +2115,19 @@ const CowManagement = () => {
                                   } else if (statusText === 'Bred' || statusText === 'Inseminated') {
                                     return (
                                       <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                                        {statusText}
+                                        Inseminated
                                       </span>
                                     );
-                                  } else if (statusText === 'Heat' || statusText === 'Estrus') {
+                                  } else if (statusText === 'In Heat' || statusText === 'Heat' || statusText === 'Estrus') {
                                     return (
                                       <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">
-                                        {statusText}
+                                        In Heat
+                                      </span>
+                                    );
+                                  } else if (statusText === 'Fresh') {
+                                    return (
+                                      <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">
+                                        Fresh
                                       </span>
                                     );
                                   } else if (statusText === 'Open') {
@@ -2123,7 +2151,28 @@ const CowManagement = () => {
                               {cow.pregnancyDate ? new Date(cow.pregnancyDate).toLocaleDateString() : '-'}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {currentMonth !== null ? `${currentMonth} months` : '-'}
+                              {currentMonth !== null ? (
+                                <div>
+                                  <div className="font-medium text-gray-900">{currentMonth} months</div>
+                                  {cow.pregnancyDate && (() => {
+                                    const gestationProgress = getGestationProgress(cow.pregnancyDate);
+                                    return gestationProgress ? (
+                                      <div className="mt-1">
+                                        <div className="flex justify-between text-xs text-gray-600 mb-1">
+                                          <span>{gestationProgress.days}d</span>
+                                          <span>{gestationProgress.percentage}%</span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                          <div
+                                            className="bg-gradient-to-r from-pink-500 to-purple-500 h-1.5 rounded-full transition-all"
+                                            style={{ width: `${gestationProgress.percentage}%` }}
+                                          />
+                                        </div>
+                                      </div>
+                                    ) : null;
+                                  })()}
+                                </div>
+                              ) : '-'}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               {cow.expectedDeliveryDate ? new Date(cow.expectedDeliveryDate).toLocaleDateString() : '-'}
@@ -6333,7 +6382,26 @@ const RecordBreedingEventModal = ({ cow, onClose, onSubmit }) => {
     notes: '',
     performedBy: ''
   });
-  
+  const [validationWarnings, setValidationWarnings] = useState([]);
+  const [validationErrors, setValidationErrors] = useState([]);
+
+  // Validate form when key fields change
+  useEffect(() => {
+    const validateForm = async () => {
+      if (formData.date && formData.eventType && formData.result) {
+        try {
+          const validation = await validateBreedingEvent(cow.id, formData);
+          setValidationErrors(validation.errors || []);
+          setValidationWarnings(validation.warnings || []);
+        } catch (error) {
+          console.error('Validation error:', error);
+        }
+      }
+    };
+
+    validateForm();
+  }, [formData.date, formData.eventType, formData.result, cow.id]);
+
   // Handle form field changes
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -6345,6 +6413,8 @@ const RecordBreedingEventModal = ({ cow, onClose, onSubmit }) => {
         [name]: value,
         result: '' // Reset result when event type changes
       });
+      setValidationWarnings([]);
+      setValidationErrors([]);
     } else {
       setFormData({
         ...formData,
@@ -6352,10 +6422,22 @@ const RecordBreedingEventModal = ({ cow, onClose, onSubmit }) => {
       });
     }
   };
-  
+
   // Handle form submission
   const handleSubmit = (e) => {
     e.preventDefault();
+
+    // Check for errors before submitting
+    if (validationErrors.length > 0) {
+      toast.error(validationErrors.join(' '));
+      return;
+    }
+
+    // Warn user if there are warnings
+    if (validationWarnings.length > 0) {
+      // Show warnings but allow submission
+      validationWarnings.forEach(warning => toast.warning(warning));
+    }
 
     // Create a new breeding event record
     const newEvent = {
@@ -6420,6 +6502,40 @@ const RecordBreedingEventModal = ({ cow, onClose, onSubmit }) => {
         
         <form onSubmit={handleSubmit}>
           <div className="px-6 py-4 space-y-4">
+            {/* Validation Alerts */}
+            {validationErrors.length > 0 && (
+              <div className="bg-red-50 border-l-4 border-red-500 p-3 rounded">
+                <div className="flex items-start">
+                  <AlertTriangle className="h-5 w-5 text-red-500 mr-2 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="text-sm font-semibold text-red-800 mb-1">Validation Errors</h4>
+                    <ul className="text-sm text-red-700 list-disc list-inside space-y-1">
+                      {validationErrors.map((error, index) => (
+                        <li key={index}>{error}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {validationWarnings.length > 0 && (
+              <div className="bg-yellow-50 border-l-4 border-yellow-500 p-3 rounded">
+                <div className="flex items-start">
+                  <AlertTriangle className="h-5 w-5 text-yellow-500 mr-2 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="text-sm font-semibold text-yellow-800 mb-1">Validation Warnings</h4>
+                    <ul className="text-sm text-yellow-700 list-disc list-inside space-y-1">
+                      {validationWarnings.map((warning, index) => (
+                        <li key={index}>{warning}</li>
+                      ))}
+                    </ul>
+                    <p className="text-xs text-yellow-600 mt-2">You can still submit, but please verify the information.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">

@@ -431,9 +431,99 @@ export const fetchCowMilkProduction = async (cowId) => {
     }
   };
 
+// Validate breeding event before recording
+export const validateBreedingEvent = async (cowId, formData) => {
+  const errors = [];
+  const warnings = [];
+
+  try {
+    // Fetch current cow data and breeding events
+    const { data: cowData, error: cowError } = await supabase
+      .from('cows')
+      .select('is_pregnant, expected_delivery_date, status')
+      .eq('id', cowId)
+      .single();
+
+    if (cowError) throw cowError;
+
+    const { data: events, error: eventsError } = await supabase
+      .from('breeding_events')
+      .select('*')
+      .eq('cow_id', cowId)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (eventsError) throw eventsError;
+
+    const lastEvent = events && events.length > 0 ? events[0] : null;
+
+    // Rule 1: Can't inseminate a pregnant cow
+    if (formData.eventType === EVENT_TYPES.INSEMINATION && cowData.is_pregnant) {
+      errors.push('Cannot inseminate a pregnant cow. Please confirm pregnancy status first.');
+    }
+
+    // Rule 2: Pregnancy check timing validation
+    if (formData.eventType === EVENT_TYPES.PREGNANCY_CHECK) {
+      const lastInsemination = events?.find(e =>
+        e.event_type === EVENT_TYPES.INSEMINATION &&
+        e.result === BREEDING_RESULTS.COMPLETED
+      );
+
+      if (lastInsemination) {
+        const daysSince = Math.floor((new Date(formData.date) - new Date(lastInsemination.date)) / (1000 * 60 * 60 * 24));
+        if (daysSince < 25) {
+          warnings.push(`Pregnancy check is ${daysSince} days after insemination. Recommended: 25-45 days for accuracy.`);
+        } else if (daysSince > 60) {
+          warnings.push(`Pregnancy check is ${daysSince} days after insemination. This is quite late - results should be obvious by now.`);
+        }
+      } else {
+        warnings.push('No recent insemination record found. Pregnancy check may be premature.');
+      }
+    }
+
+    // Rule 3: Can't record calving if not pregnant
+    if (formData.eventType === EVENT_TYPES.CALVING && !cowData.is_pregnant) {
+      errors.push('Cannot record calving for a cow that is not marked as pregnant.');
+    }
+
+    // Rule 4: Calving date validation
+    if (formData.eventType === EVENT_TYPES.CALVING && cowData.expected_delivery_date) {
+      const daysFromExpected = Math.floor((new Date(formData.date) - new Date(cowData.expected_delivery_date)) / (1000 * 60 * 60 * 24));
+      if (Math.abs(daysFromExpected) > 21) {
+        warnings.push(`Calving date is ${Math.abs(daysFromExpected)} days ${daysFromExpected > 0 ? 'after' : 'before'} expected delivery date. Please verify the date is correct.`);
+      }
+    }
+
+    // Rule 5: Event date cannot be in the future
+    if (new Date(formData.date) > new Date()) {
+      errors.push('Event date cannot be in the future.');
+    }
+
+    // Rule 6: Heat detection after recent insemination
+    if (formData.eventType === EVENT_TYPES.HEAT_DETECTION && lastEvent?.event_type === EVENT_TYPES.INSEMINATION) {
+      const daysSince = Math.floor((new Date(formData.date) - new Date(lastEvent.date)) / (1000 * 60 * 60 * 24));
+      if (daysSince < 18) {
+        warnings.push(`Heat detected only ${daysSince} days after insemination. This may indicate failed conception.`);
+      }
+    }
+
+    return { valid: errors.length === 0, errors, warnings };
+  } catch (error) {
+    console.error('Error validating breeding event:', error);
+    return { valid: false, errors: ['Validation failed: ' + error.message], warnings: [] };
+  }
+};
+
 // Record breeding event
 export const recordBreedingEvent = async (cowId, formData) => {
   try {
+    // Validate before recording
+    const validation = await validateBreedingEvent(cowId, formData);
+
+    if (!validation.valid) {
+      throw new Error(validation.errors.join(' '));
+    }
+
     // Insert the breeding event
     const breedingEvent = {
       cow_id: cowId,
@@ -444,18 +534,21 @@ export const recordBreedingEvent = async (cowId, formData) => {
       notes: formData.notes || null,
       performed_by: formData.performedBy || null
     };
-    
+
     const { data: respData, error: eventError } = await supabase
       .from('breeding_events')
       .insert(breedingEvent)
       .select();
-      
+
     if (eventError) throw eventError;
-    
+
     // After recording the breeding event, update the reproductive status based on all events
     await updateReproductiveStatus(cowId);
-    
-    return respData[0];
+
+    // Sync pregnancy status to cow table if needed
+    await syncPregnancyStatus(cowId);
+
+    return { event: respData[0], warnings: validation.warnings };
   } catch (error) {
     console.error('Error recording breeding event:', error);
     throw error;
@@ -465,12 +558,13 @@ export const recordBreedingEvent = async (cowId, formData) => {
 // Update reproductive status based on breeding events
 export const updateReproductiveStatus = async (cowId) => {
   try {
-    // Get all breeding events for this cow, sorted by date (newest first)
+    // Get all breeding events for this cow, sorted by created_at timestamp (newest first)
+    // This ensures correct ordering even if multiple events occur on the same date
     const { data: allEvents, error: eventsError } = await supabase
       .from('breeding_events')
       .select('*')
       .eq('cow_id', cowId)
-      .order('date', { ascending: false });
+      .order('created_at', { ascending: false });
       
     if (eventsError) throw eventsError;
     
@@ -500,80 +594,142 @@ export const updateReproductiveStatus = async (cowId) => {
       return;
     }
     
-    // Process events in chronological order (oldest to newest)
-    // This ensures that the final status reflects the most recent relevant event
-    const chronologicalEvents = [...allEvents].reverse();
-    
-    // Track important dates
-    let lastHeatDate = currentStatus?.last_heat_date || null;
+    // ===================================================================
+    // SIMPLIFIED LOGIC: Use the MOST RECENT event to determine status
+    // ===================================================================
+
+    const mostRecentEvent = allEvents[0]; // Already sorted by created_at DESC
+
+    console.log('[updateReproductiveStatus] Most recent event:', {
+      date: mostRecentEvent.date,
+      created_at: mostRecentEvent.created_at,
+      type: mostRecentEvent.event_type,
+      result: mostRecentEvent.result
+    });
+
+    // Track dates for calculations (scan all events for historical data)
+    let lastHeatDate = null;
     let lastInseminationDate = null;
-    let lastPregnancyCheckDate = null;
-    let lastCalvingDate = currentStatus?.last_calving_date || null;
-    let lastPregnancyCheckResult = null;
-    
-    // Track expected calving info
-    let expectedCalvingDate = null;
-    
-    // Process each event to build the most accurate reproductive status
-    chronologicalEvents.forEach(event => {
-      const eventDate = new Date(event.date);
-      
-      switch(event.event_type) {
-        case EVENT_TYPES.HEAT_DETECTION:
-          if (event.result === BREEDING_RESULTS.CONFIRMED) {
-            lastHeatDate = event.date;
-            // Only update status to "In Heat" if there's no more recent pregnancy confirmation
-            if (!lastPregnancyCheckResult || lastPregnancyCheckResult !== BREEDING_RESULTS.POSITIVE) {
-              updates.status = REPRODUCTIVE_STATUS.IN_HEAT;
-            }
-          }
-          break;
+    let lastCalvingDate = null;
+    let calvingCount = 0;
 
-        case EVENT_TYPES.INSEMINATION:
-          if (event.result === BREEDING_RESULTS.COMPLETED) {
-            lastInseminationDate = event.date;
-            // Only update to inseminated if there's no later pregnancy check
-            if (!lastPregnancyCheckDate || new Date(lastPregnancyCheckDate) < eventDate) {
-              updates.status = REPRODUCTIVE_STATUS.INSEMINATED;
-              updates.breeding_plan = 'Waiting for pregnancy check';
-            }
-          }
-          break;
-
-        case EVENT_TYPES.PREGNANCY_CHECK:
-          lastPregnancyCheckDate = event.date;
-          lastPregnancyCheckResult = event.result;
-
-          if (event.result === BREEDING_RESULTS.POSITIVE) {
-            updates.status = REPRODUCTIVE_STATUS.PREGNANT;
-            // Calculate expected calving date (approximately 280 days after last insemination)
-            if (lastInseminationDate) {
-              const dueDate = new Date(lastInseminationDate);
-              dueDate.setDate(dueDate.getDate() + COW_GESTATION_DAYS);
-              expectedCalvingDate = dueDate.toISOString().split('T')[0];
-              // Store this in breeding_plan since we don't have expected_calving_date column
-              updates.breeding_plan = `Due: ${expectedCalvingDate}`;
-            }
-          } else if (event.result === BREEDING_RESULTS.NEGATIVE) {
-            updates.status = REPRODUCTIVE_STATUS.OPEN;
-            updates.breeding_plan = 'Rebreeding needed';
-            expectedCalvingDate = null;
-          }
-          break;
-
-        case EVENT_TYPES.CALVING:
-          if (event.result === BREEDING_RESULTS.HEALTHY || event.result === BREEDING_RESULTS.COMPLICATIONS) {
-            lastCalvingDate = event.date;
-            updates.status = REPRODUCTIVE_STATUS.FRESH;
-            updates.last_calving_date = event.date;
-            updates.calving_count = (currentStatus?.calving_count || 0) + 1;
-            updates.breeding_plan = 'Post-calving rest';
-            expectedCalvingDate = null;
-          }
-          break;
+    // Scan all events to get important dates
+    allEvents.forEach(event => {
+      if ((event.event_type === 'Heat Detection' || event.event_type === 'HEAT_DETECTION') &&
+          event.result === BREEDING_RESULTS.CONFIRMED && !lastHeatDate) {
+        lastHeatDate = event.date;
+      }
+      if ((event.event_type === 'Insemination' || event.event_type === 'Artificial Insemination' || event.event_type === 'Natural Breeding') &&
+          event.result === BREEDING_RESULTS.COMPLETED && !lastInseminationDate) {
+        lastInseminationDate = event.date;
+      }
+      if (event.event_type === 'Calving' &&
+          (event.result === BREEDING_RESULTS.HEALTHY || event.result === BREEDING_RESULTS.COMPLICATIONS)) {
+        if (!lastCalvingDate) lastCalvingDate = event.date;
+        calvingCount++;
       }
     });
-    
+
+    // Prepare cow table updates
+    let cowTableUpdates = null;
+
+    // ===================================================================
+    // SET STATUS BASED ON MOST RECENT EVENT ONLY
+    // ===================================================================
+
+    const eventType = mostRecentEvent.event_type;
+    const eventResult = mostRecentEvent.result;
+
+    console.log('[updateReproductiveStatus] Checking event type:', {
+      eventType,
+      eventResult,
+      isHeatDetection: eventType === 'Heat Detection' || eventType === 'HEAT_DETECTION',
+      isInsemination: eventType === 'Insemination' || eventType === 'Artificial Insemination' || eventType === 'Natural Breeding',
+      isPregnancyCheck: eventType === 'Pregnancy Check' || eventType === 'PREGNANCY_CHECK',
+      isCalving: eventType === 'Calving' || eventType === 'CALVING'
+    });
+
+    // Heat Detection
+    if (eventType === 'Heat Detection' || eventType === 'HEAT_DETECTION') {
+      if (eventResult === BREEDING_RESULTS.CONFIRMED) {
+        updates.status = REPRODUCTIVE_STATUS.IN_HEAT;
+        updates.breeding_plan = 'Ready for breeding';
+        console.log('[updateReproductiveStatus] Status: IN HEAT (most recent event)');
+      }
+    }
+
+    // Insemination (any type)
+    else if (eventType === 'Insemination' || eventType === 'Artificial Insemination' || eventType === 'Natural Breeding') {
+      console.log('[updateReproductiveStatus] Insemination event detected, result:', eventResult, 'Expected:', BREEDING_RESULTS.COMPLETED);
+      if (eventResult === BREEDING_RESULTS.COMPLETED) {
+        updates.status = REPRODUCTIVE_STATUS.INSEMINATED;
+        updates.breeding_plan = 'Waiting for pregnancy check';
+        console.log('[updateReproductiveStatus] Status: INSEMINATED (most recent event)');
+      } else {
+        console.log('[updateReproductiveStatus] Result does not match COMPLETED, not setting to INSEMINATED');
+      }
+    }
+
+    // Pregnancy Check
+    else if (eventType === 'Pregnancy Check' || eventType === 'PREGNANCY_CHECK') {
+      if (eventResult === BREEDING_RESULTS.POSITIVE) {
+        updates.status = REPRODUCTIVE_STATUS.PREGNANT;
+
+        // Calculate expected calving date
+        if (lastInseminationDate) {
+          const dueDate = new Date(lastInseminationDate);
+          dueDate.setDate(dueDate.getDate() + COW_GESTATION_DAYS);
+          const expectedCalvingDate = dueDate.toISOString().split('T')[0];
+          updates.breeding_plan = `Due: ${expectedCalvingDate}`;
+
+          cowTableUpdates = {
+            is_pregnant: true,
+            pregnancy_date: lastInseminationDate,
+            expected_delivery_date: expectedCalvingDate
+          };
+        }
+        console.log('[updateReproductiveStatus] Status: PREGNANT (most recent event)');
+      }
+      else if (eventResult === BREEDING_RESULTS.NEGATIVE) {
+        updates.status = REPRODUCTIVE_STATUS.OPEN;
+        updates.breeding_plan = 'Rebreeding needed';
+
+        cowTableUpdates = {
+          is_pregnant: false,
+          pregnancy_date: null,
+          expected_delivery_date: null
+        };
+        console.log('[updateReproductiveStatus] Status: OPEN (negative pregnancy check)');
+      }
+    }
+
+    // Calving
+    else if (eventType === 'Calving' || eventType === 'CALVING') {
+      if (eventResult === BREEDING_RESULTS.HEALTHY || eventResult === BREEDING_RESULTS.COMPLICATIONS) {
+        updates.status = REPRODUCTIVE_STATUS.FRESH;
+        updates.last_calving_date = mostRecentEvent.date;
+        updates.calving_count = calvingCount;
+        updates.breeding_plan = 'Post-calving rest';
+
+        cowTableUpdates = {
+          is_pregnant: false,
+          pregnancy_date: null,
+          expected_delivery_date: null
+        };
+        console.log('[updateReproductiveStatus] Status: FRESH (most recent event)');
+      }
+    }
+
+    console.log(`[updateReproductiveStatus] FINAL STATUS: ${updates.status}`);
+
+    // Apply cow table updates if needed (after processing all events)
+    if (cowTableUpdates) {
+      await supabase
+        .from('cows')
+        .update(cowTableUpdates)
+        .eq('id', cowId);
+    }
+
     // Calculate next heat date if we have a last heat date and the cow is not pregnant
     if (lastHeatDate && updates.status !== REPRODUCTIVE_STATUS.PREGNANT) {
       const nextHeatDate = new Date(lastHeatDate);
@@ -678,8 +834,8 @@ export const fetchHealthHistory = async (cowId) => {
         .from('breeding_events')
         .select('*')
         .eq('cow_id', cowId)
-        .order('date', { ascending: false });
-        
+        .order('created_at', { ascending: false }); // Sort by timestamp, not just date
+
       if (error) throw error;
       return data;
     } catch (error) {
@@ -699,7 +855,8 @@ export const fetchHealthHistory = async (cowId) => {
 
       if (pregnantError) throw pregnantError;
 
-      // 2. Fetch pregnancy confirmations and inseminations from breeding events
+      // 2. Fetch pregnancy confirmations from breeding events
+      // ONLY fetch Pregnancy Check events with Positive result (confirmed pregnant cows)
       const { data: breedingEvents, error: breedingError } = await supabase
         .from('breeding_events')
         .select(`
@@ -715,24 +872,40 @@ export const fetchHealthHistory = async (cowId) => {
             breed
           )
         `)
-        .in('event_type', ['Pregnancy Check', 'Insemination'])
-        .in('result', ['Positive', 'Completed', 'Confirmed'])
-        .order('date', { ascending: false });
+        .eq('event_type', 'Pregnancy Check')
+        .eq('result', 'Positive')
+        .order('created_at', { ascending: false });
 
       if (breedingError) throw breedingError;
 
-      // Calculate expected delivery dates from breeding events (280 days from event date)
+      // For pregnancy check events, we need to find the insemination date to calculate due date
+      // Calculate expected delivery dates from breeding events (280 days from INSEMINATION date)
       const GESTATION_DAYS = 280;
-      const breedingDeliveries = (breedingEvents || []).map(event => {
-        const eventDate = new Date(event.date);
-        const expectedDate = new Date(eventDate);
-        expectedDate.setDate(expectedDate.getDate() + GESTATION_DAYS);
+      const breedingDeliveries = [];
 
-        return {
-          ...event,
-          expected_delivery_date: expectedDate.toISOString().split('T')[0]
-        };
-      });
+      for (const event of breedingEvents || []) {
+        // Find the most recent insemination before this pregnancy check
+        const { data: inseminationEvents } = await supabase
+          .from('breeding_events')
+          .select('date')
+          .eq('cow_id', event.cow_id)
+          .in('event_type', ['Insemination', 'Artificial Insemination', 'Natural Breeding'])
+          .eq('result', 'Completed')
+          .lte('date', event.date) // Before or on pregnancy check date
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (inseminationEvents && inseminationEvents.length > 0) {
+          const inseminationDate = new Date(inseminationEvents[0].date);
+          const expectedDate = new Date(inseminationDate);
+          expectedDate.setDate(expectedDate.getDate() + GESTATION_DAYS);
+
+          breedingDeliveries.push({
+            ...event,
+            expected_delivery_date: expectedDate.toISOString().split('T')[0]
+          });
+        }
+      }
 
       // 3. Merge cow table pregnancies with breeding events
       const expectedDeliveries = [];
@@ -788,7 +961,7 @@ export const fetchHealthHistory = async (cowId) => {
           )
         `)
         .eq('event_type', 'Calving')
-        .order('date', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (calvingError) throw calvingError;
 
@@ -878,16 +1051,16 @@ export const fetchHealthHistory = async (cowId) => {
         .from('milk_production')
         .select('id, date, amount')
         .eq('cow_id', cowId)
-        .order('date', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(5);
-      
+
       if (milkError) throw milkError;
-      
+
       const { data: breedingEvents, error: breedingError } = await supabase
         .from('breeding_events')
         .select('id, date, event_type, details')
         .eq('cow_id', cowId)
-        .order('date', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(5);
       
       if (breedingError) throw breedingError;
@@ -1092,5 +1265,215 @@ export const recordGrowthMilestone = async (cowId, milestoneData) => {
   } catch (error) {
     console.error('Error recording growth milestone:', error);
     throw error;
+  }
+};
+
+// Sync pregnancy status from breeding events to cow table
+export const syncPregnancyStatus = async (cowId) => {
+  try {
+    const status = await fetchReproductiveStatus(cowId);
+
+    // This function is called after updateReproductiveStatus,
+    // which already updates the cow table in the pregnancy check case
+    // So we only need to handle edge cases here
+
+    // Get the most recent breeding event to check current state
+    const { data: recentEvent } = await supabase
+      .from('breeding_events')
+      .select('*')
+      .eq('cow_id', cowId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    // Verify sync is correct
+    const { data: cowData } = await supabase
+      .from('cows')
+      .select('is_pregnant')
+      .eq('id', cowId)
+      .single();
+
+    const shouldBePregnant = status?.status === REPRODUCTIVE_STATUS.PREGNANT;
+
+    // Only update if out of sync
+    if (cowData && cowData.is_pregnant !== shouldBePregnant) {
+      console.log(`Syncing pregnancy status for cow ${cowId}: ${shouldBePregnant}`);
+      await supabase
+        .from('cows')
+        .update({ is_pregnant: shouldBePregnant })
+        .eq('id', cowId);
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error syncing pregnancy status:', error);
+    // Don't throw - this is a secondary operation
+    return false;
+  }
+};
+
+// Get breeding metrics for a cow
+export const getBreedingMetrics = async (cowId) => {
+  try {
+    const events = await fetchBreedingEvents(cowId);
+    const reproStatus = await fetchReproductiveStatus(cowId);
+
+    const { data: cowData } = await supabase
+      .from('cows')
+      .select('is_pregnant')
+      .eq('id', cowId)
+      .single();
+
+    // Calculate services per conception
+    const inseminations = events.filter(e =>
+      e.event_type === EVENT_TYPES.INSEMINATION &&
+      e.result === BREEDING_RESULTS.COMPLETED
+    );
+
+    const pregnancies = events.filter(e =>
+      e.event_type === EVENT_TYPES.PREGNANCY_CHECK &&
+      e.result === BREEDING_RESULTS.POSITIVE
+    );
+
+    const servicesPerConception = pregnancies.length > 0
+      ? inseminations.length / pregnancies.length
+      : inseminations.length > 0 ? inseminations.length : 0;
+
+    // Calculate days open (for non-pregnant cows)
+    let daysOpen = 0;
+    if (!cowData?.is_pregnant && reproStatus?.last_calving_date) {
+      daysOpen = Math.floor((new Date() - new Date(reproStatus.last_calving_date)) / (1000 * 60 * 60 * 24));
+    }
+
+    // Calculate calving interval
+    const calvingEvents = events
+      .filter(e => e.event_type === EVENT_TYPES.CALVING)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    let calvingInterval = null;
+    if (calvingEvents.length >= 2) {
+      calvingInterval = Math.floor(
+        (new Date(calvingEvents[0].date) - new Date(calvingEvents[1].date)) / (1000 * 60 * 60 * 24)
+      );
+    }
+
+    // Calculate conception rate
+    const conceptionRate = servicesPerConception > 0
+      ? ((1 / servicesPerConception) * 100).toFixed(1)
+      : pregnancies.length > 0 ? '100.0' : '0.0';
+
+    return {
+      servicesPerConception: servicesPerConception.toFixed(1),
+      daysOpen,
+      calvingInterval,
+      calvingCount: reproStatus?.calving_count || 0,
+      conceptionRate: parseFloat(conceptionRate),
+      totalInseminations: inseminations.length,
+      totalPregnancies: pregnancies.length,
+      totalCalvings: calvingEvents.length
+    };
+  } catch (error) {
+    console.error('Error calculating breeding metrics:', error);
+    return {
+      servicesPerConception: '0.0',
+      daysOpen: 0,
+      calvingInterval: null,
+      calvingCount: 0,
+      conceptionRate: 0,
+      totalInseminations: 0,
+      totalPregnancies: 0,
+      totalCalvings: 0
+    };
+  }
+};
+
+// Bulk record breeding event for multiple cows
+export const recordBulkBreedingEvent = async (cowIds, eventData) => {
+  try {
+    const events = cowIds.map(cowId => ({
+      cow_id: cowId,
+      date: eventData.date,
+      event_type: eventData.eventType,
+      details: eventData.details,
+      result: eventData.result,
+      notes: eventData.notes || null,
+      performed_by: eventData.performedBy || null
+    }));
+
+    const { data, error } = await supabase
+      .from('breeding_events')
+      .insert(events)
+      .select();
+
+    if (error) throw error;
+
+    // Update reproductive status for all cows in parallel
+    await Promise.all(cowIds.map(id => updateReproductiveStatus(id)));
+    await Promise.all(cowIds.map(id => syncPregnancyStatus(id)));
+
+    return data;
+  } catch (error) {
+    console.error('Error recording bulk breeding event:', error);
+    throw error;
+  }
+};
+
+// Calculate accurate pregnancy months
+export const calculatePregnancyMonths = (pregnancyDate) => {
+  if (!pregnancyDate) return null;
+
+  const start = new Date(pregnancyDate);
+  const now = new Date();
+
+  let months = (now.getFullYear() - start.getFullYear()) * 12;
+  months += now.getMonth() - start.getMonth();
+
+  // Adjust if day hasn't been reached yet this month
+  if (now.getDate() < start.getDate()) {
+    months--;
+  }
+
+  return Math.max(0, months);
+};
+
+// Get gestation progress information
+export const getGestationProgress = (pregnancyDate) => {
+  if (!pregnancyDate) return null;
+
+  const daysSince = Math.floor((new Date() - new Date(pregnancyDate)) / (1000 * 60 * 60 * 24));
+  const percentage = Math.min((daysSince / COW_GESTATION_DAYS) * 100, 100);
+  const months = Math.floor(daysSince / 30);
+
+  return {
+    months,
+    days: daysSince,
+    percentage: parseFloat(percentage.toFixed(1)),
+    remainingDays: Math.max(0, COW_GESTATION_DAYS - daysSince)
+  };
+};
+
+// Update stale reproductive statuses (Fresh -> Open after 45 days)
+export const updateStaleStatuses = async (cows, reproductiveStatuses) => {
+  try {
+    const staleCows = cows.filter(cow => {
+      const status = reproductiveStatuses[cow.id];
+      if (!status || status.status !== REPRODUCTIVE_STATUS.FRESH) return false;
+
+      const daysSinceCalving = Math.floor(
+        (new Date() - new Date(status.last_calving_date)) / (1000 * 60 * 60 * 24)
+      );
+
+      return daysSinceCalving > FRESH_COW_PERIOD_DAYS;
+    });
+
+    if (staleCows.length > 0) {
+      console.log(`Updating ${staleCows.length} stale Fresh statuses to Open`);
+      await Promise.all(staleCows.map(cow => updateReproductiveStatus(cow.id)));
+    }
+
+    return staleCows.length;
+  } catch (error) {
+    console.error('Error updating stale statuses:', error);
+    return 0;
   }
 };

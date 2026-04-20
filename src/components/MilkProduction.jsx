@@ -3143,11 +3143,22 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
     };
     
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
-        <div className="bg-white rounded-xl shadow-xl max-w-6xl w-full my-6 mx-auto max-h-[90vh] overflow-y-auto border border-gray-100">
-          <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 sticky top-0 z-10"></div>
-          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-1 bg-white z-10">
-            <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Record Milk Collections</h3>
+      <div
+        className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto"
+        onClick={(e) => {
+          if (e.target === e.currentTarget && !isSubmitting) onClose();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && !isSubmitting) onClose();
+        }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+      >
+        <div className="bg-white rounded-xl shadow-xl max-w-6xl w-full my-8 mx-auto flex flex-col max-h-[calc(100vh-4rem)] border border-gray-100">
+          <div className="h-1 bg-gradient-to-r from-green-400 to-blue-500 rounded-t-xl flex-shrink-0"></div>
+          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-white flex-shrink-0">
+            <h3 id="modal-title" className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Record Milk Collections</h3>
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-gray-500 transition-colors duration-200 flex-shrink-0"
@@ -3156,9 +3167,9 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
               <X size={20} />
             </button>
           </div>
-          
-          <form onSubmit={handleSubmit}>
-            <div className="px-6 py-4 space-y-4">
+
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
               {isLoadingCows ? (
                 <div className="py-4 text-center text-gray-500">Loading cows...</div>
               ) : (
@@ -3374,7 +3385,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
               )}
             </div>
 
-            <div className="flex items-center px-6 py-4 bg-gray-50">
+            <div className="flex items-center px-6 py-4 bg-gray-50 border-t border-gray-200 flex-shrink-0">
               <input
                 id="sendWhatsAppNotification"
                 name="sendWhatsAppNotification"
@@ -3388,7 +3399,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
               </label>
             </div>
 
-            <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap justify-between items-center gap-3 bg-gray-50 sticky bottom-0">
+            <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap justify-between items-center gap-3 bg-gray-50 flex-shrink-0 rounded-b-xl">
               <div className="text-sm text-gray-600">
                 Total entries: <span className="font-semibold text-green-600">{entries.filter(e => e.cowId && e.totalQuantity && parseFloat(e.totalQuantity) > 0).length}</span>
               </div>

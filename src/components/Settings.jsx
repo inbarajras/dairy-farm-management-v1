@@ -1429,11 +1429,22 @@ const AddUserModal = ({ onClose, onSubmit, isLoading }) => {
   };
   
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full my-8 mx-auto max-h-[90vh] overflow-y-auto">
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
-          <h3 className="text-lg font-medium text-gray-800">Add New User</h3>
-          <button 
+    <div
+      className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-start justify-center z-50 p-4 overflow-y-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isLoading) onClose();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && !isLoading) onClose();
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="add-user-modal-title"
+    >
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full my-8 mx-auto flex flex-col max-h-[calc(100vh-4rem)]">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-white flex-shrink-0">
+          <h3 id="add-user-modal-title" className="text-lg font-medium text-gray-800">Add New User</h3>
+          <button
             onClick={onClose}
             disabled={isLoading}
             className="text-gray-400 hover:text-gray-500"
@@ -1441,9 +1452,9 @@ const AddUserModal = ({ onClose, onSubmit, isLoading }) => {
             <X size={20} />
           </button>
         </div>
-        
-        <form onSubmit={handleSubmit}>
-          <div className="px-6 py-4 space-y-4">
+
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
