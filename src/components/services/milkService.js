@@ -1,61 +1,92 @@
 import { supabase } from '../../lib/supabase'
 
 // Fetch all milk collections with optional date range filtering
+// Uses pagination to fetch ALL records (bypassing Supabase's 1000 row default limit)
 export const fetchMilkCollections = async (startDate = null, endDate = null) => {
   try {
-    let query = supabase
-      .from('milk_production')
-      .select(`
-        id,
-        date,
-        amount,
-        shift,
-        quality,
-        notes,
-        created_at,
-        cow_id,
-        fat,
-        snf,
-        quality_grade,
-        cows (
+    console.log('Fetching milk collections with date range:', { startDate, endDate });
+
+    // For dashboard aggregation, we don't need individual records
+    // We can fetch aggregated data directly which will be much faster
+    // But for now, let's fetch all records with pagination
+
+    const allData = [];
+    const pageSize = 1000; // Supabase default max
+    let from = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      let query = supabase
+        .from('milk_production')
+        .select(`
           id,
-          name,
-          tag_number,
-          breed,
-          owner
-        )
-      `);
-    
-    // Filter by date range
-    if (startDate && endDate && startDate.split('T')[0] === endDate.split('T')[0]) {
-      // When it's "today", use direct equality for the specific date
-      const targetDate = startDate.split('T')[0];
-      query = query.eq('date', targetDate);
-    } else {
-      // When it's a range, use between
-      if (startDate) {
-        query = query.gte('date', startDate.split('T')[0]);
+          date,
+          amount,
+          shift,
+          quality,
+          notes,
+          created_at,
+          cow_id,
+          fat,
+          snf,
+          quality_grade,
+          cows (
+            id,
+            name,
+            tag_number,
+            breed,
+            owner
+          )
+        `, { count: 'exact' })  // Get total count
+        .range(from, from + pageSize - 1);  // Pagination
+
+      // Filter by date range
+      if (startDate && endDate && startDate.split('T')[0] === endDate.split('T')[0]) {
+        // When it's "today", use direct equality for the specific date
+        const targetDate = startDate.split('T')[0];
+        query = query.eq('date', targetDate);
+      } else {
+        // When it's a range, use between
+        if (startDate) {
+          query = query.gte('date', startDate.split('T')[0]);
+        }
+
+        if (endDate) {
+          query = query.lte('date', endDate.split('T')[0]);
+        }
       }
-      
-      if (endDate) {
-        query = query.lte('date', endDate.split('T')[0]);
+
+      // Add ordering
+      query = query.order('date', { ascending: false });
+
+      const { data, error, count } = await query;
+
+      if (error) throw error;
+
+      // Add fetched data to all data
+      if (data && data.length > 0) {
+        allData.push(...data);
+        console.log(`Fetched page: ${from} to ${from + data.length}, Total so far: ${allData.length}, Total in DB: ${count}`);
+      }
+
+      // Check if we need to fetch more
+      if (!data || data.length < pageSize) {
+        hasMore = false;
+      } else {
+        from += pageSize;
       }
     }
-    
-    // Then add ordering
-    query = query.order('date', { ascending: false });
-    
-    const { data, error } = await query;
-    
-    if (error) throw error;
-    
+
+    console.log(`✅ Finished fetching all milk collections: ${allData.length} total records`);
+
     // Check for empty data
-    if (!data || !Array.isArray(data)) {
+    if (!allData || allData.length === 0) {
+      console.warn('No milk production data found for the selected date range');
       return [];
     }
-    
+
     // Transform data to match the component's expected format
-    return data.map(collection => ({
+    return allData.map(collection => ({
       id: collection.id,
       date: collection.date,
       shift: collection.shift || 'Morning',
@@ -77,6 +108,77 @@ export const fetchMilkCollections = async (startDate = null, endDate = null) => 
     }));
   } catch (error) {
     console.error('Error fetching milk collections:', error);
+    throw error;
+  }
+};
+
+// Fetch aggregated daily milk production for dashboard (OPTIMIZED)
+// This is much faster than fetching all individual records
+export const fetchDailyAggregatedMilk = async (startDate = null, endDate = null) => {
+  try {
+    console.log('Fetching aggregated daily milk production:', { startDate, endDate });
+
+    // Use Supabase RPC function or direct aggregation
+    // Since Supabase doesn't support GROUP BY in select, we fetch and aggregate client-side
+    // But we only fetch date and amount, not all the cow details
+    let query = supabase
+      .from('milk_production')
+      .select('date, amount');
+
+    // Filter by date range
+    if (startDate && endDate && startDate.split('T')[0] === endDate.split('T')[0]) {
+      const targetDate = startDate.split('T')[0];
+      query = query.eq('date', targetDate);
+    } else {
+      if (startDate) {
+        query = query.gte('date', startDate.split('T')[0]);
+      }
+      if (endDate) {
+        query = query.lte('date', endDate.split('T')[0]);
+      }
+    }
+
+    // Fetch all pages
+    const allData = [];
+    const pageSize = 1000;
+    let from = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data, error } = await query.range(from, from + pageSize - 1);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        allData.push(...data);
+      }
+
+      if (!data || data.length < pageSize) {
+        hasMore = false;
+      } else {
+        from += pageSize;
+      }
+    }
+
+    console.log(`✅ Fetched ${allData.length} milk production records for aggregation`);
+
+    // Aggregate by date
+    const dailyTotals = {};
+    allData.forEach(record => {
+      const date = record.date;
+      if (!dailyTotals[date]) {
+        dailyTotals[date] = 0;
+      }
+      dailyTotals[date] += parseFloat(record.amount || 0);
+    });
+
+    // Convert to array format
+    return Object.keys(dailyTotals).map(date => ({
+      date: date,
+      totalQuantity: Math.round(dailyTotals[date] * 100) / 100
+    }));
+  } catch (error) {
+    console.error('Error fetching aggregated milk production:', error);
     throw error;
   }
 };

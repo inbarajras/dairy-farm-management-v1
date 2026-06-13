@@ -27,7 +27,7 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell,Area 
 } from 'recharts';
 import { fetchCows } from './services/cowService';
-import { fetchMilkCollections, fetchMonthlyTotals } from './services/milkService';
+import { fetchMilkCollections, fetchMonthlyTotals, fetchDailyAggregatedMilk } from './services/milkService';
 import { fetchHealthEvents, fetchOverdueVaccinations } from './services/healthService';
 import { fetchEmployees, getMonthlyAttendanceSummary } from './services/employeeService';
 import { fetchCurrentUser } from './services/userService';
@@ -467,8 +467,19 @@ const FarmDashboard = () => {
       // Calculate date range based on current selection
       const { startDate, endDate } = calculateDateRange();
 
-      // Get milk collections for the calculated date range
+      console.log('Fetching dashboard data with date range:', {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        dateRange: dateRange
+      });
+
+      // Get aggregated daily milk data for charts (OPTIMIZED - fetches ALL records)
+      const aggregatedMilkData = await fetchDailyAggregatedMilk(startDate.toISOString(), endDate.toISOString());
+      console.log(`✅ Fetched ${aggregatedMilkData.length} days of aggregated milk data`);
+
+      // Get recent individual milk collections for activities (limit to recent 100)
       const milkData = await fetchMilkCollections(startDate.toISOString(), endDate.toISOString());
+      console.log(`Fetched ${milkData.length} individual milk collection records for activities`);
 
       // Get health alerts (filter by date range)
       const healthEvents = await fetchHealthEvents();
@@ -487,28 +498,29 @@ const FarmDashboard = () => {
       const totalHealthAlerts = activeHealthAlerts + overdueVaccinations.length;
       console.log('Total health alerts:', totalHealthAlerts);
 
-      // Get financial data
-      const financialData = await getFinancialDashboardData();
+      // Get financial data filtered by date range
+      const financialData = await getFinancialDashboardData(startDate.toISOString(), endDate.toISOString());
+      console.log('Financial data for selected range:', {
+        revenue: financialData?.financialStats?.revenue?.current || 0,
+        expenses: financialData?.financialStats?.expenses?.current || 0
+      });
 
-      // Get employee data
+      // Get employee data (employees don't change by date range - they're current status)
       const employeesData = await fetchEmployees();
       const activeEmployees = employeesData.filter(emp => emp.status === 'Active').length;
 
-      // Process milk data into the format needed for charts
-      const processedMilkData = processMilkData(milkData, startDate, endDate, dateRange);
+      // Process milk data into the format needed for charts (using aggregated data)
+      const processedMilkData = processMilkData(aggregatedMilkData, startDate, endDate, dateRange);
 
       // Process health data
       const healthData = processHealthData(cowsData);
 
-      // Calculate total milk production for KPI (within date range)
-      const totalMilk = milkData.reduce((sum, record) => {
-        const recordDate = new Date(record.date);
-        // Only include records within the date range
-        if (recordDate >= startDate && recordDate <= endDate) {
-          return sum + parseFloat(record.totalQuantity || 0);
-        }
-        return sum;
+      // Calculate total milk production for KPI (from aggregated data - much faster!)
+      const totalMilk = aggregatedMilkData.reduce((sum, record) => {
+        return sum + parseFloat(record.totalQuantity || 0);
       }, 0);
+
+      console.log(`Total milk production in range: ${totalMilk.toFixed(2)}L`);
 
       // Calculate active tasks within date range
       const activeTasks = filteredHealthEvents.filter(event =>
@@ -541,13 +553,21 @@ const FarmDashboard = () => {
       const previousKpiData = await calculatePreviousPeriodData(currentKpiData);
 
       // Set dashboard data
-      setDashboardData({
+      const newDashboardData = {
         kpiData: currentKpiData,
         previousKpiData: previousKpiData,
         milkProductionData: processedMilkData,
         cowHealthData: healthData,
         recentActivities: recentActivities
+      };
+
+      console.log('Setting dashboard data:', {
+        milkProductionDataLength: processedMilkData.length,
+        milkProductionSample: processedMilkData.slice(0, 3),
+        totalMilk: currentKpiData.milkProduction
       });
+
+      setDashboardData(newDashboardData);
 
       setIsLoading(false);
       setIsRefreshing(false);
@@ -624,16 +644,24 @@ const FarmDashboard = () => {
   // Process milk data for charts
   const processMilkData = (milkData, startDate, endDate, currentDateRange) => {
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const dailyMap = {};
     const dateMap = {}; // Store actual dates to match records precisely
 
     // Calculate number of days in the range
     const daysDiff = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
 
+    console.log('Processing milk data:', {
+      totalRecords: milkData.length,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      daysDiff,
+      currentDateRange
+    });
+
     // Initialize all days with 0
-    for (let i = daysDiff - 1; i >= 0; i--) {
-      const date = new Date(endDate);
-      date.setDate(date.getDate() - i);
+    for (let i = 0; i < daysDiff; i++) {
+      const date = new Date(startDate);
+      date.setDate(startDate.getDate() + i);
+      date.setHours(0, 0, 0, 0);
 
       // Store unique date key in YYYY-MM-DD format for exact matching
       const dateKey = date.toISOString().split('T')[0];
@@ -648,26 +676,82 @@ const FarmDashboard = () => {
         label = days[date.getDay()];
       }
 
-      // Set initial values for both maps
-      dateMap[dateKey] = { label: label, production: 0 };
+      // Set initial values
+      dateMap[dateKey] = { label: label, production: 0, date: new Date(date) };
     }
 
+    console.log('Date map initialized with', Object.keys(dateMap).length, 'days');
+    console.log('Date map keys:', Object.keys(dateMap).sort());
+
     // Sum milk quantities by day using exact date matching
-    milkData.forEach(record => {
-      // Get date in YYYY-MM-DD format for exact matching
-      const dateKey = new Date(record.date).toISOString().split('T')[0];
+    let recordsProcessed = 0;
+    let recordsSkipped = 0;
+
+    milkData.forEach((record, index) => {
+      // Handle date string - could be 'YYYY-MM-DD' or full ISO string
+      let dateKey;
+      if (typeof record.date === 'string') {
+        // If already in YYYY-MM-DD format, use directly
+        dateKey = record.date.includes('T') ? record.date.split('T')[0] : record.date;
+      } else {
+        dateKey = new Date(record.date).toISOString().split('T')[0];
+      }
+
+      // Debug: log first 5 records
+      if (index < 5) {
+        console.log(`Record ${index}:`, {
+          originalDate: record.date,
+          dateKey: dateKey,
+          quantity: record.totalQuantity,
+          inRange: !!dateMap[dateKey]
+        });
+      }
 
       // Only add to the map if it's within our date range
       if (dateMap[dateKey]) {
-        dateMap[dateKey].production += parseFloat(record.totalQuantity || 0);
+        const quantity = parseFloat(record.totalQuantity || 0);
+        dateMap[dateKey].production += quantity;
+        recordsProcessed++;
+
+        // Log every 100th record to avoid console spam
+        if (recordsProcessed % 100 === 0) {
+          console.log(`Processed ${recordsProcessed} records. ${dateKey}: ${dateMap[dateKey].production}L total`);
+        }
+      } else {
+        recordsSkipped++;
+        if (recordsSkipped <= 3) {
+          console.log(`Skipping record - Date ${dateKey} not in range [${Object.keys(dateMap)[0]} to ${Object.keys(dateMap)[Object.keys(dateMap).length - 1]}]`);
+        }
       }
     });
 
-    // Convert to array format for chart
-    return Object.keys(dateMap).sort().map(dateKey => ({
-      day: dateMap[dateKey].label,
-      production: Math.round(dateMap[dateKey].production * 100) / 100 // Round to 2 decimals
-    }));
+    console.log(`Aggregation complete: ${recordsProcessed} records processed, ${recordsSkipped} skipped`);
+
+    // Convert to array format for chart and sort by date
+    const chartData = Object.keys(dateMap)
+      .sort()
+      .map(dateKey => ({
+        day: dateMap[dateKey].label,
+        production: Math.round(dateMap[dateKey].production * 100) / 100, // Round to 2 decimals
+        fullDate: dateKey
+      }));
+
+    console.log('Chart data prepared:', {
+      totalDays: chartData.length,
+      sample: chartData.slice(0, 3),
+      totalProduction: chartData.reduce((sum, d) => sum + d.production, 0),
+      maxProduction: Math.max(...chartData.map(d => d.production)),
+      daysWithData: chartData.filter(d => d.production > 0).length
+    });
+
+    // Validate data
+    if (chartData.length === 0) {
+      console.error('ERROR: Chart data is empty!');
+    } else if (chartData.every(d => d.production === 0)) {
+      console.warn('WARNING: All production values are 0!');
+    }
+
+    return chartData;
   };
   
   // Process health data for pie chart
@@ -853,17 +937,23 @@ const FarmDashboard = () => {
   };
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-blue-50/60 via-white to-green-50/70 overflow-hidden">
+    <div className="flex h-screen bg-gradient-to-br from-blue-50 via-gray-50 to-emerald-50 overflow-hidden relative">
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 left-0 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-emerald-400/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-purple-400/5 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
+      </div>
       {/* Loading Overlay for date range changes */}
       {isRefreshing && <LoadingSpinner message="Updating data..." />}
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden relative z-10">
       {/* Top Navigation */}
-        <header className="bg-white shadow-sm z-30 border-b border-gray-100 flex-shrink-0">
+        <header className="bg-white/80 backdrop-blur-md shadow-lg z-30 border-b border-gray-200/50 flex-shrink-0">
           <div className="flex items-center justify-between p-3 sm:p-4">
             <div className="flex items-center">
-              <h1 className="text-lg sm:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-600 via-emerald-500 to-blue-600 truncate">
+              <h1 className="text-lg sm:text-xl font-bold text-emerald-600 truncate">
                 Dairy Farm Dashboard
               </h1>
             </div>
@@ -929,10 +1019,10 @@ const FarmDashboard = () => {
         </header>
 
         {/* Dashboard Content */}
-        <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 bg-gradient-to-br from-blue-50/40 via-gray-50 to-green-50/30">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 lg:p-8 bg-transparent custom-scrollbar">
           {/* Date Range Selector */}
           <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <h2 className="text-xl sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-blue-700">Farm Overview</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-800">Farm Overview</h2>
             <div className="flex flex-wrap items-center gap-2">
               <StyledDropdown
                 value={dateRange}
@@ -948,12 +1038,12 @@ const FarmDashboard = () => {
             </div>
           </div>
           
-          {/* KPI Cards Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
+          {/* KPI Cards Row with modern grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 sm:gap-6 mb-8 sm:mb-10">
             <KpiCard
               title="Total Cows"
               value={dashboardData.kpiData.totalCows}
-              icon={<Clipboard className="text-green-600" />}
+              icon={<Clipboard />}
               subdivision={[
                 { label: 'Milking', value: dashboardData.kpiData.cowSubdivision.milking },
                 { label: 'Calves', value: dashboardData.kpiData.cowSubdivision.calves },
@@ -963,135 +1053,152 @@ const FarmDashboard = () => {
             <KpiCard
               title="Milk Production"
               value={`${dashboardData.kpiData.milkProduction}${DEFAULT_VALUES.kpi.volumeUnit}`}
-              icon={<Droplet className="text-blue-600" />}
+              icon={<Droplet />}
               trend={calculateKpiTrend(dashboardData.kpiData.milkProduction, dashboardData.previousKpiData.milkProduction, 'milkProduction')}
               positive={isTrendPositive('milkProduction', dashboardData.kpiData.milkProduction, dashboardData.previousKpiData.milkProduction)}
             />
             <KpiCard
               title="Health Alerts"
               value={dashboardData.kpiData.healthAlerts}
-              icon={<Thermometer className="text-red-500" />}
+              icon={<Thermometer />}
               trend={calculateKpiTrend(dashboardData.kpiData.healthAlerts, dashboardData.previousKpiData.healthAlerts, 'healthAlerts')}
               positive={isTrendPositive('healthAlerts', dashboardData.kpiData.healthAlerts, dashboardData.previousKpiData.healthAlerts)}
             />
             <KpiCard
               title="Active Employees"
               value={dashboardData.kpiData.activeEmployees}
-              icon={<Users className="text-purple-600" />}
+              icon={<Users />}
               subdivision={[
                 { label: 'Total', value: dashboardData.kpiData.totalEmployees }
               ]}
             />
             <KpiCard
-              title="Revenue (MTD)"
+              title="Revenue"
               value={`${DEFAULT_VALUES.kpi.currencySymbol}${Math.round(dashboardData.kpiData.revenue).toLocaleString()}`}
-              icon={<DollarSign className="text-green-700" />}
+              icon={<DollarSign />}
               trend={calculateKpiTrend(dashboardData.kpiData.revenue, dashboardData.previousKpiData.revenue, 'revenue')}
               positive={isTrendPositive('revenue', dashboardData.kpiData.revenue, dashboardData.previousKpiData.revenue)}
             />
             <KpiCard
-              title="Expenses (MTD)"
+              title="Expenses"
               value={`${DEFAULT_VALUES.kpi.currencySymbol}${Math.round(dashboardData.kpiData.expenses).toLocaleString()}`}
-              icon={<DollarSign className="text-red-600" />}
+              icon={<DollarSign />}
               trend={calculateKpiTrend(dashboardData.kpiData.expenses, dashboardData.previousKpiData.expenses, 'expenses')}
               positive={isTrendPositive('expenses', dashboardData.kpiData.expenses, dashboardData.previousKpiData.expenses)}
             />
           </div>
 
-          {/* Charts Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* Charts Section with enhanced grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 mb-8 sm:mb-10">
             {/* Milk Production Chart */}
             <div className="col-span-2">
               <ChartCard
                 title="Milk Production"
               >
                 <div className="h-80">
+                  {/* Debug: Log chart data */}
+                  {console.log('Rendering chart with data:', {
+                    dataLength: dashboardData.milkProductionData.length,
+                    firstItem: dashboardData.milkProductionData[0],
+                    lastItem: dashboardData.milkProductionData[dashboardData.milkProductionData.length - 1]
+                  })}
+
                   <ResponsiveContainer width="100%" height="100%">
                   <LineChart
                     data={dashboardData.milkProductionData}
-                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                    margin={{ top: 10, right: 30, left: 0, bottom: 5 }}
                   >
                     <defs>
-                      <linearGradient id="greenGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={CHART_COLORS.trends.positive} stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor={CHART_COLORS.trends.positive} stopOpacity={0.2}/>
-                      </linearGradient>
-                      <linearGradient id="redGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={CHART_COLORS.trends.negative} stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor={CHART_COLORS.trends.negative} stopOpacity={0.2}/>
+                      <linearGradient id="productionGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.4}/>
+                        <stop offset="50%" stopColor="#06b6d4" stopOpacity={0.2}/>
+                        <stop offset="100%" stopColor="#10b981" stopOpacity={0.1}/>
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke={DEFAULT_VALUES.chart.colors.gridStroke} />
-                    <XAxis dataKey="day" stroke={DEFAULT_VALUES.chart.colors.axisStroke} />
-                    <YAxis stroke={DEFAULT_VALUES.chart.colors.axisStroke} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
+                    <XAxis
+                      dataKey="day"
+                      stroke="#6b7280"
+                      style={{ fontSize: '12px', fontWeight: '500' }}
+                      tick={{ fill: '#6b7280' }}
+                    />
+                    <YAxis
+                      stroke="#6b7280"
+                      style={{ fontSize: '12px', fontWeight: '500' }}
+                      tick={{ fill: '#6b7280' }}
+                    />
                     <Tooltip
                       contentStyle={{
-                        background: 'rgba(255, 255, 255, 0.95)',
-                        border: '1px solid #f1f1f1',
-                        borderRadius: '8px',
-                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                        background: 'rgba(255, 255, 255, 0.98)',
+                        border: 'none',
+                        borderRadius: '12px',
+                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                        padding: '12px 16px'
                       }}
-                      formatter={(value) => [`${value}${DEFAULT_VALUES.kpi.volumeUnit}`, DEFAULT_VALUES.ui.labels.production]}
+                      formatter={(value) => [`${value}${DEFAULT_VALUES.kpi.volumeUnit}`, 'Production']}
+                      labelStyle={{ fontWeight: '600', color: '#1f2937', marginBottom: '4px' }}
                     />
-                    <Legend />
+                    <Legend
+                      wrapperStyle={{ paddingTop: '20px' }}
+                      iconType="circle"
+                    />
 
-                    {/* Custom area with conditional coloring */}
-                    {dashboardData.milkProductionData.map((entry, index) => {
-                      if (index === 0) return null; // Skip first point for comparing
+                    {/* Enhanced Area Chart */}
+                    <Area
+                      type="monotone"
+                      dataKey="production"
+                      stroke="#3b82f6"
+                      strokeWidth={3}
+                      fill="url(#productionGradient)"
+                      fillOpacity={1}
+                      animationDuration={1000}
+                      animationEasing="ease-in-out"
+                    />
 
-                      const prevValue = dashboardData.milkProductionData[index - 1].production;
-                      const currentValue = entry.production;
-                      const isIncreasing = currentValue >= prevValue;
-
-                      return (
-                        <Area
-                          key={`area-${index}`}
-                          type="monotone"
-                          dataKey="production"
-                          stroke={isIncreasing ? CHART_COLORS.trends.positive : CHART_COLORS.trends.negative}
-                          strokeWidth={3}
-                          fillOpacity={0.3}
-                          fill={isIncreasing ? "url(#greenGradient)" : "url(#redGradient)"}
-                          activeDot={{ r: 6, strokeWidth: 0 }}
-                          // Only show this segment between the current points
-                          baseValue={0}
-                          data={[dashboardData.milkProductionData[index - 1], entry]}
-                        />
-                      );
-                    })}
-
-                    {/* Use a line for points and connections */}
+                    {/* Enhanced Line with gradient effect */}
                     <Line
                       type="monotone"
                       dataKey="production"
-                      stroke={isTrendingUp(dashboardData.milkProductionData) ? CHART_COLORS.trends.positive : CHART_COLORS.trends.negative}
+                      stroke="#2563eb"
                       strokeWidth={3}
-                      dot={(props) => <CustomizedDot {...props} data={dashboardData.milkProductionData} />}
-                      activeDot={{ r: 7, strokeWidth: 0, fill: isTrendingUp(dashboardData.milkProductionData) ? CHART_COLORS.trends.positive : CHART_COLORS.trends.negative }}
-                      fillOpacity={1}
-                      fill={`url(#${isTrendingUp(dashboardData.milkProductionData) ? 'greenGradient' : 'redGradient'})`}
+                      dot={{
+                        fill: '#fff',
+                        stroke: '#2563eb',
+                        strokeWidth: 3,
+                        r: 5,
+                        style: { filter: 'drop-shadow(0px 2px 4px rgba(37, 99, 235, 0.3))' }
+                      }}
+                      activeDot={{
+                        r: 7,
+                        fill: '#2563eb',
+                        stroke: '#fff',
+                        strokeWidth: 3,
+                        style: { filter: 'drop-shadow(0px 4px 8px rgba(37, 99, 235, 0.5))' }
+                      }}
+                      animationDuration={1000}
+                      animationEasing="ease-in-out"
                     />
                   </LineChart>
                   </ResponsiveContainer>
                 </div>
 
-                {/* Add a milk production summary below the chart */}
-                <div className="grid grid-cols-3 gap-3 mt-4">
-                  <div className="text-center p-2 rounded-lg bg-gradient-to-b from-blue-50 to-blue-100 border border-blue-200">
-                    <p className="text-xs text-gray-500">{DEFAULT_VALUES.ui.labels.average}</p>
-                    <p className="text-lg font-bold text-blue-600">
+                {/* Enhanced summary cards */}
+                <div className="grid grid-cols-3 gap-4 mt-6">
+                  <div className="text-center p-4 rounded-xl bg-blue-50 border border-blue-200 hover:shadow-lg transition-all duration-300 hover:scale-105">
+                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">{DEFAULT_VALUES.ui.labels.average}</p>
+                    <p className="text-2xl font-bold text-blue-600">
                       {calculateMilkAverage(dashboardData.milkProductionData)}{DEFAULT_VALUES.kpi.volumeUnit}
                     </p>
                   </div>
-                  <div className="text-center p-2 rounded-lg bg-gradient-to-b from-green-50 to-green-100 border border-green-200">
-                    <p className="text-xs text-gray-500">{DEFAULT_VALUES.ui.labels.highest}</p>
-                    <p className="text-lg font-bold text-green-600">
+                  <div className="text-center p-4 rounded-xl bg-emerald-50 border border-emerald-200 hover:shadow-lg transition-all duration-300 hover:scale-105">
+                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">{DEFAULT_VALUES.ui.labels.highest}</p>
+                    <p className="text-2xl font-bold text-emerald-600">
                       {calculateMilkHighest(dashboardData.milkProductionData)}{DEFAULT_VALUES.kpi.volumeUnit}
                     </p>
                   </div>
-                  <div className="text-center p-2 rounded-lg bg-gradient-to-b from-purple-50 to-purple-100 border border-purple-200">
-                    <p className="text-xs text-gray-500">{DEFAULT_VALUES.ui.labels.total}</p>
-                    <p className="text-lg font-bold text-purple-600">
+                  <div className="text-center p-4 rounded-xl bg-purple-50 border border-purple-200 hover:shadow-lg transition-all duration-300 hover:scale-105">
+                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">{DEFAULT_VALUES.ui.labels.total}</p>
+                    <p className="text-2xl font-bold text-purple-600">
                       {calculateMilkTotal(dashboardData.milkProductionData)}{DEFAULT_VALUES.kpi.volumeUnit}
                     </p>
                   </div>
@@ -1102,72 +1209,100 @@ const FarmDashboard = () => {
             {/* Cow Health Distribution */}
             <div>
               <ChartCard title="Cow Health Status">
-                <div className="h-80">
+                <div className="h-80 flex items-center justify-center">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
+                      <defs>
+                        <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+                          <feDropShadow dx="0" dy="2" stdDeviation="4" floodOpacity="0.15"/>
+                        </filter>
+                      </defs>
                       <Pie
                         data={dashboardData.cowHealthData}
                         cx="50%"
-                        cy="50%"
+                        cy="45%"
                         labelLine={false}
-                        outerRadius={80}
-                        innerRadius={30}
-                        paddingAngle={5}
+                        outerRadius={90}
+                        innerRadius={50}
+                        paddingAngle={3}
                         dataKey="value"
-                        stroke={DEFAULT_VALUES.chart.colors.pieStroke}
-                        strokeWidth={2}
-                        label={({ name, value, percent }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
+                        stroke="#fff"
+                        strokeWidth={3}
+                        animationDuration={800}
+                        animationBegin={0}
+                        label={({ name, value, percent }) => {
+                          if (percent > 0.05) {
+                            return `${value}`;
+                          }
+                          return '';
+                        }}
+                        labelStyle={{
+                          fontSize: '14px',
+                          fontWeight: 'bold',
+                          fill: '#1f2937'
+                        }}
                       >
                         {dashboardData.cowHealthData.map((entry, index) => (
-                          <Cell 
-                            key={`cell-${index}`} 
-                            fill={entry.color} 
-                            style={{ filter: 'drop-shadow(0px 2px 3px rgba(0, 0, 0, 0.1))' }} 
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={entry.color}
+                            filter="url(#shadow)"
                           />
                         ))}
                       </Pie>
-                      <Tooltip 
-                        formatter={(value, name, props) => [`${value} cows`, name]}
-                        contentStyle={{ 
-                          background: 'rgba(255, 255, 255, 0.95)', 
-                          border: '1px solid #f1f1f1', 
-                          borderRadius: '8px',
-                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                      <Tooltip
+                        formatter={(value, name) => [`${value} cows`, name]}
+                        contentStyle={{
+                          background: 'rgba(255, 255, 255, 0.98)',
+                          border: 'none',
+                          borderRadius: '12px',
+                          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                          padding: '12px 16px'
                         }}
+                        labelStyle={{ fontWeight: '600', color: '#1f2937' }}
                       />
-                      <Legend 
-                        verticalAlign="bottom" 
-                        align="center" 
+                      <Legend
+                        verticalAlign="bottom"
+                        align="center"
                         layout="horizontal"
-                        formatter={(value, entry, index) => {
-                          return (
-                            <span style={{ color: '#4B5563', fontWeight: 500, marginLeft: '10px' }}>
-                              {value}
-                            </span>
-                          )
-                        }}
+                        iconType="circle"
+                        wrapperStyle={{ paddingTop: '15px' }}
+                        formatter={(value) => (
+                          <span style={{ color: '#6b7280', fontWeight: 500, fontSize: '13px' }}>
+                            {value}
+                          </span>
+                        )}
                       />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                
-                {/* Add a health status summary below the chart */}
-                <div className="grid grid-cols-3 gap-3 mt-4">
-                  <div className="text-center p-2 rounded-lg bg-gradient-to-b from-green-50 to-green-100 border border-green-200">
-                    <p className="text-xs text-gray-500">{DEFAULT_VALUES.ui.labels.healthy}</p>
-                    <p className="text-lg font-bold text-green-600">
+
+                {/* Enhanced health status summary */}
+                <div className="grid grid-cols-3 gap-4 mt-6">
+                  <div className="text-center p-4 rounded-xl bg-emerald-50 border border-emerald-200 hover:shadow-lg transition-all duration-300 hover:scale-105">
+                    <div className="flex items-center justify-center mb-2">
+                      <div className="w-3 h-3 rounded-full bg-emerald-500 mr-2"></div>
+                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{DEFAULT_VALUES.ui.labels.healthy}</p>
+                    </div>
+                    <p className="text-2xl font-bold text-emerald-600">
                       {dashboardData.cowHealthData.find(d => d.name === DEFAULT_VALUES.ui.labels.healthy)?.value || 0}
                     </p>
                   </div>
-                  <div className="text-center p-2 rounded-lg bg-gradient-to-b from-amber-50 to-amber-100 border border-amber-200">
-                    <p className="text-xs text-gray-500">{DEFAULT_VALUES.ui.labels.monitored}</p>
-                    <p className="text-lg font-bold text-amber-600">
+                  <div className="text-center p-4 rounded-xl bg-amber-50 border border-amber-200 hover:shadow-lg transition-all duration-300 hover:scale-105">
+                    <div className="flex items-center justify-center mb-2">
+                      <div className="w-3 h-3 rounded-full bg-amber-500 mr-2"></div>
+                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{DEFAULT_VALUES.ui.labels.monitored}</p>
+                    </div>
+                    <p className="text-2xl font-bold text-amber-600">
                       {dashboardData.cowHealthData.find(d => d.name === DEFAULT_VALUES.ui.labels.monitored)?.value || 0}
                     </p>
                   </div>
-                  <div className="text-center p-2 rounded-lg bg-gradient-to-b from-red-50 to-red-100 border border-red-200">
-                    <p className="text-xs text-gray-500">{DEFAULT_VALUES.ui.labels.treatment}</p>
-                    <p className="text-lg font-bold text-red-600">
+                  <div className="text-center p-4 rounded-xl bg-red-50 border border-red-200 hover:shadow-lg transition-all duration-300 hover:scale-105">
+                    <div className="flex items-center justify-center mb-2">
+                      <div className="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
+                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{DEFAULT_VALUES.ui.labels.treatment}</p>
+                    </div>
+                    <p className="text-2xl font-bold text-red-600">
                       {dashboardData.cowHealthData.find(d => d.name === DEFAULT_VALUES.ui.labels.treatment)?.value || 0}
                     </p>
                   </div>
@@ -1177,19 +1312,40 @@ const FarmDashboard = () => {
           </div>
 
           {/* Recent Activities and Weather */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
             {/* Recent Activities */}
-            <div className="bg-white rounded-xl shadow-md p-6 col-span-2 border border-gray-100">
+            <div className="
+              col-span-2
+              bg-white/80 backdrop-blur-md
+              rounded-2xl shadow-xl
+              p-6 sm:p-8
+              border border-gray-200/50
+              hover:shadow-2xl
+              transition-all duration-500
+            ">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600">Recent Activities</h2>
-                <button 
-                  className="px-3 py-1.5 text-sm font-medium text-white bg-gradient-to-r from-green-500 to-blue-500 rounded-lg hover:opacity-90 transition-opacity shadow-sm"
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-1.5 bg-emerald-500 rounded-full"></div>
+                  <h2 className="text-xl font-bold text-gray-800">
+                    Recent Activities
+                  </h2>
+                </div>
+                <button
+                  className="
+                    px-4 py-2 text-sm font-semibold text-white
+                    bg-emerald-500
+                    rounded-xl
+                    hover:bg-emerald-600
+                    transition-all duration-300
+                    shadow-lg hover:shadow-xl
+                    transform hover:scale-105
+                  "
                   onClick={() => setIsActivitiesModalOpen(true)}
                 >
                   {DEFAULT_VALUES.ui.labels.viewAll}
                 </button>
               </div>
-              <div className="space-y-1 rounded-lg overflow-hidden">
+              <div className="space-y-3">
                 {dashboardData.recentActivities.slice(0, 4).map((activity) => (
                   <ActivityItem key={activity.id} activity={activity} />
                 ))}
@@ -1273,7 +1429,7 @@ const NavItem = ({ icon, label, active = false, collapsed = false }) => {
   );
 };
 
-// Component for KPI card
+// Component for KPI card - restored to git version with working colors
 const KpiCard = ({ title, value, icon, trend, positive = true, subdivision }) => {
   // Determine icon background color based on title
   let iconBgColor = "bg-blue-100";
@@ -1291,9 +1447,15 @@ const KpiCard = ({ title, value, icon, trend, positive = true, subdivision }) =>
   } else if (title.toLowerCase().includes("revenue")) {
     iconBgColor = "bg-green-100";
     iconColor = "text-green-700";
+  } else if (title.toLowerCase().includes("expense")) {
+    iconBgColor = "bg-red-100";
+    iconColor = "text-red-600";
   } else if (title.toLowerCase().includes("cow")) {
     iconBgColor = "bg-green-100";
     iconColor = "text-green-600";
+  } else if (title.toLowerCase().includes("employee")) {
+    iconBgColor = "bg-purple-100";
+    iconColor = "text-purple-600";
   }
 
   // Determine value text color
@@ -1347,31 +1509,54 @@ const KpiCard = ({ title, value, icon, trend, positive = true, subdivision }) =>
   );
 };
 
-// Component for activity item
+// Component for activity item with modern design
 const ActivityItem = ({ activity }) => {
   const getActivityIcon = (type) => {
     switch (type) {
       case 'health':
-        return <Thermometer size={16} className="text-white" />;
+        return <Thermometer size={18} className="text-white" strokeWidth={2.5} />;
       case 'milk':
-        return <Droplet size={16} className="text-white" />;
+        return <Droplet size={18} className="text-white" strokeWidth={2.5} />;
       case 'employee':
-        return <Users size={16} className="text-white" />;
+        return <Users size={18} className="text-white" strokeWidth={2.5} />;
       case 'cow':
-        return <Clipboard size={16} className="text-white" />;
+        return <Clipboard size={18} className="text-white" strokeWidth={2.5} />;
       default:
-        return null;
+        return <Calendar size={18} className="text-white" strokeWidth={2.5} />;
     }
   };
 
   return (
-    <div className="flex items-start p-3 rounded-xl hover:bg-gray-50 transition-colors duration-200">
-      <div className={`p-2 rounded-full bg-gradient-to-r ${GRADIENT_CLASSES.activity[activity.type] || GRADIENT_CLASSES.activity.cow} mr-4 mt-1 shadow-sm`}>
+    <div className="
+      group
+      flex items-start
+      p-4 rounded-xl
+      bg-gradient-to-r from-white to-gray-50/50
+      hover:from-gray-50 hover:to-white
+      border border-gray-100
+      hover:border-gray-200
+      hover:shadow-md
+      transition-all duration-300
+      cursor-pointer
+    ">
+      <div className={`
+        p-2.5 rounded-xl
+        bg-gradient-to-br ${GRADIENT_CLASSES.activity[activity.type] || GRADIENT_CLASSES.activity.cow}
+        mr-4 mt-0.5
+        shadow-lg
+        group-hover:scale-110 group-hover:rotate-3
+        transition-transform duration-300
+      `}>
         {getActivityIcon(activity.type)}
       </div>
-      <div className="flex-1">
-        <p className="text-gray-800 font-medium">{activity.text}</p>
-        <p className="text-xs text-gray-500 mt-1">{activity.time}</p>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-gray-800 mb-1 line-clamp-2 group-hover:text-gray-900 transition-colors">
+          {activity.text}
+        </p>
+        <p className="text-xs text-gray-500 font-medium flex items-center gap-1">
+          <Clock size={12} className="opacity-70" />
+          <span>{activity.time}</span>
+        </p>
       </div>
     </div>
   );
@@ -1505,14 +1690,28 @@ const ProfileMenuItem = ({ icon, text }) => {
   );
 };
 
-// Styled Dropdown Component
+// Enhanced Styled Dropdown Component
 const StyledDropdown = ({ value, onChange, options }) => {
   return (
-    <div className="relative">
+    <div className="relative group">
       <select
         value={value}
         onChange={onChange}
-        className="appearance-none bg-white border border-gray-200 rounded-lg pl-3 pr-10 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-300 shadow-sm hover:shadow-md transition-all duration-200"
+        className="
+          appearance-none
+          bg-white/90 backdrop-blur-sm
+          border-2 border-gray-200
+          rounded-xl
+          pl-4 pr-10 py-2.5
+          text-sm font-semibold text-gray-700
+          focus:outline-none
+          focus:ring-2 focus:ring-emerald-500
+          focus:border-emerald-400
+          shadow-md hover:shadow-lg
+          transition-all duration-300
+          cursor-pointer
+          hover:border-emerald-300
+        "
       >
         {options.map(option => (
           <option key={option.value} value={option.value}>
@@ -1521,7 +1720,7 @@ const StyledDropdown = ({ value, onChange, options }) => {
         ))}
       </select>
       <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-        <ChevronDown size={16} className="text-gray-500" />
+        <ChevronDown size={18} className="text-gray-500 group-hover:text-emerald-500 transition-colors duration-300" />
       </div>
     </div>
   );
@@ -1800,55 +1999,107 @@ const WeatherConditions = ({ location }) => {
   };
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-cyan-600 mb-4">Weather Conditions</h2>
-      
-      {/* Current Weather Card with improved design */}
-      <div className={`bg-gradient-to-br ${getWeatherBackground()} p-5 rounded-xl border backdrop-blur-sm shadow-sm`}>
-        {/* Current Temperature Display */}
-        <div className="mb-4">
-          <div className="flex items-start">
-            <h3 className="text-4xl font-bold text-gray-800">{weatherData.temp}</h3>
-            <span className="text-xl text-gray-600 mt-1">°C</span>
+    <div className="space-y-5">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="h-8 w-1.5 bg-blue-500 rounded-full"></div>
+        <h2 className="text-xl font-bold text-gray-800">
+          Weather Conditions
+        </h2>
+      </div>
+
+      {/* Current Weather Card with modern glassmorphism */}
+      <div className={`
+        relative overflow-hidden
+        bg-gradient-to-br ${getWeatherBackground()}
+        p-6 rounded-2xl
+        border backdrop-blur-md
+        shadow-lg hover:shadow-xl
+        transition-all duration-500
+        group
+      `}>
+        {/* Animated background shimmer */}
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+
+        <div className="relative z-10">
+          {/* Main weather display */}
+          <div className="flex items-start justify-between mb-5">
+            <div>
+              <div className="flex items-baseline gap-1">
+                <h3 className="text-6xl font-bold text-gray-800 tabular-nums">{weatherData.temp}</h3>
+                <span className="text-3xl text-gray-600">°C</span>
+              </div>
+              <p className="text-sm text-gray-600 font-medium mt-2 capitalize">{weatherData.description}</p>
+              <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                {DEFAULT_VALUES.ui.labels.live}
+              </p>
+            </div>
+
+            {/* Weather icon with animation */}
+            <div className="transform group-hover:scale-110 group-hover:rotate-6 transition-all duration-300">
+              {getWeatherIcon(weatherData.icon)}
+            </div>
           </div>
-          <p className="text-sm text-gray-600 mt-1">{weatherData.description}</p>
-        </div>
-        
-        {/* Weather Details */}
-        <div className="grid grid-cols-3 gap-2 bg-white/40 rounded-lg p-3 backdrop-blur-sm">
-          <div className="text-center">
-            <p className="text-xs text-gray-500">{DEFAULT_VALUES.ui.labels.feelsLike}</p>
-            <p className="font-medium text-gray-700">{weatherData.feelsLike}°C</p>
-          </div>
-          <div className="text-center border-x border-gray-200">
-            <p className="text-xs text-gray-500">{DEFAULT_VALUES.ui.labels.humidity}</p>
-            <p className="font-medium text-gray-700">{weatherData.humidity}%</p>
-          </div>
-          <div className="text-center">
-            <p className="text-xs text-gray-500">{DEFAULT_VALUES.ui.labels.wind}</p>
-            <div className="flex items-center justify-center">
-              <Wind size={12} className="mr-1 text-gray-500" />
-              <p className="font-medium text-gray-700">{weatherData.windSpeed} km/h</p>
+
+          {/* Weather Details Grid */}
+          <div className="grid grid-cols-3 gap-3 bg-white/50 rounded-xl p-4 backdrop-blur-sm border border-white/30 shadow-inner">
+            <div className="text-center">
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-1">
+                {DEFAULT_VALUES.ui.labels.feelsLike}
+              </p>
+              <p className="text-lg font-bold text-gray-800">{weatherData.feelsLike}°C</p>
+            </div>
+            <div className="text-center border-x border-gray-200/50">
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-1">
+                {DEFAULT_VALUES.ui.labels.humidity}
+              </p>
+              <p className="text-lg font-bold text-gray-800">{weatherData.humidity}%</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-1">
+                {DEFAULT_VALUES.ui.labels.wind}
+              </p>
+              <div className="flex items-center justify-center gap-1">
+                <Wind size={14} className="text-gray-500" />
+                <p className="text-lg font-bold text-gray-800">{weatherData.windSpeed}</p>
+                <span className="text-xs text-gray-500">km/h</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
-      
-      {/* Weather Forecast */}
+
+      {/* Weather Forecast with modern cards */}
       {forecast.length > 0 && (
-        <div className="bg-white/40 rounded-xl p-3 backdrop-blur-sm border border-gray-100 shadow-sm">
-          <h3 className="text-sm font-medium text-gray-600 mb-3 px-1">{DEFAULT_VALUES.ui.labels.forecast}</h3>
-          <div className="overflow-x-auto">
-            <div className="flex justify-between min-w-[300px]">
-            {forecast.map((item, index) => (
-              <div key={index} className="text-center px-2">
-                <p className="text-xs text-gray-500">{item.date}</p>
-                <div className="my-1 flex justify-center">
-                  {getWeatherIcon(item.icon)}
+        <div className="bg-white/60 backdrop-blur-md rounded-2xl p-4 border border-gray-200/50 shadow-md">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4 px-2 uppercase tracking-wide flex items-center gap-2">
+            <Calendar size={16} className="text-blue-500" />
+            {DEFAULT_VALUES.ui.labels.forecast}
+          </h3>
+          <div className="overflow-x-auto scrollbar-hide">
+            <div className="flex gap-3 min-w-max pb-2">
+              {forecast.map((item, index) => (
+                <div
+                  key={index}
+                  className="
+                    flex-shrink-0
+                    bg-gradient-to-br from-white to-gray-50
+                    rounded-xl p-3
+                    border border-gray-200/50
+                    hover:shadow-lg hover:scale-105
+                    transition-all duration-300
+                    min-w-[80px]
+                    text-center
+                  "
+                >
+                  <p className="text-xs font-medium text-gray-500 mb-2">{item.date}</p>
+                  <div className="my-2 flex justify-center transform hover:scale-110 transition-transform">
+                    {getWeatherIcon(item.icon)}
+                  </div>
+                  <p className="text-base font-bold text-gray-800">{item.temp}°C</p>
+                  <p className="text-xs text-gray-500 mt-1 capitalize truncate">{item.condition}</p>
                 </div>
-                <p className="font-medium text-gray-700">{item.temp}°C</p>
-              </div>
-            ))}
+              ))}
             </div>
           </div>
         </div>
@@ -2064,12 +2315,32 @@ const AddTaskModal = ({ onClose }) => {
 
 const ChartCard = ({ title, children, periodSelector }) => {
   return (
-    <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100">
-      <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-blue-50">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold text-gray-800">
-            {title}
-          </h2>
+    <div className="
+      bg-white/80 backdrop-blur-md
+      rounded-2xl shadow-xl
+      overflow-hidden
+      border border-gray-200/50
+      hover:shadow-2xl
+      transition-all duration-500
+      group
+    ">
+      {/* Enhanced header with gradient */}
+      <div className="
+        px-6 py-5
+        bg-gradient-to-r from-emerald-50 via-blue-50 to-purple-50
+        border-b border-gray-200/50
+        relative overflow-hidden
+      ">
+        {/* Animated shimmer effect */}
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent transform -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-1.5 bg-blue-500 rounded-full"></div>
+            <h2 className="text-xl font-bold text-gray-800 tracking-tight">
+              {title}
+            </h2>
+          </div>
           {periodSelector && (
             <div className="flex-shrink-0">
               {periodSelector}
@@ -2077,7 +2348,9 @@ const ChartCard = ({ title, children, periodSelector }) => {
           )}
         </div>
       </div>
-      <div className="p-4 sm:p-6">
+
+      {/* Chart content area */}
+      <div className="p-6 sm:p-8 bg-gradient-to-br from-gray-50/50 to-white">
         <div className="overflow-x-auto">
           {children}
         </div>
