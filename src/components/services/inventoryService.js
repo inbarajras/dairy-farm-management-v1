@@ -731,7 +731,9 @@ export const getDailyUsageSummary = async (department = null, dateRange = 'month
         )
       `)
       .gte('usage_date', startDate)
-      .lte('usage_date', today);
+      .lte('usage_date', today)
+      .order('usage_date', { ascending: false })
+      .order('created_at', { ascending: false });
 
     if (department && department !== 'all') {
       query = query.eq('department', department);
@@ -810,7 +812,7 @@ export const getDailyUsageSummary = async (department = null, dateRange = 'month
       usageTrend,
       topUsageItems,
       usageByDepartment: Object.values(usageByDepartment),
-      recentUsage: data.slice(0, 10)
+      recentUsage: data // Return all records instead of just first 10
     };
   } catch (error) {
     console.error('Error fetching daily usage summary:', error);

@@ -1380,7 +1380,7 @@ const CowManagement = () => {
                         {productionTrends.droppingCows.length} cows
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mb-4">Cows with ≥2L decrease from yesterday</p>
+                    <p className="text-xs text-gray-500 mb-4">Cows with gradual decrease in production (3-day trend)</p>
 
                     <div className="space-y-3 max-h-80 overflow-y-auto">
                       {productionTrends.droppingCows.length > 0 ? (
@@ -1396,9 +1396,9 @@ const CowManagement = () => {
                             <div className="text-right">
                               <div className="flex items-center gap-2">
                                 <div className="text-sm">
-                                  <span className="text-gray-500">{cow.yesterdayAmount.toFixed(1)}L</span>
+                                  <span className="text-gray-500">{cow.previousAverage?.toFixed(1) || '0.0'}L</span>
                                   <span className="mx-1">→</span>
-                                  <span className="font-semibold text-gray-900">{cow.todayAmount.toFixed(1)}L</span>
+                                  <span className="font-semibold text-gray-900">{cow.recentAverage?.toFixed(1) || '0.0'}L</span>
                                 </div>
                               </div>
                               <div className="flex items-center justify-end gap-1 mt-1">
@@ -1442,7 +1442,7 @@ const CowManagement = () => {
                         {productionTrends.improvingCows.length} cows
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mb-4">Cows with ≥2L increase from yesterday</p>
+                    <p className="text-xs text-gray-500 mb-4">Cows with gradual increase in production (3-day trend)</p>
 
                     <div className="space-y-3 max-h-80 overflow-y-auto">
                       {productionTrends.improvingCows.length > 0 ? (
@@ -1458,9 +1458,9 @@ const CowManagement = () => {
                             <div className="text-right">
                               <div className="flex items-center gap-2">
                                 <div className="text-sm">
-                                  <span className="text-gray-500">{cow.yesterdayAmount.toFixed(1)}L</span>
+                                  <span className="text-gray-500">{cow.previousAverage?.toFixed(1) || '0.0'}L</span>
                                   <span className="mx-1">→</span>
-                                  <span className="font-semibold text-gray-900">{cow.todayAmount.toFixed(1)}L</span>
+                                  <span className="font-semibold text-gray-900">{cow.recentAverage?.toFixed(1) || '0.0'}L</span>
                                 </div>
                               </div>
                               <div className="flex items-center justify-end gap-1 mt-1">
@@ -2365,15 +2365,15 @@ const CowCard = ({ cow, onClick, onEdit, onDelete, checkCowMilkingStatus, hasPer
 
   return (
     <div
-      className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 cursor-pointer flex"
+      className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100 cursor-pointer flex flex-col h-96"
       onClick={onClick}
     >
-      {/* Left portion - Full height image */}
-      <div className="relative w-2/5 bg-gray-100">
+      {/* Top portion - Fixed height image container */}
+      <div className="relative h-48 flex-shrink-0 bg-gray-100 flex items-center justify-center">
         <img
           src={cow?.image || cow?.photo || cowSample}
           alt={cow?.name}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-contain"
           onError={(e) => { e.target.src = cowSample; }}
         />
 
@@ -2383,8 +2383,8 @@ const CowCard = ({ cow, onClick, onEdit, onDelete, checkCowMilkingStatus, hasPer
         </span>
       </div>
 
-      {/* Right portion - Content */}
-      <div className="flex-1 p-4 flex flex-col">
+      {/* Bottom portion - Content */}
+      <div className="flex-1 p-4 flex flex-col overflow-hidden">
         <div className="flex justify-between items-start mb-3">
           <div className="max-w-[70%]">
             <h3 className="text-lg font-semibold text-gray-800 bg-clip-text text-transparent bg-gradient-to-r from-green-600 to-blue-600 truncate">{cow?.name}</h3>

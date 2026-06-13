@@ -145,14 +145,15 @@ export const deleteHealthEvent = async (eventId) => {
   }
 };
 
-// Fetch all cows for dropdown selection
+// Fetch all cows for dropdown selection (exclude sold cows)
 export const fetchCowsForSelection = async () => {
   try {
     const { data, error } = await supabase
       .from('cows')
-      .select('id, name, tag_number, breed')
+      .select('id, name, tag_number, breed, status')
+      .neq('status', 'Sold')
       .order('name');
-    
+
     if (error) throw error;
     return data;
   } catch (error) {

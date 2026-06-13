@@ -982,38 +982,36 @@ const handleDeleteEvent = async () => {
             
             {/* Pagination */}
             {totalPages > 1 && (
-              <div className="flex justify-center mt-6">
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => setCurrentPage(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    className={`w-10 h-10 flex items-center justify-center rounded-md transition-all duration-300 ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 shadow'}`}
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
-                  
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                    <button
-                      key={page}
-                      onClick={() => setCurrentPage(page)}
-                      className={`w-10 h-10 flex items-center justify-center rounded-md transition-all duration-300 ${
-                        currentPage === page 
-                          ? 'bg-gradient-to-r from-green-500 to-blue-600 text-white shadow-md' 
-                          : 'bg-white text-gray-700 hover:bg-gray-50 shadow'
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  ))}
-                  
-                  <button
-                    onClick={() => setCurrentPage(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                    className={`w-10 h-10 flex items-center justify-center rounded-md transition-all duration-300 ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 shadow'}`}
-                  >
-                    <ChevronRight size={16} />
-                  </button>
+              <div className="flex justify-between items-center mt-6 px-4">
+                <button
+                  onClick={() => setCurrentPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className={`px-4 py-2 flex items-center gap-2 rounded-md transition-all duration-300 ${
+                    currentPage === 1
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'bg-white text-gray-700 hover:bg-gray-50 shadow hover:shadow-md'
+                  }`}
+                >
+                  <ChevronLeft size={18} />
+                  <span className="font-medium">Previous</span>
+                </button>
+
+                <div className="text-sm font-medium text-gray-700">
+                  Page <span className="text-green-600">{currentPage}</span> of <span className="text-gray-900">{totalPages}</span>
                 </div>
+
+                <button
+                  onClick={() => setCurrentPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className={`px-4 py-2 flex items-center gap-2 rounded-md transition-all duration-300 ${
+                    currentPage === totalPages
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'bg-white text-gray-700 hover:bg-gray-50 shadow hover:shadow-md'
+                  }`}
+                >
+                  <span className="font-medium">Next</span>
+                  <ChevronRight size={18} />
+                </button>
               </div>
             )}
           </div>

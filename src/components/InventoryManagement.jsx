@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { toast } from './utils/ToastContainer';
 import { 
   Plus, 
@@ -143,9 +143,12 @@ const InventoryManagement = () => {
   const [isPlaceOrderModalOpen, setIsPlaceOrderModalOpen] = useState(false);
   const [isOrderDetailsModalOpen, setIsOrderDetailsModalOpen] = useState(false);
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
+  const [isDeleteSupplierModalOpen, setIsDeleteSupplierModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
+  const [usageCurrentPage, setUsageCurrentPage] = useState(1);
+  const [usageItemsPerPage] = useState(10);
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [selectedSupplier, setSelectedSupplier] = useState(null);
@@ -910,7 +913,7 @@ const InventoryManagement = () => {
 const handleSupplierSubmit = async (supplierData) => {
   try {
     setIsLoading(true);
-    
+
     if (supplierData.id) {
       const { error } = await supabase
         .from('suppliers')
@@ -928,8 +931,9 @@ const handleSupplierSubmit = async (supplierData) => {
           notes: supplierData.notes
         })
         .eq('id', supplierData.id);
-      
+
       if (error) throw error;
+      toast.success('Supplier updated successfully');
     } else {
       // Add new supplier
       const { error } = await supabase
@@ -947,18 +951,49 @@ const handleSupplierSubmit = async (supplierData) => {
           payment_terms: supplierData.payment_terms,
           notes: supplierData.notes
         });
-      
+
       if (error) throw error;
+      toast.success('Supplier added successfully');
     }
-    
+
     // Refresh the suppliers list
     await fetchInventoryData();
-    
+
     setIsSupplierModalOpen(false);
     setIsLoading(false);
     return true;
   } catch (err) {
     setError(`Failed to ${supplierData.id ? 'update' : 'add'} supplier: ` + err.message);
+    toast.error(`Failed to ${supplierData.id ? 'update' : 'add'} supplier`);
+    setIsLoading(false);
+    return false;
+  }
+};
+
+// Handle supplier delete
+const handleDeleteSupplier = async () => {
+  if (!selectedSupplier) return false;
+
+  try {
+    setIsLoading(true);
+
+    const { error } = await supabase
+      .from('suppliers')
+      .delete()
+      .eq('id', selectedSupplier.id);
+
+    if (error) throw error;
+
+    toast.success('Supplier deleted successfully');
+    await fetchInventoryData();
+
+    setIsDeleteSupplierModalOpen(false);
+    setSelectedSupplier(null);
+    setIsLoading(false);
+    return true;
+  } catch (err) {
+    setError('Failed to delete supplier: ' + err.message);
+    toast.error('Failed to delete supplier');
     setIsLoading(false);
     return false;
   }
@@ -1980,15 +2015,24 @@ return (
                                     setActiveTab('orders');
                                     setSearchQuery(supplier.name);
                                 }}
-                                className="text-sm text-blue-600 hover:text-blue-900"
+                                className="text-sm text-blue-600 hover:text-blue-900 font-medium"
                                 >
                                 View Orders
                                 </button>
                                 <button
                                 onClick={() => toggleSupplierModal(supplier)}
-                                className="text-sm text-green-600 hover:text-green-900"
+                                className="text-sm text-green-600 hover:text-green-900 font-medium"
                                 >
                                 Edit
+                                </button>
+                                <button
+                                onClick={() => {
+                                    setSelectedSupplier(supplier);
+                                    setIsDeleteSupplierModalOpen(true);
+                                }}
+                                className="text-sm text-red-600 hover:text-red-900 font-medium"
+                                >
+                                Delete
                                 </button>
                             </div>
                             </div>
@@ -2381,7 +2425,12 @@ return (
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                         {usageData.summary.recentUsage && usageData.summary.recentUsage.length > 0 ? (
-                            usageData.summary.recentUsage.map((record, index) => (
+                            (() => {
+                              const indexOfLastUsage = usageCurrentPage * usageItemsPerPage;
+                              const indexOfFirstUsage = indexOfLastUsage - usageItemsPerPage;
+                              const currentUsageRecords = usageData.summary.recentUsage.slice(indexOfFirstUsage, indexOfLastUsage);
+                              return currentUsageRecords;
+                            })().map((record, index) => (
                             <tr key={index} className="hover:bg-gray-50 transition-colors duration-200">
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                 {formatDate(record.usage_date)}
@@ -2437,6 +2486,42 @@ return (
                         </tbody>
                     </table>
                     </div>
+
+                    {/* Pagination for Usage Records */}
+                    {usageData.summary.recentUsage && usageData.summary.recentUsage.length > usageItemsPerPage && (
+                    <div className="flex justify-between items-center px-6 py-4 border-t border-gray-200 bg-gray-50">
+                        <button
+                        onClick={() => setUsageCurrentPage(usageCurrentPage - 1)}
+                        disabled={usageCurrentPage === 1}
+                        className={`px-4 py-2 flex items-center gap-2 rounded-md transition-all duration-300 ${
+                            usageCurrentPage === 1
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-white text-gray-700 hover:bg-gray-50 shadow hover:shadow-md'
+                        }`}
+                        >
+                        <ChevronLeft size={18} />
+                        <span className="font-medium">Previous</span>
+                        </button>
+
+                        <div className="text-sm font-medium text-gray-700">
+                        Page <span className="text-purple-600">{usageCurrentPage}</span> of{' '}
+                        <span className="text-gray-900">{Math.ceil(usageData.summary.recentUsage.length / usageItemsPerPage)}</span>
+                        </div>
+
+                        <button
+                        onClick={() => setUsageCurrentPage(usageCurrentPage + 1)}
+                        disabled={usageCurrentPage === Math.ceil(usageData.summary.recentUsage.length / usageItemsPerPage)}
+                        className={`px-4 py-2 flex items-center gap-2 rounded-md transition-all duration-300 ${
+                            usageCurrentPage === Math.ceil(usageData.summary.recentUsage.length / usageItemsPerPage)
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-white text-gray-700 hover:bg-gray-50 shadow hover:shadow-md'
+                        }`}
+                        >
+                        <span className="font-medium">Next</span>
+                        <ChevronRight size={18} />
+                        </button>
+                    </div>
+                    )}
                 </div>
                 </div>
             )}
@@ -2508,6 +2593,37 @@ return (
                 onSubmit={handleSupplierSubmit}
                 isLoading={isLoading}
             />
+            )}
+
+            {/* Delete Supplier Modal */}
+            {isDeleteSupplierModalOpen && selectedSupplier && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+                <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Supplier</h3>
+                <p className="text-sm text-gray-600 mb-6">
+                    Are you sure you want to delete <span className="font-semibold">{selectedSupplier.name}</span>? This action cannot be undone.
+                </p>
+                <div className="flex justify-end gap-3">
+                    <button
+                    onClick={() => {
+                        setIsDeleteSupplierModalOpen(false);
+                        setSelectedSupplier(null);
+                    }}
+                    disabled={isLoading}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+                    >
+                    Cancel
+                    </button>
+                    <button
+                    onClick={handleDeleteSupplier}
+                    disabled={isLoading}
+                    className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                    >
+                    {isLoading ? 'Deleting...' : 'Delete'}
+                    </button>
+                </div>
+                </div>
+            </div>
             )}
 
             {/* Record Usage Modal */}
@@ -2834,6 +2950,7 @@ const AddItemModal = ({ onClose, onSubmit, isLoading, departments, activeDepartm
 
 const SupplierModal = ({ supplier, onClose, onSubmit, isLoading }) => {
   const [formData, setFormData] = useState({
+    id: supplier?.id || null,
     name: supplier?.name || '',
     contact_person: supplier?.contact_person || '',
     phone: supplier?.phone || '',
@@ -3053,7 +3170,7 @@ const PlaceOrderModal = ({
     const [formData, setFormData] = useState({
       supplier_id: '',
       supplier_name: '',
-      department: activeDepartment || 'feed',
+      department: (activeDepartment && activeDepartment !== 'all') ? activeDepartment : 'feed',
       expected_delivery: '',
       status: 'Pending',
       notes: '',
@@ -3151,8 +3268,37 @@ const PlaceOrderModal = ({
     };
     
     // Filter items by department
-    const filteredItems = inventoryItems.filter(item => item.department === formData.department);
-    
+    const filteredItems = useMemo(() => {
+      if (!inventoryItems || inventoryItems.length === 0) {
+        console.warn('[PlaceOrderModal] No inventory items available');
+        return [];
+      }
+
+      console.log('[PlaceOrderModal] Selected department:', formData.department);
+      console.log('[PlaceOrderModal] Total inventory items:', inventoryItems.length);
+      console.log('[PlaceOrderModal] First 3 items:', inventoryItems.slice(0, 3).map(item => ({
+        id: item.id,
+        name: item.name,
+        department: item.department,
+        category: item.category
+      })));
+
+      const filtered = inventoryItems.filter(item => {
+        const matches = item.department === formData.department;
+        if (!matches && inventoryItems.length < 10) {
+          console.log(`[PlaceOrderModal] Item "${item.name}" department "${item.department}" !== "${formData.department}"`);
+        }
+        return matches;
+      });
+
+      console.log('[PlaceOrderModal] Filtered items count:', filtered.length);
+      if (filtered.length > 0) {
+        console.log('[PlaceOrderModal] First filtered item:', filtered[0]);
+      }
+
+      return filtered;
+    }, [inventoryItems, formData.department]);
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 overflow-y-auto">
         <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl border border-gray-100 my-8 mx-auto max-h-[85vh] flex flex-col">
@@ -3240,13 +3386,23 @@ const PlaceOrderModal = ({
                           required
                           className="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-all"
                         >
-                          <option value="">Select an item</option>
+                          <option value="">
+                            {filteredItems.length === 0
+                              ? `No items available for ${formData.department} department`
+                              : 'Select an item'}
+                          </option>
                           {filteredItems.map(invItem => (
                             <option key={invItem.id} value={invItem.id}>
                               {invItem.name}
                             </option>
                           ))}
                         </select>
+                        {filteredItems.length === 0 && inventoryItems?.length > 0 && (
+                          <p className="text-xs text-amber-600 mt-1">
+                            💡 Total items: {inventoryItems.length} | Department: "{formData.department}" |
+                            Check console for details
+                          </p>
+                        )}
                       </div>
                       <div className="col-span-2">
                         <label className="block text-xs text-gray-500 mb-1">Quantity</label>

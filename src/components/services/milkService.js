@@ -515,18 +515,45 @@ export const getMilkProductionByCowId = async (cowId) => {
 };
 
 // Fetch milk production trends (dropping/improving cows)
+// Uses 3-day rolling average comparison to detect gradual trends
 export const getMilkProductionTrends = async () => {
   try {
-    // Get today and yesterday's dates
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    // Calculate date ranges for comparison
+    // Recent period: last 3 days (including today)
+    // Previous period: 3 days before the recent period (days 4-6 ago)
+    const today = new Date();
+    const dates = {
+      recent: [], // Last 3 days
+      previous: [] // Days 4-6 ago
+    };
 
-    // Fetch today's and yesterday's milk production data
-    const { data: todayData, error: todayError } = await supabase
+    // Generate recent period dates (days 0, 1, 2 - today, yesterday, day before)
+    for (let i = 0; i < 3; i++) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      dates.recent.push(date.toISOString().split('T')[0]);
+    }
+
+    // Generate previous period dates (days 3, 4, 5 - for comparison)
+    for (let i = 3; i < 6; i++) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      dates.previous.push(date.toISOString().split('T')[0]);
+    }
+
+    console.log('Trend Analysis Periods:', {
+      recent: dates.recent,
+      previous: dates.previous
+    });
+
+    // Fetch all milk production data for both periods
+    const allDates = [...dates.recent, ...dates.previous];
+    const { data: milkData, error: milkError } = await supabase
       .from('milk_production')
       .select(`
         cow_id,
         amount,
+        date,
         cows (
           id,
           name,
@@ -534,66 +561,87 @@ export const getMilkProductionTrends = async () => {
           breed
         )
       `)
-      .eq('date', today);
+      .in('date', allDates)
+      .order('date', { ascending: false });
 
-    if (todayError) throw todayError;
+    if (milkError) throw milkError;
 
-    const { data: yesterdayData, error: yesterdayError } = await supabase
-      .from('milk_production')
-      .select('cow_id, amount')
-      .eq('date', yesterday);
+    // Group data by cow and calculate daily totals (sum of all sessions per day)
+    const cowData = {};
 
-    if (yesterdayError) throw yesterdayError;
+    milkData.forEach(record => {
+      const cowId = record.cow_id;
+      const date = record.date;
 
-    // Group by cow_id and sum amounts for each day
-    const todayTotals = {};
-    todayData.forEach(record => {
-      if (!todayTotals[record.cow_id]) {
-        todayTotals[record.cow_id] = {
-          cowId: record.cow_id,
+      if (!cowData[cowId]) {
+        cowData[cowId] = {
+          cowId,
           cowName: record.cows?.name || 'Unknown',
           cowTagNumber: record.cows?.tag_number || 'Unknown',
           cowBreed: record.cows?.breed || 'Unknown',
-          todayAmount: 0
+          recentDays: {}, // Daily totals for recent period
+          previousDays: {} // Daily totals for previous period
         };
       }
-      todayTotals[record.cow_id].todayAmount += parseFloat(record.amount || 0);
-    });
 
-    const yesterdayTotals = {};
-    yesterdayData.forEach(record => {
-      if (!yesterdayTotals[record.cow_id]) {
-        yesterdayTotals[record.cow_id] = 0;
+      const amount = parseFloat(record.amount || 0);
+
+      if (dates.recent.includes(date)) {
+        cowData[cowId].recentDays[date] = (cowData[cowId].recentDays[date] || 0) + amount;
+      } else if (dates.previous.includes(date)) {
+        cowData[cowId].previousDays[date] = (cowData[cowId].previousDays[date] || 0) + amount;
       }
-      yesterdayTotals[record.cow_id] += parseFloat(record.amount || 0);
     });
 
-    // Calculate trends
+    // Calculate trends based on average daily production
     const trends = [];
-    Object.keys(todayTotals).forEach(cowId => {
-      const todayAmount = todayTotals[cowId].todayAmount;
-      const yesterdayAmount = yesterdayTotals[cowId] || 0;
-      const difference = todayAmount - yesterdayAmount;
 
-      // Only include cows that have yesterday's data for comparison
-      if (yesterdayAmount > 0) {
+    Object.values(cowData).forEach(cow => {
+      const recentDailyTotals = Object.values(cow.recentDays);
+      const previousDailyTotals = Object.values(cow.previousDays);
+
+      // Only calculate trends if we have data for both periods
+      // Require at least 2 days of data in each period for reliable comparison
+      if (recentDailyTotals.length >= 2 && previousDailyTotals.length >= 2) {
+        // Calculate average daily production for each period
+        const recentAvg = recentDailyTotals.reduce((sum, val) => sum + val, 0) / recentDailyTotals.length;
+        const previousAvg = previousDailyTotals.reduce((sum, val) => sum + val, 0) / previousDailyTotals.length;
+
+        const difference = recentAvg - previousAvg;
+        const percentageChange = previousAvg > 0 ? ((difference / previousAvg) * 100) : 0;
+
         trends.push({
-          ...todayTotals[cowId],
-          yesterdayAmount,
-          difference,
-          percentageChange: ((difference / yesterdayAmount) * 100).toFixed(1)
+          cowId: cow.cowId,
+          cowName: cow.cowName,
+          cowTagNumber: cow.cowTagNumber,
+          cowBreed: cow.cowBreed,
+          recentAverage: parseFloat(recentAvg.toFixed(2)),
+          previousAverage: parseFloat(previousAvg.toFixed(2)),
+          difference: parseFloat(difference.toFixed(2)),
+          percentageChange: parseFloat(percentageChange.toFixed(1)),
+          recentDaysCount: recentDailyTotals.length,
+          previousDaysCount: previousDailyTotals.length
         });
       }
     });
 
-    // Separate into dropping and improving (±2L threshold)
+    console.log('Total cows analyzed:', trends.length);
+
+    // Separate into dropping and improving cows
+    // Threshold: ±1.5L difference in average daily production
+    // This is more sensitive to gradual changes than the previous ±2L on single day
+    const THRESHOLD = 1.5;
+
     const droppingCows = trends
-      .filter(cow => cow.difference <= -2)
+      .filter(cow => cow.difference <= -THRESHOLD)
       .sort((a, b) => a.difference - b.difference); // Most drop first
 
     const improvingCows = trends
-      .filter(cow => cow.difference >= 2)
+      .filter(cow => cow.difference >= THRESHOLD)
       .sort((a, b) => b.difference - a.difference); // Most improvement first
+
+    console.log('Dropping cows:', droppingCows.length);
+    console.log('Improving cows:', improvingCows.length);
 
     return {
       droppingCows,

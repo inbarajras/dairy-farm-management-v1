@@ -5518,11 +5518,13 @@ const AddInvoiceModal = ({ onClose, onSubmit, customers = [], toggleAddCustomerM
                   className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                 >
                   <option value="">Select a customer</option>
-                  {customers.map(customer => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.name}
-                    </option>
-                  ))}
+                  {customers
+                    .filter(customer => customer.status === 'Active')
+                    .map(customer => (
+                      <option key={customer.id} value={customer.id}>
+                        {customer.name}
+                      </option>
+                    ))}
                 </select>
                 <button
                   type="button" 

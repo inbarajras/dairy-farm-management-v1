@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, Droplet, Filter, Search, ChevronLeft, ChevronRight, BarChart2, Download, Plus, ThermometerSun, X, RefreshCw,FileSpreadsheet,FileText,File,FileType } from 'lucide-react';
+import { Calendar, Droplet, Filter, Search, ChevronLeft, ChevronRight, BarChart2, Download, Plus, ThermometerSun, X, RefreshCw, FileSpreadsheet, FileText, File, FileType, Users, Trash2 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, Area, AreaChart, ReferenceLine
@@ -785,7 +785,7 @@ const MilkProduction = () => {
                         {milkData.trends.droppingCows.length} cows
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mb-4">Cows with ≥2L decrease from yesterday</p>
+                    <p className="text-xs text-gray-500 mb-4">Cows with gradual decrease in production (3-day trend)</p>
 
                     <div className="space-y-3 max-h-80 overflow-y-auto">
                       {milkData.trends.droppingCows.length > 0 ? (
@@ -801,9 +801,9 @@ const MilkProduction = () => {
                             <div className="text-right">
                               <div className="flex items-center gap-2">
                                 <div className="text-sm">
-                                  <span className="text-gray-500">{cow.yesterdayAmount.toFixed(1)}L</span>
+                                  <span className="text-gray-500">{cow.previousAverage?.toFixed(1) || '0.0'}L</span>
                                   <span className="mx-1">→</span>
-                                  <span className="font-semibold text-gray-900">{cow.todayAmount.toFixed(1)}L</span>
+                                  <span className="font-semibold text-gray-900">{cow.recentAverage?.toFixed(1) || '0.0'}L</span>
                                 </div>
                               </div>
                               <div className="flex items-center justify-end gap-1 mt-1">
@@ -847,7 +847,7 @@ const MilkProduction = () => {
                         {milkData.trends.improvingCows.length} cows
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mb-4">Cows with ≥2L increase from yesterday</p>
+                    <p className="text-xs text-gray-500 mb-4">Cows with gradual increase in production (3-day trend)</p>
 
                     <div className="space-y-3 max-h-80 overflow-y-auto">
                       {milkData.trends.improvingCows.length > 0 ? (
@@ -863,9 +863,9 @@ const MilkProduction = () => {
                             <div className="text-right">
                               <div className="flex items-center gap-2">
                                 <div className="text-sm">
-                                  <span className="text-gray-500">{cow.yesterdayAmount.toFixed(1)}L</span>
+                                  <span className="text-gray-500">{cow.previousAverage?.toFixed(1) || '0.0'}L</span>
                                   <span className="mx-1">→</span>
-                                  <span className="font-semibold text-gray-900">{cow.todayAmount.toFixed(1)}L</span>
+                                  <span className="font-semibold text-gray-900">{cow.recentAverage?.toFixed(1) || '0.0'}L</span>
                                 </div>
                               </div>
                               <div className="flex items-center justify-end gap-1 mt-1">
@@ -1506,38 +1506,36 @@ const MilkProduction = () => {
         
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex justify-center mt-6">
-            <div className="flex space-x-2">
-              <button
-                onClick={() => setCurrentPage(currentPage - 1)}
-                disabled={currentPage === 1}
-                className={`w-10 h-10 flex items-center justify-center rounded-md transition-all duration-300 ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 shadow'}`}
-              >
-                <ChevronLeft size={16} />
-              </button>
-              
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                <button
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
-                  className={`w-10 h-10 flex items-center justify-center rounded-md transition-all duration-300 ${
-                    currentPage === page 
-                      ? 'bg-gradient-to-r from-green-500 to-blue-600 text-white shadow-md' 
-                      : 'bg-white text-gray-700 hover:bg-gray-50 shadow'
-                  }`}
-                >
-                  {page}
-                </button>
-              ))}
-              
-              <button
-                onClick={() => setCurrentPage(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className={`w-10 h-10 flex items-center justify-center rounded-md transition-all duration-300 ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 shadow'}`}
-              >
-                <ChevronRight size={16} />
-              </button>
+          <div className="flex justify-between items-center mt-6 px-4">
+            <button
+              onClick={() => setCurrentPage(currentPage - 1)}
+              disabled={currentPage === 1}
+              className={`px-4 py-2 flex items-center gap-2 rounded-md transition-all duration-300 ${
+                currentPage === 1
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 shadow hover:shadow-md'
+              }`}
+            >
+              <ChevronLeft size={18} />
+              <span className="font-medium">Previous</span>
+            </button>
+
+            <div className="text-sm font-medium text-gray-700">
+              Page <span className="text-green-600">{currentPage}</span> of <span className="text-gray-900">{totalPages}</span>
             </div>
+
+            <button
+              onClick={() => setCurrentPage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className={`px-4 py-2 flex items-center gap-2 rounded-md transition-all duration-300 ${
+                currentPage === totalPages
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 shadow hover:shadow-md'
+              }`}
+            >
+              <span className="font-medium">Next</span>
+              <ChevronRight size={18} />
+            </button>
           </div>
         )}
         
@@ -2981,24 +2979,30 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
   
   // Add Collection Modal Component
   const AddCollectionModal = ({ onClose, onAdd }) => {
-    const [entries, setEntries] = useState([{
+    // Common fields for all cows
+    const [commonDate, setCommonDate] = useState(new Date().toISOString().split('T')[0]);
+    const [commonShift, setCommonShift] = useState('Morning');
+    const [useCommonQuality, setUseCommonQuality] = useState(false);
+    const [commonFat, setCommonFat] = useState('');
+    const [commonSnf, setCommonSnf] = useState('');
+    const [useCommonTotalMilk, setUseCommonTotalMilk] = useState(false);
+    const [commonTotalMilk, setCommonTotalMilk] = useState('');
+
+    // Cow entries (only cow-specific data)
+    const [cowEntries, setCowEntries] = useState([{
       id: Date.now(),
-      date: new Date().toISOString().split('T')[0],
-      shift: 'Morning',
-      totalQuantity: '',
       cowId: '',
+      totalQuantity: '',
       quality: 'Good',
-      notes: '',
       fat: '',
-      snf: ''
+      snf: '',
+      notes: ''
     }]);
+
     const [sendWhatsAppNotification, setSendWhatsAppNotification] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [cows, setCows] = useState([]);
     const [isLoadingCows, setIsLoadingCows] = useState(true);
-    const [useCommonQuality, setUseCommonQuality] = useState(false);
-    const [commonFat, setCommonFat] = useState('');
-    const [commonSnf, setCommonSnf] = useState('');
 
     // Load cows for dropdown
     useEffect(() => {
@@ -3022,9 +3026,9 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
       loadCows();
     }, []);
 
-    // Handle form field changes for a specific entry
-    const handleEntryChange = (entryId, field, value) => {
-      setEntries(entries.map(entry =>
+    // Handle cow entry changes
+    const handleCowEntryChange = (entryId, field, value) => {
+      setCowEntries(cowEntries.map(entry =>
         entry.id === entryId ? { ...entry, [field]: value } : entry
       ));
     };
@@ -3033,8 +3037,8 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
     const handleCommonQualityToggle = (checked) => {
       setUseCommonQuality(checked);
       if (checked && (commonFat || commonSnf)) {
-        // Apply common values to all entries
-        setEntries(entries.map(entry => ({
+        // Apply common values to all cow entries
+        setCowEntries(cowEntries.map(entry => ({
           ...entry,
           fat: commonFat || entry.fat,
           snf: commonSnf || entry.snf
@@ -3046,37 +3050,82 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
     const handleCommonFatChange = (value) => {
       setCommonFat(value);
       if (useCommonQuality) {
-        setEntries(entries.map(entry => ({ ...entry, fat: value })));
+        setCowEntries(cowEntries.map(entry => ({ ...entry, fat: value })));
       }
     };
 
     const handleCommonSnfChange = (value) => {
       setCommonSnf(value);
       if (useCommonQuality) {
-        setEntries(entries.map(entry => ({ ...entry, snf: value })));
+        setCowEntries(cowEntries.map(entry => ({ ...entry, snf: value })));
       }
     };
 
-    // Add a new entry row
-    const addEntry = () => {
-      const newEntry = {
-        id: Date.now(),
-        date: new Date().toISOString().split('T')[0],
-        shift: 'Morning',
-        totalQuantity: '',
-        cowId: '',
-        quality: 'Good',
-        notes: '',
-        fat: useCommonQuality ? commonFat : '',
-        snf: useCommonQuality ? commonSnf : ''
-      };
-      setEntries([...entries, newEntry]);
+    // Handle common total milk checkbox change
+    const handleCommonTotalMilkToggle = (checked) => {
+      setUseCommonTotalMilk(checked);
+      if (!checked) {
+        // Clear individual quantities when unchecking
+        setCowEntries(cowEntries.map(entry => ({ ...entry, totalQuantity: '' })));
+        setCommonTotalMilk('');
+      }
     };
 
-    // Remove an entry row
-    const removeEntry = (entryId) => {
-      if (entries.length > 1) {
-        setEntries(entries.filter(entry => entry.id !== entryId));
+    // Handle common total milk value change and distribute across cows
+    const handleCommonTotalMilkChange = (value) => {
+      setCommonTotalMilk(value);
+      if (useCommonTotalMilk && value && cowEntries.length > 0) {
+        const validCowsCount = cowEntries.filter(entry => entry.cowId).length;
+        if (validCowsCount > 0) {
+          const perCowQuantity = (parseFloat(value) / validCowsCount).toFixed(2);
+          setCowEntries(cowEntries.map(entry =>
+            entry.cowId ? { ...entry, totalQuantity: perCowQuantity } : entry
+          ));
+        }
+      }
+    };
+
+    // Recalculate milk distribution when number of rows changes
+    useEffect(() => {
+      if (useCommonTotalMilk && commonTotalMilk) {
+        redistributeMilk();
+      }
+    }, [cowEntries.length, useCommonTotalMilk, commonTotalMilk]);
+
+    // Function to redistribute milk across all rows
+    const redistributeMilk = () => {
+      if (useCommonTotalMilk && commonTotalMilk) {
+        const totalRows = cowEntries.length;
+        if (totalRows > 0) {
+          const perCowQuantity = (parseFloat(commonTotalMilk) / totalRows).toFixed(1);
+          setCowEntries(prev => prev.map(entry => ({
+            ...entry,
+            totalQuantity: perCowQuantity
+          })));
+        }
+      }
+    };
+
+    // Add a new cow entry
+    const addCowEntry = () => {
+      const newEntry = {
+        id: Date.now(),
+        cowId: '',
+        totalQuantity: '',
+        quality: 'Good',
+        fat: useCommonQuality ? commonFat : '',
+        snf: useCommonQuality ? commonSnf : '',
+        notes: ''
+      };
+      setCowEntries([...cowEntries, newEntry]);
+      // Milk will be redistributed by useEffect
+    };
+
+    // Remove a cow entry
+    const removeCowEntry = (entryId) => {
+      if (cowEntries.length > 1) {
+        setCowEntries(cowEntries.filter(entry => entry.id !== entryId));
+        // Milk will be redistributed by useEffect
       }
     };
 
@@ -3091,24 +3140,31 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
       setIsSubmitting(true);
 
       try {
-        // Validate all entries
-        const validEntries = entries.filter(entry =>
-          entry.cowId && entry.date && entry.totalQuantity && parseFloat(entry.totalQuantity) > 0
-        );
-
-        if (validEntries.length === 0) {
-          toast.error('Please fill in all required fields for at least one entry');
+        // Validate common fields
+        if (!commonDate) {
+          toast.error('Please select a date');
           setIsSubmitting(false);
           return;
         }
 
-        // Submit all valid entries
+        // Validate cow entries
+        const validEntries = cowEntries.filter(entry =>
+          entry.cowId && entry.totalQuantity && parseFloat(entry.totalQuantity) > 0
+        );
+
+        if (validEntries.length === 0) {
+          toast.error('Please add at least one cow with quantity');
+          setIsSubmitting(false);
+          return;
+        }
+
+        // Submit all valid entries with common date and shift
         let successCount = 0;
         for (const entry of validEntries) {
           const collectionData = {
             cowId: entry.cowId,
-            date: entry.date,
-            shift: entry.shift,
+            date: commonDate,
+            shift: commonShift,
             totalQuantity: parseFloat(entry.totalQuantity),
             quality: entry.quality,
             notes: entry.notes,
@@ -3174,6 +3230,94 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                 <div className="py-4 text-center text-gray-500">Loading cows...</div>
               ) : (
                 <>
+                  {/* Common Date & Session Section */}
+                  <div className="bg-gradient-to-r from-green-50 to-blue-50 p-4 rounded-lg border border-green-200 shadow-sm">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                      <Calendar size={16} className="text-green-600" />
+                      Collection Details (Applied to all cows)
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Date *
+                        </label>
+                        <input
+                          type="date"
+                          value={commonDate}
+                          onChange={(e) => setCommonDate(e.target.value)}
+                          required
+                          className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Session *
+                        </label>
+                        <select
+                          value={commonShift}
+                          onChange={(e) => setCommonShift(e.target.value)}
+                          required
+                          className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                        >
+                          <option value="Morning">Morning</option>
+                          <option value="Evening">Evening</option>
+                        </select>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-xs text-gray-600 flex items-center gap-1">
+                      <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                      Same date and session for all cows. For different date/session, save and create a new collection.
+                    </p>
+                  </div>
+
+                  {/* Common Total Milk Section */}
+                  <div className="bg-gradient-to-r from-purple-50/40 via-gray-50 to-pink-50/30 p-4 rounded-lg border-2 border-dashed border-purple-300">
+                    <div className="flex items-start gap-4">
+                      <div className="flex items-center pt-2">
+                        <input
+                          id="useCommonTotalMilk"
+                          name="useCommonTotalMilk"
+                          type="checkbox"
+                          checked={useCommonTotalMilk}
+                          onChange={(e) => handleCommonTotalMilkToggle(e.target.checked)}
+                          className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                        />
+                        <label htmlFor="useCommonTotalMilk" className="ml-2 block text-sm font-medium text-gray-700">
+                          Share total milk equally across all cows
+                        </label>
+                      </div>
+
+                      {useCommonTotalMilk && (
+                        <div className="flex-1">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Total Milk Quantity (L) *
+                          </label>
+                          <input
+                            type="number"
+                            value={commonTotalMilk}
+                            onChange={(e) => handleCommonTotalMilkChange(e.target.value)}
+                            min="0"
+                            step="0.1"
+                            placeholder="e.g. 100"
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 text-sm"
+                          />
+                        </div>
+                      )}
+                    </div>
+                    {useCommonTotalMilk && (
+                      <p className="mt-2 text-xs text-gray-600 flex items-center gap-1">
+                        <svg className="w-4 h-4 text-purple-500" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                        {commonTotalMilk && cowEntries.length > 0
+                          ? `${commonTotalMilk}L ÷ ${cowEntries.length} row${cowEntries.length > 1 ? 's' : ''} = ${(parseFloat(commonTotalMilk) / cowEntries.length).toFixed(1)}L per row (auto-updated when rows are added/removed)`
+                          : 'Enter total milk to auto-distribute equally across all rows'}
+                      </p>
+                    )}
+                  </div>
+
                   {/* Common Fat/SNF Section */}
                   <div className="bg-gradient-to-r from-blue-50/40 via-gray-50 to-green-50/30 p-4 rounded-lg border-2 border-dashed border-green-300">
                     <div className="flex items-start gap-4">
@@ -3234,26 +3378,32 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                     )}
                   </div>
 
+                  {/* Cows Section Header */}
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                      <Users size={16} className="text-blue-600" />
+                      Add Cows (same date & session for all)
+                    </h4>
+                  </div>
+
                   {/* Header Row */}
-                  <div className="grid grid-cols-12 gap-2 text-xs font-medium text-gray-700 px-2">
-                    <div className="col-span-2">Cow *</div>
-                    <div className="col-span-2">Date *</div>
-                    <div className="col-span-1">Shift *</div>
-                    <div className="col-span-1">Qty (L) *</div>
+                  <div className="grid grid-cols-12 gap-2 text-xs font-medium text-gray-700 px-2 bg-gray-100 py-2 rounded-md">
+                    <div className="col-span-3">Cow *</div>
+                    <div className="col-span-2">Qty (L) *</div>
                     <div className="col-span-1">Quality</div>
                     <div className="col-span-1">Fat %</div>
                     <div className="col-span-1">SNF %</div>
-                    <div className="col-span-2">Notes</div>
-                    <div className="col-span-1">Action</div>
+                    <div className="col-span-3">Notes</div>
+                    <div className="col-span-1 text-center">Action</div>
                   </div>
 
-                  {/* Entry Rows */}
-                  {entries.map((entry) => (
-                    <div key={entry.id} className="grid grid-cols-12 gap-2 items-start p-3 bg-gray-50 rounded-lg border border-gray-200">
-                      <div className="col-span-2">
+                  {/* Cow Entry Rows */}
+                  {cowEntries.map((entry, index) => (
+                    <div key={entry.id} className="grid grid-cols-12 gap-2 items-start p-3 bg-white rounded-lg border border-gray-200 hover:border-green-300 transition-colors">
+                      <div className="col-span-3">
                         <SearchableSelect
                           value={entry.cowId}
-                          onChange={(value) => handleEntryChange(entry.id, 'cowId', value)}
+                          onChange={(value) => handleCowEntryChange(entry.id, 'cowId', value)}
                           options={cows
                             .filter(cow => ['Active'].includes(cow.status))
                             .map(cow => ({
@@ -3270,43 +3420,22 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
 
                       <div className="col-span-2">
                         <input
-                          type="date"
-                          value={entry.date}
-                          onChange={(e) => handleEntryChange(entry.id, 'date', e.target.value)}
-                          required
-                          className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
-                        />
-                      </div>
-
-                      <div className="col-span-1">
-                        <select
-                          value={entry.shift}
-                          onChange={(e) => handleEntryChange(entry.id, 'shift', e.target.value)}
-                          required
-                          className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
-                        >
-                          <option value="Morning">Morning</option>
-                          <option value="Evening">Evening</option>
-                        </select>
-                      </div>
-
-                      <div className="col-span-1">
-                        <input
                           type="number"
                           value={entry.totalQuantity}
-                          onChange={(e) => handleEntryChange(entry.id, 'totalQuantity', e.target.value)}
+                          onChange={(e) => handleCowEntryChange(entry.id, 'totalQuantity', e.target.value)}
                           required
                           min="0"
                           step="0.1"
-                          className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
-                          placeholder="0.0"
+                          disabled={useCommonTotalMilk}
+                          className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                          placeholder={useCommonTotalMilk ? "Auto-calculated" : "0.0"}
                         />
                       </div>
 
                       <div className="col-span-1">
                         <select
                           value={entry.quality}
-                          onChange={(e) => handleEntryChange(entry.id, 'quality', e.target.value)}
+                          onChange={(e) => handleCowEntryChange(entry.id, 'quality', e.target.value)}
                           className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
                         >
                           <option value="Excellent">Exc</option>
@@ -3320,7 +3449,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                         <input
                           type="number"
                           value={entry.fat}
-                          onChange={(e) => handleEntryChange(entry.id, 'fat', e.target.value)}
+                          onChange={(e) => handleCowEntryChange(entry.id, 'fat', e.target.value)}
                           min="0"
                           step="0.1"
                           disabled={useCommonQuality}
@@ -3333,7 +3462,7 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                         <input
                           type="number"
                           value={entry.snf}
-                          onChange={(e) => handleEntryChange(entry.id, 'snf', e.target.value)}
+                          onChange={(e) => handleCowEntryChange(entry.id, 'snf', e.target.value)}
                           min="0"
                           step="0.1"
                           disabled={useCommonQuality}
@@ -3342,44 +3471,42 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
                         />
                       </div>
 
-                      <div className="col-span-2">
-                        <textarea
-                          rows={2}
+                      <div className="col-span-3">
+                        <input
+                          type="text"
                           value={entry.notes}
-                          onChange={(e) => handleEntryChange(entry.id, 'notes', e.target.value)}
-                          className="block w-full px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                          onChange={(e) => handleCowEntryChange(entry.id, 'notes', e.target.value)}
+                          className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
                           placeholder="Notes..."
-                        ></textarea>
+                        />
                       </div>
 
                       <div className="col-span-1 flex items-center justify-center">
                         <button
                           type="button"
-                          onClick={() => removeEntry(entry.id)}
-                          disabled={entries.length === 1}
+                          onClick={() => removeCowEntry(entry.id)}
+                          disabled={cowEntries.length === 1}
                           className={`p-2 rounded-md transition-all duration-200 ${
-                            entries.length === 1
+                            cowEntries.length === 1
                               ? 'text-gray-300 cursor-not-allowed'
                               : 'text-red-600 hover:bg-red-50 hover:text-red-700'
                           }`}
-                          title="Remove entry"
+                          title="Remove cow"
                         >
-                          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
+                          <Trash2 size={18} />
                         </button>
                       </div>
                     </div>
                   ))}
 
-                  {/* Add Entry Button */}
+                  {/* Add Cow Button */}
                   <button
                     type="button"
-                    onClick={addEntry}
-                    className="w-full py-2 px-4 border-2 border-dashed border-green-300 rounded-md text-sm font-medium text-green-600 bg-green-50 hover:bg-green-100 hover:border-green-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300 flex items-center justify-center gap-2"
+                    onClick={addCowEntry}
+                    className="w-full py-3 px-4 border-2 border-dashed border-green-300 rounded-lg text-sm font-medium text-green-600 bg-green-50 hover:bg-green-100 hover:border-green-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-300 flex items-center justify-center gap-2"
                   >
                     <Plus size={18} />
-                    Add Another Entry
+                    Add Another Cow
                   </button>
                 </>
               )}
@@ -3401,7 +3528,17 @@ const EditCollectionModal = ({ collection, onClose, onSave }) => {
 
             <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap justify-between items-center gap-3 bg-gray-50 flex-shrink-0 rounded-b-xl">
               <div className="text-sm text-gray-600">
-                Total entries: <span className="font-semibold text-green-600">{entries.filter(e => e.cowId && e.totalQuantity && parseFloat(e.totalQuantity) > 0).length}</span>
+                <span className="font-medium">Total cows:</span> <span className="font-semibold text-green-600">{cowEntries.filter(e => e.cowId && e.totalQuantity && parseFloat(e.totalQuantity) > 0).length}</span>
+                {useCommonTotalMilk && commonTotalMilk && (
+                  <>
+                    <span className="mx-2">|</span>
+                    <span className="font-medium">Total Milk:</span> <span className="font-semibold text-purple-600">{commonTotalMilk}L</span>
+                  </>
+                )}
+                <span className="mx-2">|</span>
+                <span className="font-medium">Date:</span> <span className="font-semibold text-blue-600">{new Date(commonDate).toLocaleDateString()}</span>
+                <span className="mx-2">|</span>
+                <span className="font-medium">Session:</span> <span className="font-semibold text-purple-600">{commonShift}</span>
               </div>
               <div className="flex gap-3">
                 <button
